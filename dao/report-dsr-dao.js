@@ -615,28 +615,38 @@ getCashsales: async (locationCode, reportDate) => {
 
 
         
+        // Per-pump totals are grouped first; ex/short and loose 2T are then worked
+        // out once per shift (inside the GROUP BY they ran once per reading row)
         const query = `
-        SELECT                    
-          mper.Person_Name AS person_name,        
-          DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date_formatted,
-          CALCULATE_EXSHORTAGE(tc.closing_id) AS ex_short,
-          (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id =tc.closing_id and toil.product_id = mp.product_id
+        SELECT
+          s.person_name,
+          s.closing_date_formatted,
+          CALCULATE_EXSHORTAGE(s.closing_id) AS ex_short,
+          (select given_qty-returned_qty from t_2toil toil,m_product mp where closing_id = s.closing_id and toil.product_id = mp.product_id
           and mp.product_id = two_t_product_id(mp.location_code, 'LOOSE') ) loose,
-          tc.notes,
-          ${caseStatements}
-        FROM 
-          t_closing tc
-        JOIN 
-          m_persons mper ON mper.Person_id = tc.cashier_id
-        JOIN 
-          t_reading tr ON tc.closing_id = tr.closing_id
-        JOIN 
-          m_pump mp ON tr.pump_id = mp.pump_id
-        WHERE 
-          tc.closing_status = 'CLOSED'
-          AND tc.closing_id IN (:closing_id)
-        GROUP BY 
-          tc.closing_id, tc.location_code, mper.Person_Name, mper.Person_id, mper.Role, tc.closing_date,tc.notes`;
+          s.notes,
+          ${productCodes.map((product) => `s.\`${product.product_code}\``).join(', ')}
+        FROM (
+          SELECT
+            tc.closing_id,
+            mper.Person_Name AS person_name,
+            DATE_FORMAT(tc.closing_date, '%d-%b-%Y') AS closing_date_formatted,
+            tc.notes,
+            ${caseStatements}
+          FROM
+            t_closing tc
+          JOIN
+            m_persons mper ON mper.Person_id = tc.cashier_id
+          JOIN
+            t_reading tr ON tc.closing_id = tr.closing_id
+          JOIN
+            m_pump mp ON tr.pump_id = mp.pump_id
+          WHERE
+            tc.closing_status = 'CLOSED'
+            AND tc.closing_id IN (:closing_id)
+          GROUP BY
+            tc.closing_id, tc.location_code, mper.Person_Name, mper.Person_id, mper.Role, tc.closing_date,tc.notes
+        ) s`;
       
       // Execute the query
       const result = await db.sequelize.query(query,  {
