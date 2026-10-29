@@ -2140,6 +2140,12 @@ app.use(function (err, req, res, next) {
 
     // render the error page
     res.status(err.status || 500);
+    // Failed before the session loaded (body parse error, session store
+    // timeout): the layout's flash messages need a session, so keep it plain
+    if (!req.session) {
+        console.error(`${req.method} ${req.originalUrl} failed before session:`, err.message);
+        return res.send('<h3>Something went wrong. Please try again in a moment.</h3>');
+    }
     res.render('error');
 });
 // error handler - end.
