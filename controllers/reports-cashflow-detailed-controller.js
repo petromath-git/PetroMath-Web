@@ -2,6 +2,9 @@ const dateFormat = require('dateformat');
 const moment = require('moment');
 const ExcelJS = require('exceljs');
 const CashflowDetailedDao = require("../dao/cashflow-detailed-dao");
+const cashflowDao = require("../dao/cashflow-closing-dao");
+const rolePermissionsDao = require("../dao/role-permissions-dao");
+const { getReclassifyOptions } = require("./cash-flow-controller");
 
 const CashflowDetailedReportsController = {
     
@@ -19,7 +22,20 @@ const CashflowDetailedReportsController = {
             // Fetch the cashflow detailed data
             const cashflowDetailedData = await CashflowDetailedDao.getCashflowDetailedData(fromDate, toDate, locationCode);
             console.log(`getCashflowDetailedReport: Retrieved ${cashflowDetailedData.length} records`);
-            
+
+            // Reclassify of manually entered lines (screen only, not the PDF)
+            const canReclassify = caller === 'notpdf'
+                && await rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'RECLASSIFY_CASHFLOW');
+            let reclassifyOptions = { IN: [], OUT: [] };
+            if (canReclassify) {
+                const [inOptions, outOptions] = await Promise.all([
+                    cashflowDao.getCashflowTypeOptions(locationCode, 'CREDIT'),
+                    cashflowDao.getCashflowTypeOptions(locationCode, 'DEBIT')
+                ]);
+                const pick = (opts) => getReclassifyOptions(opts).map(o => ({ id: o.id, name: o.name }));
+                reclassifyOptions = { IN: pick(inOptions), OUT: pick(outOptions) };
+            }
+
             // Format dates for display
             const formattedFromDate = moment(fromDate).format('DD/MM/YYYY');
             const formattedToDate = moment(toDate).format('DD/MM/YYYY');
@@ -34,7 +50,9 @@ const CashflowDetailedReportsController = {
                 formattedToDate: formattedToDate,
                 cashflowDetailedData: cashflowDetailedData,
                 currentDate: dateFormat(new Date(), "yyyy-mm-dd"),
-                caller: caller
+                caller: caller,
+                canReclassify: canReclassify,
+                reclassifyOptions: reclassifyOptions
             };
             
             if (caller === 'notpdf') {

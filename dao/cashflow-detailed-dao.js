@@ -20,7 +20,16 @@ module.exports = {
                 tct.amount,
                 tcc.cashflow_id as reference_no,
                 tct.transaction_id,
-                tct.calc_flag
+                tct.calc_flag,
+                CASE WHEN COALESCE(tct.calc_flag, 'N') <> 'Y' THEN 1 ELSE 0 END AS is_manual,
+                -- manual line with nothing linked to it: can be moved to another type
+                CASE WHEN COALESCE(tct.calc_flag, 'N') <> 'Y'
+                      AND tct.source_table IS NULL
+                      AND tct.digital_vendor_id IS NULL
+                      AND tct.recon_match_id IS NULL
+                      AND COALESCE(tct.manual_recon_flag, 0) = 0
+                      AND tct.entry_type IN ('CREDIT', 'DEBIT')
+                     THEN 1 ELSE 0 END AS can_reclassify
             FROM
                 t_cashflow_transaction tct
                 JOIN t_cashflow_closing tcc ON tct.cashflow_id = tcc.cashflow_id
