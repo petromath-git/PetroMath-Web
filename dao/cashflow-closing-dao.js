@@ -132,14 +132,15 @@ module.exports = {
     // have a cashflow-scoped Ledger Rule (applies_to_cashflow='Y') for this
     // direction; existing entries come straight off t_cashflow_transaction.entry_type
     // (set at insert time — see trg_cashflow_txn_account_head_insert).
-    findCashflowTxnById: async (location, id, type) => {
-        const entryType = type === 'IN' ? 'CREDIT' : 'DEBIT';
-
-        const options = await db.sequelize.query(`
+    // Day Close types (Account Heads with a cashflow Ledger Rule) for one
+    // direction - 'CREDIT' (InFlow) or 'DEBIT' (OutFlow).
+    getCashflowTypeOptions: (location, entryType) => {
+        return db.sequelize.query(`
             SELECT DISTINCT ah.account_head_id AS id, ah.account_head_name AS name,
                    ah.requires_digital_vendor_link AS requiresDigitalVendor,
                    ah.requires_credit_customer_link AS requiresCustomer,
-                   ah.employee_ledger_txn_type AS employeeTxnType
+                   ah.employee_ledger_txn_type AS employeeTxnType,
+                   mlr.max_amount AS maxAmount
             FROM m_account_heads ah
             INNER JOIN m_ledger_rules mlr
                 ON  mlr.location_code = ah.location_code
@@ -150,9 +151,29 @@ module.exports = {
             WHERE ah.location_code = :location AND ah.active_flag = 'Y'
             ORDER BY COALESCE(mlr.display_sequence, 999999), ah.account_head_name
         `, { replacements: { location, entryType }, type: Sequelize.QueryTypes.SELECT });
+    },
+    // account_head_id -> Max Amount per line, from the head's cashflow Ledger
+    // Rule (Account Heads > Ledger Rules). Heads without a limit are left out.
+    getCashflowMaxAmounts: async (location, accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return new Map();
+        const rows = await db.sequelize.query(`
+            SELECT external_id AS account_head_id, MIN(max_amount) AS max_amount
+            FROM m_ledger_rules
+            WHERE location_code = :location AND source_type = 'Static'
+              AND applies_to_cashflow = 'Y' AND max_amount IS NOT NULL
+              AND external_id IN (:accountHeadIds)
+            GROUP BY external_id
+        `, { replacements: { location, accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return new Map(rows.map(r => [r.account_head_id, parseFloat(r.max_amount)]));
+    },
+    findCashflowTxnById: async (location, id, type) => {
+        const entryType = type === 'IN' ? 'CREDIT' : 'DEBIT';
+
+        const options = await module.exports.getCashflowTypeOptions(location, entryType);
 
         const transactions = await db.sequelize.query(`
             SELECT tct.transaction_id, tct.description, tct.amount, tct.type, tct.calc_flag AS calcFlag,
+                   tct.account_head_id AS accountHeadId,
                    tct.digital_vendor_id AS digitalVendorId,
                    tr.treceipt_id AS originReceiptId,
                    el.ledger_id AS originLedgerId
@@ -199,6 +220,70 @@ module.exports = {
             WHERE account_head_id IN (:accountHeadIds) AND requires_credit_customer_link = 'Y'
         `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
         return rows.map(r => r.account_head_id);
+    },
+    // account_head_id -> account_head_name for the given heads (validates the
+    // head the client sent rather than trusting the type text).
+    getAccountHeadNames: async (accountHeadIds) => {
+        if (!accountHeadIds || accountHeadIds.length === 0) return new Map();
+        const rows = await db.sequelize.query(`
+            SELECT account_head_id, account_head_name
+            FROM m_account_heads
+            WHERE account_head_id IN (:accountHeadIds)
+        `, { replacements: { accountHeadIds }, type: Sequelize.QueryTypes.SELECT });
+        return new Map(rows.map(r => [r.account_head_id, r.account_head_name]));
+    },
+    // True when no earlier Day Close exists for the location - the day whose
+    // opening cash is entered by hand as Balance B/F.
+    isFirstDayClose: async (cashflowId) => {
+        const rows = await db.sequelize.query(`
+            SELECT COUNT(prev.cashflow_id) AS cnt
+            FROM t_cashflow_closing cur
+            LEFT JOIN t_cashflow_closing prev
+                ON  prev.location_code = cur.location_code
+                AND prev.cashflow_date < cur.cashflow_date
+            WHERE cur.cashflow_id = :cashflowId
+        `, { replacements: { cashflowId }, type: Sequelize.QueryTypes.SELECT });
+        return rows.length > 0 && Number(rows[0].cnt) === 0;
+    },
+    // A cashflow line with its Day Close, for reclassify.
+    findCashflowTxnForReclassify: (transactionId) => {
+        return db.sequelize.query(`
+            SELECT tct.transaction_id, tct.cashflow_id, tct.type, tct.account_head_id, tct.entry_type, tct.amount,
+                   tct.calc_flag, tct.source_table, tct.digital_vendor_id,
+                   tct.recon_match_id, tct.manual_recon_flag,
+                   tcc.location_code, tcc.cashflow_date, tcc.closing_status
+            FROM t_cashflow_transaction tct
+            JOIN t_cashflow_closing tcc ON tcc.cashflow_id = tct.cashflow_id
+            WHERE tct.transaction_id = :transactionId
+        `, { replacements: { transactionId }, type: Sequelize.QueryTypes.SELECT })
+            .then(rows => rows[0] || null);
+    },
+    // Moves a manual cashflow line to another Account Head. The update trigger
+    // re-derives account_head_id / entry_type from the new type. If GL has
+    // already posted the line, it is queued on the GL Correction Queue so the
+    // voucher can be reversed and re-posted to the new head's ledger.
+    reclassifyCashflowTxn: async ({ transactionId, locationCode, oldType, newHeadId, newType, username }) => {
+        await db.sequelize.transaction(async (t) => {
+            await db.sequelize.query(`
+                UPDATE t_cashflow_transaction
+                SET type = :newType, account_head_id = :newHeadId, updated_by = :username
+                WHERE transaction_id = :transactionId
+            `, { replacements: { transactionId, newType, newHeadId, username }, transaction: t });
+
+            await db.sequelize.query(`
+                INSERT INTO gl_correction_queue
+                    (location_code, mapping_source, mapping_key, old_description, new_description,
+                     source_type, source_id, voucher_id, fy_id, status, created_by)
+                SELECT ge.location_code, 'CASHFLOW_RECLASSIFY', :newType,
+                       CONCAT('Type: ', :oldType), CONCAT('Type: ', :newType),
+                       ge.source_type, ge.source_id, ge.voucher_id, ge.fy_id, 'PENDING', :username
+                FROM gl_accounting_events ge
+                WHERE ge.source_type = 'CASHFLOW_TXN' AND ge.source_id = :transactionId
+                  AND ge.location_code = :locationCode AND ge.event_status = 'PROCESSED'
+                ORDER BY ge.event_id DESC
+                LIMIT 1
+            `, { replacements: { transactionId, locationCode, oldType, newType, username }, transaction: t });
+        });
     },
     // Active, non-digital credit customers of a location, for the Day Close
     // Cash Receipt picker and for validating what it posts.

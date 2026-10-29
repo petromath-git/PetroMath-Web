@@ -144,7 +144,9 @@ module.exports = {
     saveCashflowTxnData: async (req, res, next) => {
         const txnData = req.body;
         if (txnData && txnData.length > 0) {
-            const validationError = await validateDigitalVendorRows(txnData, req.user.location_code)
+            const validationError = await validateNoSystemOnlyTypes(txnData, req.user.location_code)
+                || await validateMaxAmounts(txnData, req.user.location_code)
+                || await validateDigitalVendorRows(txnData, req.user.location_code)
                 || await validateNoFreeTextCashReceipts(txnData)
                 || await validateNoFreeTextSalaryLines(txnData);
             if (validationError) {
@@ -314,6 +316,61 @@ module.exports = {
             });
         }
     },
+    // Moves a manually entered Day Close line to another type (Account Head) of
+    // the same direction - also on a CLOSED Day Close, since the amount and
+    // direction (and so every later Balance B/F) stay the same.
+    reclassifyCashflowTxn: async (req, res, next) => {
+        try {
+            const transactionId = parseInt(req.params.id, 10);
+            const newHeadId = parseInt(req.body && req.body.account_head_id, 10);
+            if (isNaN(transactionId) || isNaN(newHeadId)) {
+                return res.status(400).send({error: 'Please select the new type.'});
+            }
+
+            const txn = await cashflowDao.findCashflowTxnForReclassify(transactionId);
+            if (!txn || txn.location_code !== req.user.location_code) {
+                return res.status(404).send({error: 'Day Close line not found.'});
+            }
+            if (txn.calc_flag === 'Y' || txn.source_table) {
+                return res.status(400).send({error: 'This line is created by the system and cannot be reclassified.'});
+            }
+            if (txn.entry_type !== 'CREDIT' && txn.entry_type !== 'DEBIT') {
+                return res.status(400).send({error: 'This line has no InFlow/OutFlow direction set. Please contact support.'});
+            }
+            if (txn.recon_match_id || Number(txn.manual_recon_flag) === 1) {
+                return res.status(400).send({error: 'Cannot reclassify: this line is already bank-reconciled. Remove the reconciliation first.'});
+            }
+            if (txn.digital_vendor_id || await adjustmentsDao.findActiveByCashflowTxnId(transactionId)) {
+                return res.status(400).send({error: 'Cannot reclassify: this line is linked to a digital vendor adjustment. Delete and re-enter it instead.'});
+            }
+
+            const options = await cashflowDao.getCashflowTypeOptions(txn.location_code, txn.entry_type);
+            const newHead = getReclassifyOptions(options).find(o => o.id === newHeadId);
+            if (!newHead) {
+                return res.status(400).send({error: 'This type cannot be used here. Pick another ' + (txn.entry_type === 'CREDIT' ? 'InFlow' : 'OutFlow') + ' type.'});
+            }
+            if (newHead.name === txn.type) {
+                return res.status(400).send({error: 'The line is already "' + txn.type + '".'});
+            }
+            if (newHead.maxAmount !== null && newHead.maxAmount !== undefined
+                && parseFloat(txn.amount) > parseFloat(newHead.maxAmount)) {
+                return res.status(400).send({error: maxAmountError(newHead.name, newHead.maxAmount, txn.amount)});
+            }
+
+            await cashflowDao.reclassifyCashflowTxn({
+                transactionId,
+                locationCode: txn.location_code,
+                oldType: txn.type,
+                newHeadId,
+                newType: newHead.name,
+                username: req.user.User_Name
+            });
+            res.status(200).send({message: 'Reclassified "' + txn.type + '" to "' + newHead.name + '".'});
+        } catch (err) {
+            console.error('Error reclassifying cashflow line:', err);
+            res.status(500).send({error: 'Error while reclassifying the line.'});
+        }
+    },
     deleteCashFlow: (req, res, next) => {
         if(req.query.id) {
             const transactionId = req.query.id;
@@ -477,6 +534,7 @@ function collectCreditAndDebits(result) {
         amount: t.amount,
         type: t.type,
         calcFlag: t.calcFlag,
+        accountHeadId: t.accountHeadId,
         digitalVendorId: t.digitalVendorId,
         originReceiptId: t.originReceiptId,
         originLedgerId: t.originLedgerId
@@ -484,6 +542,26 @@ function collectCreditAndDebits(result) {
     return { data: creditOrDebits, options: result.options || [] };
 }
 
+
+const isSystemOnlyType = (name) => config.cashflowSystemOnlyTypes.includes(name);
+
+// Types offered for manual entry: everything except the system-only ones,
+// keeping Balance B/F on the location's first Day Close (opening cash).
+function getEntryOptions(options, isFirstDayClose) {
+    return (options || []).filter(o => !isSystemOnlyType(o.name)
+        || (isFirstDayClose && o.name === config.cashflowOpeningBalanceType));
+}
+
+// Types a manual line can be reclassified to: no system-only types, and none
+// that need a linked customer / employee / digital vendor record (those lines
+// are entered through their own pickers).
+function getReclassifyOptions(options) {
+    return (options || []).filter(o => !isSystemOnlyType(o.name)
+        && o.requiresCustomer !== 'Y' && o.requiresDigitalVendor !== 'Y' && !o.employeeTxnType);
+}
+
+// Also used by the Cashflow Detailed report, where the reclassify lives
+module.exports.getReclassifyOptions = getReclassifyOptions;
 
 function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
     const locationCode = req.user.location_code;
@@ -497,10 +575,12 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
         locationConfig.getLocationConfigValue(locationCode, 'MAX_CASHFLOW_ROWS', config.maxCashFlowRowsCnt),
         adjustmentsDao.getDigitalVendors(locationCode),
         cashflowDao.findCashReceiptCustomers(locationCode),
-        cashflowDao.findCashflowEmployees(locationCode)
+        cashflowDao.findCashflowEmployees(locationCode),
+        cashflowDao.isFirstDayClose(req.query.id)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
+        const isFirstDayClose = values[10].value === true;
 
         res.render('cash-flow', {
             title: "CashFlow : " + dateFormat(values[0].value.cashflow_date, 'dd-mmm-yyyy'),
@@ -512,8 +592,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             cashflowId: req.query.id,
             cashFlowCredits: creditData.data,
             cashFlowDebits: debitData.data,
-            creditOptions: creditData.options,
-            debitOptions: debitData.options,
+            creditOptions: getEntryOptions(creditData.options, isFirstDayClose),
+            debitOptions: getEntryOptions(debitData.options, isFirstDayClose),
             shiftClosings: values[4].value || [], // Add the closing data
             showCashFlowDenominations: values[5].value === 'Y',
             maxCashFlowRows: Number(values[6].value),
@@ -608,6 +688,53 @@ function triggerAndGetCashflowData(cashflowId, req, res, next) {
 // Salary lines (Account Head with employee_ledger_txn_type) must be entered
 // with an employee, via /save-cashflow-employee-entries, so they land in the
 // employee ledger - cash in/out of the employee ledger comes only from Day Close.
+// Rejects manual lines using a type only generate_cashflow may write (see
+// config.cashflowSystemOnlyTypes) - checked on the Account Head id, not the
+// type text. Balance B/F is allowed on the location's first Day Close.
+async function validateNoSystemOnlyTypes(txnData, locationCode) {
+    const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
+    const headNames = await cashflowDao.getAccountHeadNames(accountHeadIds);
+    let isFirstDayClose = null;
+
+    for (const row of txnData) {
+        const name = headNames.get(parseInt(row.account_head_id, 10)) || row.type;
+        if (!isSystemOnlyType(name) || !((parseFloat(row.amount) || 0) > 0)) continue;
+        if (name === config.cashflowOpeningBalanceType) {
+            if (isFirstDayClose === null) {
+                const cashflow = await cashflowDao.findCashflow(locationCode, row.cashflowId);
+                isFirstDayClose = !!cashflow && await cashflowDao.isFirstDayClose(row.cashflowId);
+            }
+            if (isFirstDayClose) continue;
+        }
+        return '"' + name + '" is created by the system and cannot be entered by hand. Please choose another type.';
+    }
+    return null;
+}
+
+const formatRupees = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+function maxAmountError(typeName, maxAmount, amount) {
+    return '"' + typeName + '" allows at most ' + formatRupees(maxAmount) + ' per line, but this line is '
+        + formatRupees(amount) + '. Please check the type (e.g. bank deposits go to the bank type).';
+}
+
+// Per-line ceiling set as Max Amount on the type's cashflow Ledger Rule
+// (blank = no limit) - stops e.g. a cash deposit being booked as Discount.
+async function validateMaxAmounts(txnData, locationCode) {
+    const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
+    const maxAmounts = await cashflowDao.getCashflowMaxAmounts(locationCode, accountHeadIds);
+    if (maxAmounts.size === 0) return null;
+
+    for (const row of txnData) {
+        const maxAmount = maxAmounts.get(parseInt(row.account_head_id, 10));
+        const amount = parseFloat(row.amount) || 0;
+        if (maxAmount !== undefined && amount > maxAmount) {
+            return maxAmountError(row.type, maxAmount, amount);
+        }
+    }
+    return null;
+}
+
 async function validateNoFreeTextSalaryLines(txnData) {
     const accountHeadIds = [...new Set(txnData.map(r => parseInt(r.account_head_id, 10)).filter(id => !isNaN(id)))];
     const employeeHeads = await cashflowDao.getAccountHeadEmployeeTxnTypes(accountHeadIds);
