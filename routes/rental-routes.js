@@ -24,12 +24,17 @@ router.put('/api/settings', canMaster, ctrl.saveSettings);
 router.post('/api/tenants', canMaster, ctrl.createTenant);
 router.put('/api/tenants/:id(\\d+)', canMaster, ctrl.updateTenant);
 router.delete('/api/tenants/:id(\\d+)', canMaster, ctrl.deleteTenant);
+router.get('/api/tenants/:id(\\d+)/rent', canMaster, ctrl.getRent);
+router.post('/api/tenants/:id(\\d+)/revisions', canMaster, ctrl.addRevision);
+router.delete('/api/tenants/:id(\\d+)/revisions/:rid(\\d+)', canMaster, ctrl.deleteRevision);
+router.put('/api/tenants/:id(\\d+)/escalation', canMaster, ctrl.saveEscalation);
 
 router.post('/api/generate', canInvoice, ctrl.generateDrafts);
 router.post('/api/finalize', canInvoice, ctrl.finalize);
 router.put('/api/invoices/:id(\\d+)', canInvoice, ctrl.updateDraft);
 router.delete('/api/invoices/:id(\\d+)', canInvoice, ctrl.deleteDraft);
 router.post('/api/invoices/:id(\\d+)/cancel', canInvoice, ctrl.cancelInvoice);
+router.post('/api/invoices/:id(\\d+)/delete', canInvoice, ctrl.deleteFinalInvoice);
 router.post('/api/einvoice/import', canInvoice, upload.single('file'), ctrl.einvoiceImport);
 
 module.exports = router;

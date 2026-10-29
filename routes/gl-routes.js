@@ -2893,6 +2893,18 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermissio
                 WHERE ri.invoice_id = :sid`,
                 { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
             );
+            if (!rows[0]) {
+                // Deleted from Rental Invoices: show it from the archive
+                const deleted = await db.sequelize.query(`
+                    SELECT invoice_no, DATE_FORMAT(invoice_date, '%Y-%m-%d') AS invoice_date, CONCAT('DELETED (', delete_reason, ')') AS status,
+                           JSON_UNQUOTE(JSON_EXTRACT(invoice_data, '$.description')) AS description,
+                           taxable_value, cgst_amount, sgst_amount, total_amount, tds_amount, tenant_name
+                    FROM t_rental_invoice_deleted WHERE invoice_id = :sid
+                    ORDER BY deleted_id DESC LIMIT 1`,
+                    { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+                );
+                rows.push(...deleted);
+            }
             if (rows[0]) {
                 const r = rows[0];
                 detail = {
