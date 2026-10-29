@@ -23,10 +23,16 @@ block content
                 // Set new timeout - wait 300ms after user stops typing
                 searchTimeout = setTimeout(() => {
                     const filter = input.value.toUpperCase();
+                    const manualOnlyBox = document.getElementById('manualOnly');
+                    const manualOnly = manualOnlyBox && manualOnlyBox.checked;
                     const tr = table.getElementsByTagName('tr');
 
                     for (let i = 1; i < tr.length; i++) { // Start from 1 to skip header
                         const row = tr[i];
+                        if (manualOnly && row.dataset.manual !== '1') {
+                            row.style.display = 'none';
+                            continue;
+                        }
                         let shouldShow = false;
                         const td = row.getElementsByTagName('td');
                         
@@ -120,6 +126,58 @@ block content
                 document.body.removeChild(form);
             }
 
+            // Reclassify a manually entered line: same-direction types only
+            // (window.cashflowReclassifyOptions), except the line's current one.
+            var cashflowReclassifyTxnId = null;
+
+            function openCashflowReclassify(btn) {
+                const d = btn.dataset;
+                const select = document.getElementById('cashflowReclassifyHead');
+                select.innerHTML = '<option value="">-- Select --</option>';
+                ((window.cashflowReclassifyOptions || {})[d.direction] || [])
+                    .filter(o => o.name !== d.type)
+                    .forEach(o => {
+                        const opt = document.createElement('option');
+                        opt.value = o.id;
+                        opt.textContent = o.name;
+                        select.appendChild(opt);
+                    });
+                document.getElementById('cashflowReclassifyCurrent').textContent = d.type;
+                document.getElementById('cashflowReclassifyLine').textContent =
+                    d.date + ' | ' + (d.direction === 'IN' ? 'Inflow' : 'Outflow') + ' | ₹' + d.amount + (d.remarks ? ' | ' + d.remarks : '');
+                cashflowReclassifyTxnId = d.txnId;
+                $('#cashflowReclassifyModal').modal('show');
+            }
+
+            function saveCashflowReclassify() {
+                const headId = document.getElementById('cashflowReclassifyHead').value;
+                if (!headId) {
+                    showToastMessage({ error: 'Please select the new type.' }, 5000);
+                    return;
+                }
+                const saveBtn = document.getElementById('cashflowReclassifySave');
+                saveBtn.disabled = true;
+                fetch('/cashflow-txn/' + cashflowReclassifyTxnId + '/reclassify', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_head_id: headId })
+                })
+                    .then(res => res.json())
+                    .then(result => {
+                        saveBtn.disabled = false;
+                        showToastMessage(result, result.error ? 7000 : undefined);
+                        if (!result.error) {
+                            $('#cashflowReclassifyModal').modal('hide');
+                            // re-run the report for the same dates
+                            setTimeout(() => document.getElementById('reportForm').submit(), 800);
+                        }
+                    })
+                    .catch(() => {
+                        saveBtn.disabled = false;
+                        showToastMessage({ error: 'Error while reclassifying the line.' }, 7000);
+                    });
+            }
+
     // Only show sticky header and filters for non-PDF renders
     if caller !== 'pdf'
         // Sticky Header Container
@@ -134,13 +192,26 @@ block content
                         form(method='POST' action='/reports-cashflow-detailed' id='reportForm')
                             .form-row
                                 .col-md-2
-                                    label(for='dateRange') Date Range:
-                                    select#dateRange.form-control(onchange="updateDateRange()")
+                                    label(for='dateRange') Period:
+                                    select#dateRange.form-control(onchange='glSetPeriod(this)' data-from='fromclosingDate' data-to='toclosingDate' data-monthyear='cfMonthYearWrap' data-month='cfMonth' data-year='cfYear')
+                                        option(value='month_year') Month / Year
                                         option(value='this_month') This Month
                                         option(value='last_month') Last Month
-                                        option(value='this_financial_year') This Financial Year
-                                        option(value='last_financial_year') Last Financial Year
-                                        option(value='custom', selected=true) Custom Date
+                                        option(value='this_fy') This Financial Year
+                                        option(value='last_fy') Last Financial Year
+                                        option(value='custom' selected) Custom
+                                //- Month runs in FY order (Apr..Mar); values are 0-based JS months for glSetMonthYear
+                                - const _cfNow = new Date()
+                                - const _cfMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+                                .col-md-2#cfMonthYearWrap(style='display:none')
+                                    label Month / Year:
+                                    .d-flex
+                                        select#cfMonth.form-control.mr-1(onchange=`glSetMonthYear('fromclosingDate','toclosingDate','cfMonth','cfYear')`)
+                                            each m in [3, 4, 5, 6, 7, 8, 9, 10, 11, 0, 1, 2]
+                                                option(value=m selected=(m === _cfNow.getMonth()))= _cfMonthNames[m]
+                                        select#cfYear.form-control(onchange=`glSetMonthYear('fromclosingDate','toclosingDate','cfMonth','cfYear')`)
+                                            each y in [0, 1, 2, 3, 4, 5].map(n => _cfNow.getFullYear() - n)
+                                                option(value=y selected=(y === _cfNow.getFullYear()))= y
                                 .col-md-2
                                     label(for='fromclosingDate') From Date:
                                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, max=currentDate, required)
@@ -149,7 +220,10 @@ block content
                                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, max=currentDate, required)
                                 .col-md-2
                                     label(for='searchInput') Search:
-                                    input#searchInput.form-control(type='text', placeholder='Search transactions...', oninput='searchTable()')   
+                                    input#searchInput.form-control(type='text', placeholder='Search transactions...', oninput='searchTable()')
+                                    .form-check.mt-1
+                                        input#manualOnly.form-check-input(type='checkbox' onchange='searchTable()')
+                                        label.form-check-label(for='manualOnly') Manual entries only
                                 .col-md-4.d-flex.align-items-end
                                     button.btn.btn-primary.mr-2(type='submit' form='reportForm')
                                         | Go
@@ -185,16 +259,21 @@ block content
                                 th.text-center Description
                                 th.text-center.text-right Debit (₹)
                                 th.text-center.text-right Credit (₹)
+                                if canReclassify
+                                    th.text-center(title="Reclassify a manually entered line")
                         tbody
                             each transaction in cashflowDetailedData
-                                tr
+                                tr(data-manual=transaction.is_manual)
                                     td.text-center= transaction.transaction_date
                                     td.text-center
                                         if transaction.type === 'Inflow' || transaction.type === 'Credit'
                                             span.badge.badge-success= transaction.type
                                         else
                                             span.badge.badge-danger= transaction.type
-                                    td= transaction.category
+                                    td
+                                        | #{transaction.category}
+                                        if caller !== 'pdf' && transaction.is_manual == 1
+                                            span.badge.badge-light.border.ml-1(title="Entered by hand on Day Close") manual
                                     td= transaction.description
                                     td.text-right.font-weight-bold.text-danger
                                         if transaction.flow_type === 'DEBIT'
@@ -202,11 +281,46 @@ block content
                                     td.text-right.font-weight-bold.text-success
                                         if transaction.flow_type === 'CREDIT'
                                             | ₹#{transaction.amount.toLocaleString('en-IN')}
+                                    if canReclassify
+                                        td.text-center
+                                            if transaction.can_reclassify == 1
+                                                button.btn.btn-sm.btn-link.p-0(type="button" title="Reclassify this line" aria-label="Reclassify"
+                                                    onclick="openCashflowReclassify(this)"
+                                                    data-txn-id=transaction.transaction_id
+                                                    data-direction=(transaction.flow_type === 'CREDIT' ? 'IN' : 'OUT')
+                                                    data-type=transaction.category
+                                                    data-amount=transaction.amount.toLocaleString('en-IN')
+                                                    data-date=transaction.transaction_date
+                                                    data-remarks=transaction.description)
+                                                    i.bi.bi-pencil-square
     else
         .card.shadow.mb-4
             .card-body.text-center
                 h5 No cashflow data found
                 p.text-muted Select date range and click 'Go' to generate report
+
+    if canReclassify
+        .modal.fade#cashflowReclassifyModal(tabindex="-1" role="dialog" aria-labelledby="cashflowReclassifyTitle" aria-hidden="true")
+            .modal-dialog(role="document")
+                .modal-content
+                    .modal-header
+                        h5.modal-title#cashflowReclassifyTitle Reclassify Day Close line
+                        button.close(type="button" data-dismiss="modal" aria-label="Close")
+                            span(aria-hidden="true") &times;
+                    .modal-body
+                        p.mb-1
+                            span.text-muted Current type:&nbsp;
+                            strong#cashflowReclassifyCurrent
+                        p.mb-3.text-muted#cashflowReclassifyLine
+                        label(for="cashflowReclassifyHead") New type
+                        select.form-control#cashflowReclassifyHead
+                        small.form-text.text-muted The amount and Inflow/Outflow side stay the same, so the Day Close balance does not change. If the day is already accounted, the line is added to GL &rarr; Correction Queue for re-posting.
+                    .modal-footer
+                        button.btn.btn-secondary(type="button" data-dismiss="modal") Cancel
+                        button.btn.btn-primary#cashflowReclassifySave(type="button" onclick="saveCashflowReclassify()") Reclassify
+        - const reclassifyOptionsJson = JSON.stringify(reclassifyOptions).replace(/</g, '\\u003c');
+        script.
+            window.cashflowReclassifyOptions = !{reclassifyOptionsJson};
 
     // Only include date script for non-PDF
     if caller !== 'pdf'

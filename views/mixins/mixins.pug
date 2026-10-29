@@ -246,16 +246,18 @@ mixin addCashFlowEntry(val, flow, prefix, rowCnt)
             else
                 td &nbsp;
     else
+        - const rowOptions = (flow === debitLabel ? debitOptions : creditOptions) || [];
         tr(id=trRowId)
             input(type='hidden' id=prefix + rowCnt + '_hiddenId' value=val.txn_id)
             td
                 select.form-control(name=prefix + 'transaction-'+ rowCnt, id=prefix+'transaction-'+ rowCnt, required onchange="onCashflowTypeChange('" + prefix + "', " + rowCnt + ")")
-                    if debitOptions && flow === debitLabel
-                        each option in debitOptions
-                            option(value=`${option.id}` data-requires-vendor=option.requiresDigitalVendor data-requires-customer=option.requiresCustomer data-requires-employee=(option.employeeTxnType ? 'Y' : 'N') selected=(option.name === val.type))= option.name
-                    if creditOptions && flow === creditLabel
-                        each option in creditOptions
-                            option(value=option.id data-requires-vendor=option.requiresDigitalVendor data-requires-customer=option.requiresCustomer data-requires-employee=(option.employeeTxnType ? 'Y' : 'N') selected=(option.name === val.type))= option.name
+                    //- An older line on a type no longer offered (e.g. "Collection"
+                    //- typed by hand): keep it shown, not silently switched; saving
+                    //- is refused until another type is picked.
+                    if val.accountHeadId && !rowOptions.some(o => o.name === val.type)
+                        option(value=`${val.accountHeadId}` data-requires-vendor='N' data-requires-customer='N' data-requires-employee='N' selected)= val.type + ' (system only - change)'
+                    each option in rowOptions
+                        option(value=`${option.id}` data-requires-vendor=option.requiresDigitalVendor data-requires-customer=option.requiresCustomer data-requires-employee=(option.employeeTxnType ? 'Y' : 'N') selected=(option.name === val.type))= option.name
             td
                 input.form-control(name=prefix+'remarks-'+ rowCnt, id=prefix+'remarks-'+ rowCnt, value=val.description, placeholder='Remarks')
                 +cashflowEmployeeSelect(prefix, rowCnt)
