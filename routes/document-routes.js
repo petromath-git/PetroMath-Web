@@ -28,6 +28,11 @@ router.get('/:doc_id', isLoginEnsured, async (req, res) => {
         if (doc.entity_type === 'LUBE_INVOICE' && doc.location_code !== req.user.location_code) {
             return res.status(404).send('Document not found');
         }
+        // Support ticket attachments are served by /dev-tracker/:id/attachments/:docId,
+        // which checks the user can see that ticket.
+        if (doc.entity_type === 'SUPPORT_TICKET') {
+            return res.status(404).send('Document not found');
+        }
 
         // ETag: doc_id is stable for a given file — a replacement creates a new doc_id
         const etag = `"doc-${doc.doc_id}"`;

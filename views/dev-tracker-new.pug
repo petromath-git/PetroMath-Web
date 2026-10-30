@@ -2,6 +2,7 @@ extends layout
 
 block content
     include mixins/dev-tracker-style
+    include mixins/ticket-attachment-picker
     - var typeLabel = { Bug: 'Issue (something is wrong)', Feature: 'Feature request (something new)', Enhancement: 'Enhancement (improve something existing)', Task: 'Task (internal)' }
     .container-fluid.ticket-page
         .d-flex.align-items-center.mb-3
@@ -11,7 +12,7 @@ block content
 
         .row.justify-content-center
             .col-12.col-lg-8
-                form.card.card-body(method="POST" action="/dev-tracker")
+                form.card.card-body(method="POST" action="/dev-tracker" enctype="multipart/form-data")
                     .row.g-3
                         .col-12.col-md-6
                             label Station *
@@ -44,6 +45,10 @@ block content
                         .col-12
                             label Details
                             textarea.form-control(name="description" rows="6" placeholder="What happened? Which screen, which date/shift, what did you expect? For a feature: what should it do and why?")
+
+                        .col-12
+                            label Attachments
+                            +ticketAttachmentPicker(maxFiles, maxMb)
 
                         .col-12.col-md-6
                             label Priority
