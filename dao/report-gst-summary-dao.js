@@ -17,7 +17,12 @@ module.exports = {
                                         DATE_FORMAT(ti.invoice_date, '%d-%b-%Y') "Date",
                                         ti.invoice_number "Invoice-Number",
                                         tid.quantity * 1000 "Quantity",
-                                        tid.total_line_amount Amount
+                                        -- Full invoice value: line amount + VAT / additional VAT /
+                                        -- delivery charges, as the GL posts it (create-accounting TANK_INVOICE)
+                                        tid.total_line_amount
+                                          + (SELECT COALESCE(SUM(c.charge_amount), 0)
+                                             FROM t_tank_invoice_charges c
+                                             WHERE c.invoice_dtl_id = tid.id) Amount
                                     FROM
                                         t_tank_invoice ti
                                         JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
@@ -45,7 +50,10 @@ module.exports = {
       SELECT
         mp.product_name AS Product,
         SUM(tid.quantity * 1000) AS Total_Quantity,
-        SUM(tid.total_line_amount) AS Total_Amount
+        SUM(tid.total_line_amount
+            + (SELECT COALESCE(SUM(c.charge_amount), 0)
+               FROM t_tank_invoice_charges c
+               WHERE c.invoice_dtl_id = tid.id)) AS Total_Amount
       FROM
         t_tank_invoice ti
         JOIN t_tank_invoice_dtl tid ON ti.id = tid.invoice_id
