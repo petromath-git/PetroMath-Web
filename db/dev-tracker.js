@@ -52,6 +52,25 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(255),
             allowNull: true
         },
+        // Cause / fix / files / DB / PRs / verify / gotchas for the next person. SuperUser only.
+        dev_notes: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
+        // Claude conversation usage for the ticket: tokens, and cost at API list prices. SuperUser only.
+        claude_tokens: {
+            type: DataTypes.BIGINT,
+            allowNull: true
+        },
+        claude_cost_usd: {
+            type: DataTypes.DECIMAL(10, 2),
+            allowNull: true
+        },
+        // Claude conversations, one per line (https link or session id). SuperUser only.
+        claude_links: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
         creation_date: {
             type: DataTypes.DATE,
             allowNull: false,

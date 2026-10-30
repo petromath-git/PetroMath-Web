@@ -61,6 +61,34 @@ block content
                             tr
                                 th Last updated by
                                 td= tracker.updated_by
+                    if isSuperUser
+                        tr
+                            th
+                                i.bi.bi-robot.mr-1
+                                | Claude
+                            td
+                                if claudeLinks.length
+                                    each c, i in claudeLinks
+                                        .text-truncate
+                                            if c.url
+                                                a(href=c.url target="_blank" rel="noopener noreferrer")
+                                                    | Conversation #{claudeLinks.length > 1 ? i + 1 : ''}
+                                                    i.bi.bi-box-arrow-up-right.ml-1.small
+                                            else
+                                                - var cmd = 'claude --resume ' + c.sessionId
+                                                code.small(title=cmd)= c.sessionId.slice(0, 8)
+                                                button.btn.btn-link.btn-sm.p-0.ml-1(type="button" title="Copy: " + cmd data-copy=cmd onclick="copyText(this)")
+                                                    i.bi.bi-clipboard
+                                else
+                                    a.small(href=`/dev-tracker/${tracker.tracker_id}/edit`) Add
+                        if tracker.claude_tokens || tracker.claude_cost_usd
+                            tr
+                                th Claude usage
+                                td(title="Cost at Anthropic API list prices")
+                                    if tracker.claude_tokens
+                                        | #{(Number(tracker.claude_tokens) / 1e6).toFixed(1)}M tokens
+                                    if tracker.claude_cost_usd
+                                        span.text-muted  · $#{Number(tracker.claude_cost_usd).toFixed(2)}
 
     .container-fluid.ticket-page
         .d-flex.justify-content-between.align-items-start.flex-wrap.gap-2.mb-3
@@ -91,6 +119,19 @@ block content
                             .ticket-text= tracker.description
                         else
                             span.text-muted No details given
+
+                if isSuperUser
+                    .card.mb-3#devNotes
+                        .card-header.d-flex.justify-content-between.align-items-center
+                            span
+                                i.bi.bi-journal-code.mr-2
+                                | Dev notes
+                            a.small(href=`/dev-tracker/${tracker.tracker_id}/edit#devNotesField`)= tracker.dev_notes ? 'Edit' : 'Add'
+                        .card-body
+                            if tracker.dev_notes
+                                .ticket-text.dev-notes= tracker.dev_notes
+                            else
+                                span.small.text-muted None yet: cause, fix, files, DB, PRs, how to verify, gotchas
 
                 // Attachments
                 - var remaining = maxFiles - attachments.length
@@ -237,6 +278,12 @@ block content
                 if (!d.success) throw new Error(d.error || 'Failed');
                 return d;
             }).catch(e => { alert(e.message); throw e; });
+        }
+        function copyText(btn) {
+            var text = btn.getAttribute('data-copy');
+            var done = function () { var i = btn.querySelector('i'); i.className = 'bi bi-clipboard-check'; setTimeout(function () { i.className = 'bi bi-clipboard'; }, 1500); };
+            if (navigator.clipboard) navigator.clipboard.writeText(text).then(done, function () { prompt('Copy:', text); });
+            else prompt('Copy:', text);
         }
         function deleteAttachment(id, docId) {
             if (!confirm('Remove this attachment?')) return;
