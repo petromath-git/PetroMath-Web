@@ -4,12 +4,16 @@ const GstController = require('../controllers/gst-controller');
 const GstFilingController = require('../controllers/gst-filing-controller');
 const multer = require('multer');
 const login = require('connect-ensure-login');
-const security = require('../utils/app-security');
 
 // Middleware to ensure login for all GST routes
 const isLoginEnsured = login.ensureLoggedIn('/login');
-// Filing returns is owner / admin work
-const gstAccess = [isLoginEnsured, security.isAdmin()];
+// Filing returns is owner / admin work: Admin, PowerUser and SuperUser (not Manager)
+const GST_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
+const isGstRole = (req, res, next) => {
+    if (req.user && GST_ROLES.includes(req.user.Role)) return next();
+    res.status(403).send('You do not have access to this page.');
+};
+const gstAccess = [isLoginEnsured, isGstRole];
 const upload2b = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Dashboard - /gst
