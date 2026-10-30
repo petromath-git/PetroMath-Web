@@ -127,12 +127,12 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         GstFilingDao.getHsnMaster()
     ]);
     const hsnDesc = new Map(hsnMaster.map(h => [h.hsn_code, h.description]));
-    const hsnResolver = await GstHsnService.loadResolver();
+    const hsnResolver = await GstHsnService.loadResolver(locationCode);
 
     const errors = [];
     const warnings = [];
     const productByName = new Map(products.map(p => [p.product_name, p]));
-    // HSN as filed: the product's own, else the same product at a reference outlet, else the category default.
+    // HSN as filed: see services/gst-hsn-service.js (own code, oil company invoice, reference outlet, default).
     const hsnFor = new Map(products.map(p => [p.product_name, hsnResolver.resolve(p)]));
     const hsnOf = (productName) => (hsnFor.get(productName) || {}).code || '';
 
