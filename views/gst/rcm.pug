@@ -1,0 +1,143 @@
+extends ../layout
+
+block content
+    - const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    - const f = edit || { supplier_name: '', description: 'Shop rent', sac_code: '997212', taxable_value: '', gst_rate: 18, self_invoice_no: defaults.self_invoice_no, self_invoice_date: defaults.self_invoice_date, itc_class: 'COMMON', notes: '' }
+    style.
+        .gst-rcm table { font-size: .85rem; }
+        .gst-rcm .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .gst-rcm tfoot td { font-weight: 600; border-top: 2px solid #adb5bd; }
+
+    .container.mt-3.gst-rcm.gst-page
+        nav(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active Reverse charge
+
+        .d-flex.flex-wrap.justify-content-between.align-items-start.mb-2
+            div
+                h4.mb-1 Reverse charge · #{period.label}
+                p.text-muted.small.mb-0
+                    | Rent paid to a landlord without GST registration: you pay the GST yourself and raise a self-invoice.
+            form.form-inline(method='GET' action='/gst/rcm')
+                select.custom-select.custom-select-sm(name='period' onchange='this.form.submit()')
+                    each p in periods
+                        option(value=p.code selected=p.code === period.code)= p.label
+
+        .alert.alert-info.small.py-2
+            | Where it goes: GSTR-3B #[strong 3.1(d)] (tax to pay, in cash only) and #[strong 4A(3)] (credit you take back, shared under Rule 42 when it is a common cost),
+            | and GSTR-1 #[strong Table 13] as a document of type 2. Use the rent #[strong before TDS] (the full rent, not what reached the landlord).
+
+        .card.mb-3
+            .card-header.py-2.d-flex.flex-wrap.justify-content-between.align-items-center
+                span.font-weight-bold Self-invoices this month
+                if !entries.length && prevCount
+                    form.d-inline(method='POST' action='/gst/rcm/copy')
+                        input(type='hidden' name='period' value=period.code)
+                        button.btn.btn-sm.btn-outline-primary(type='submit')
+                            i.bi.bi-copy.mr-1
+                            | Copy last month (#{prevCount})
+            if entries.length
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th No.
+                                th Date
+                                th From
+                                th What
+                                th SAC
+                                th.num Value
+                                th.num Rate
+                                th.num CGST
+                                th.num SGST
+                                th Credit
+                                th
+                        tbody
+                            each e in entries
+                                tr
+                                    td.m-title= e.self_invoice_no
+                                    td(data-label='Date')= fmtDate(e.self_invoice_date)
+                                    td(data-label='From')= e.supplier_name
+                                    td(data-label='What')= e.description
+                                    td(data-label='SAC')= e.sac_code || ''
+                                    td.num(data-label='Value')= inr(e.taxable_value)
+                                    td.num(data-label='Rate') #{Number(e.gst_rate)}%
+                                    td.num(data-label='CGST')= inr(e.cgst)
+                                    td.num(data-label='SGST')= inr(e.sgst)
+                                    td.small(data-label='Credit')= (classes[e.itc_class] || e.itc_class).split(' (')[0]
+                                    td.text-nowrap.m-actions
+                                        a.btn.btn-sm.btn-link.p-0.mr-2(href=`/gst/rcm?period=${period.code}&edit=${e.rcm_id}`) Edit
+                                        form.d-inline(method='POST' action=`/gst/rcm/${e.rcm_id}/delete` onsubmit="return confirm('Delete this self-invoice?')")
+                                            input(type='hidden' name='period' value=period.code)
+                                            button.btn.btn-sm.btn-link.text-danger.p-0(type='submit') Delete
+                        tfoot
+                            tr
+                                td.m-title(colspan=5) Total
+                                td.num(data-label='Value')= inr(entries.reduce((t, e) => t + Number(e.taxable_value), 0))
+                                td.m-hide
+                                td.num(data-label='CGST')= inr(entries.reduce((t, e) => t + Number(e.cgst), 0))
+                                td.num(data-label='SGST')= inr(entries.reduce((t, e) => t + Number(e.sgst), 0))
+                                td.m-hide(colspan=2)
+            else
+                .card-body.text-muted.small Nothing entered for #{period.label}.
+
+        .card.mb-4(class=edit ? 'border-primary' : '')
+            .card-header.py-2.font-weight-bold= edit ? `Edit ${edit.self_invoice_no}` : 'Add a self-invoice'
+            .card-body
+                form(method='POST' action='/gst/rcm')
+                    input(type='hidden' name='period' value=period.code)
+                    if edit
+                        input(type='hidden' name='rcm_id' value=edit.rcm_id)
+                    .form-row
+                        .form-group.col-md-6
+                            label.small From (landlord / supplier)
+                            input.form-control.form-control-sm(type='text' name='supplier_name' value=f.supplier_name maxlength='150' required)
+                        .form-group.col-md-4
+                            label.small What
+                            input.form-control.form-control-sm(type='text' name='description' value=f.description maxlength='200' required)
+                        .form-group.col-md-2
+                            label.small SAC
+                            input.form-control.form-control-sm(type='text' name='sac_code' value=f.sac_code || '' maxlength='8')
+                    .form-row
+                        .form-group.col-6.col-md-3
+                            label.small Value before tax (₹)
+                            input#rcmValue.form-control.form-control-sm(type='number' step='0.01' min='0.01' name='taxable_value' value=f.taxable_value required)
+                        .form-group.col-6.col-md-2
+                            label.small GST rate
+                            select#rcmRate.custom-select.custom-select-sm(name='gst_rate')
+                                each r in rates
+                                    option(value=r selected=Number(f.gst_rate) === r) #{r}%
+                        .form-group.col-6.col-md-3
+                            label.small Self-invoice no.
+                            input.form-control.form-control-sm(type='text' name='self_invoice_no' value=f.self_invoice_no maxlength='16' required)
+                        .form-group.col-6.col-md-4
+                            label.small Self-invoice date
+                            input.form-control.form-control-sm(type='date' name='self_invoice_date' value=f.self_invoice_date
+                                min=period.from_date max=period.to_date required)
+                    .form-row
+                        .form-group.col-md-6
+                            label.small Credit (Rule 42)
+                            select.custom-select.custom-select-sm(name='itc_class')
+                                each label, key in classes
+                                    option(value=key selected=f.itc_class === key)= label
+                        .form-group.col-md-6
+                            label.small Note
+                            input.form-control.form-control-sm(type='text' name='notes' value=f.notes || '' maxlength='255')
+                    .d-flex.flex-wrap.align-items-center
+                        button.btn.btn-primary.btn-sm.mr-3(type='submit')= edit ? 'Save changes' : 'Add'
+                        if edit
+                            a.btn.btn-link.btn-sm.mr-3(href=`/gst/rcm?period=${period.code}`) Cancel
+                        span#rcmTax.small.text-muted
+
+    script.
+        (function () {
+            const v = document.getElementById('rcmValue'), r = document.getElementById('rcmRate'), out = document.getElementById('rcmTax');
+            const fmt = (n) => n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            function show() {
+                const half = Math.round((parseFloat(v.value || 0) * parseFloat(r.value) / 200) * 100) / 100;
+                out.textContent = half ? `CGST ₹${fmt(half)} + SGST ₹${fmt(half)} to pay in cash` : '';
+            }
+            v.addEventListener('input', show); r.addEventListener('change', show); show();
+        })();
