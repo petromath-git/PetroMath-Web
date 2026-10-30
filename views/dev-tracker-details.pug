@@ -81,6 +81,14 @@ block content
                                                     i.bi.bi-clipboard
                                 else
                                     a.small(href=`/dev-tracker/${tracker.tracker_id}/edit`) Add
+                        if tracker.claude_tokens || tracker.claude_cost_usd
+                            tr
+                                th Claude usage
+                                td(title="Cost at Anthropic API list prices")
+                                    if tracker.claude_tokens
+                                        | #{(Number(tracker.claude_tokens) / 1e6).toFixed(1)}M tokens
+                                    if tracker.claude_cost_usd
+                                        span.text-muted  · $#{Number(tracker.claude_cost_usd).toFixed(2)}
 
     .container-fluid.ticket-page
         .d-flex.justify-content-between.align-items-start.flex-wrap.gap-2.mb-3
