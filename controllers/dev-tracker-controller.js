@@ -356,6 +356,9 @@ module.exports = {
                 if (links.error) return sendError(req, res, 400, links.error, `/dev-tracker/${trackerId}/edit`);
                 extra.claude_links = links.value;
             }
+            if (access.isSuperUser && req.body.dev_notes !== undefined) {
+                extra.dev_notes = String(req.body.dev_notes).replace(/\r\n/g, '\n').trim().slice(0, 20000) || null;
+            }
 
             await devTrackerDao.updateTracker(trackerId, {
                 ...extra,

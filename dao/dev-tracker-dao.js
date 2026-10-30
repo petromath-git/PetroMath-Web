@@ -47,13 +47,14 @@ module.exports = {
         else if (filters.location_code) where.location_code = filters.location_code;
         if (filters.search) {
             const like = `%${filters.search}%`;
-            where[Op.and] = [{
-                [Op.or]: [
-                    { title: { [Op.like]: like } },
-                    { description: { [Op.like]: like } },
-                    { tags: { [Op.like]: like } }
-                ]
-            }];
+            const fields = [
+                { title: { [Op.like]: like } },
+                { description: { [Op.like]: like } },
+                { tags: { [Op.like]: like } }
+            ];
+            // Dev notes are SuperUser-only, so only their searches look in them
+            if (access.isSuperUser) fields.push({ dev_notes: { [Op.like]: like } });
+            where[Op.and] = [{ [Op.or]: fields }];
         }
 
         return DevTracker.findAll({

@@ -112,6 +112,19 @@ block content
                         else
                             span.text-muted No details given
 
+                if isSuperUser
+                    .card.mb-3#devNotes
+                        .card-header.d-flex.justify-content-between.align-items-center
+                            span
+                                i.bi.bi-journal-code.mr-2
+                                | Dev notes
+                            a.small(href=`/dev-tracker/${tracker.tracker_id}/edit#devNotesField`)= tracker.dev_notes ? 'Edit' : 'Add'
+                        .card-body
+                            if tracker.dev_notes
+                                .ticket-text.dev-notes= tracker.dev_notes
+                            else
+                                span.small.text-muted None yet: cause, fix, files, DB, PRs, how to verify, gotchas
+
                 // Attachments
                 - var remaining = maxFiles - attachments.length
                 .card.mb-3#attachments
