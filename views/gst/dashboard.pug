@@ -1,165 +1,85 @@
 extends ../layout
 
 block content
-    .container-fluid.mt-4
-        //- Header
-        .row.mb-4
-            .col-12
-                .d-flex.justify-content-between.align-items-center
-                    div
-                        h4.mb-1
-                            i.bi.bi-file-earmark-text.me-2
-                            | GST Returns Management
-                        p.text-muted.mb-0 Generate and download GSTR-1 & GSTR-3B returns
-                    div
-                        if gstConfig
-                            span.badge.bg-success.me-2 Configured
-                            small.text-muted GSTIN: #{gstConfig.gstin}
-                        else
-                            a.btn.btn-warning(href='/gst/config')
-                                i.bi.bi-gear.me-2
-                                | Setup Configuration
+    .container.mt-3
+        .d-flex.flex-wrap.justify-content-between.align-items-start.mb-3
+            div
+                h4.mb-1
+                    i.bi.bi-file-earmark-text.mr-2
+                    | GST Returns
+                p.text-muted.mb-0 Make the GSTR-1 file from PetroMath and upload it on the GST portal yourself.
+            div.text-md-right.mt-2.mt-md-0
+                if gstConfig
+                    .small.text-muted GSTIN
+                    .font-weight-bold= gstConfig.gstin
+                    a.small(href='/gst/config') Settings
+                else
+                    a.btn.btn-warning.btn-sm(href='/gst/config')
+                        i.bi.bi-gear.mr-1
+                        | Enter GSTIN first
 
-        //- Quick Stats
-        .row.mb-4
-            .col-md-4
-                .card.border-primary
-                    .card-body.text-center
-                        h6.text-muted Current Period
-                        h3.mb-0.text-primary= formattedPeriod
-                        small.text-muted= currentPeriod
-            
-            .col-md-4
-                .card.border-info
-                    .card-body.text-center
-                        h6.text-muted Total Returns
-                        h3.mb-0.text-info= recentReturns.length
-                        small.text-muted Generated
-            
-            .col-md-4
-                .card.border-success
-                    .card-body.text-center
-                        h6.text-muted GSTIN
-                        h3.mb-0.text-success(style='font-size: 1.2rem;')= gstConfig ? gstConfig.gstin : 'Not Set'
-                        small.text-muted Location: #{user.location_code}
-
-        //- Main Actions
-        .row.mb-4
-            .col-md-6
-                .card.h-100.border-success
-                    .card-header.bg-success.text-white
-                        h5.mb-0
-                            i.bi.bi-file-text.me-2
-                            | GSTR-1
-                    .card-body
-                        p.text-muted Monthly return of outward supplies (sales)
-                        ul.small.mb-3
-                            li B2B invoices (Sales to registered dealers)
-                            li B2C Large invoices (>₹2.5 lakh)
-                            li B2C Small invoices (state-wise summary)
-                            li HSN-wise summary of outward supplies
-                        
-                        if gstConfig
-                            a.btn.btn-success.w-100(href='/gst/generate/GSTR1')
-                                i.bi.bi-plus-circle.me-2
-                                | Generate GSTR-1
-                        else
-                            button.btn.btn-secondary.w-100(disabled)
-                                i.bi.bi-lock.me-2
-                                | Setup Configuration First
-            
-            .col-md-6
-                .card.h-100.border-info
-                    .card-header.bg-info.text-white
-                        h5.mb-0
-                            i.bi.bi-file-earmark-text.me-2
-                            | GSTR-3B
-                    .card-body
-                        p.text-muted Monthly summary return and tax payment
-                        ul.small.mb-3
-                            li Summary of outward supplies
-                            li Summary of ITC (Input Tax Credit)
-                            li Tax liability calculation
-                            li Interest and late fee (if applicable)
-                        
-                        if gstConfig
-                            a.btn.btn-info.w-100(href='/gst/generate/GSTR3B')
-                                i.bi.bi-plus-circle.me-2
-                                | Generate GSTR-3B
-                        else
-                            button.btn.btn-secondary.w-100(disabled)
-                                i.bi.bi-lock.me-2
-                                | Setup Configuration First
-
-        //- Recent Returns
         .row
-            .col-12
-                .card
-                    .card-header.d-flex.justify-content-between.align-items-center
-                        h5.mb-0
-                            i.bi.bi-clock-history.me-2
-                            | Recent Returns
-                        a.btn.btn-sm.btn-outline-primary(href='/gst/history') View All
-                    
+            .col-lg-7.mb-3
+                .card.h-100.border-success
                     .card-body
-                        if recentReturns && recentReturns.length > 0
-                            .table-responsive
-                                table.table.table-hover
-                                    thead
-                                        tr
-                                            th Return Type
-                                            th Period
-                                            th Generated On
-                                            th Status
-                                            th Actions
-                                    tbody
-                                        each ret in recentReturns.slice(0, 5)
-                                            tr
-                                                td
-                                                    span.badge(class=ret.return_type === 'GSTR1' ? 'bg-success' : 'bg-info')= ret.return_type
-                                                td= ret.return_period
-                                                td= new Date(ret.creation_date).toLocaleDateString('en-IN')
-                                                td
-                                                    span.badge(class=ret.status === 'READY' ? 'bg-warning' : 'bg-success')= ret.status
-                                                td
-                                                    a.btn.btn-sm.btn-outline-primary(href=`/gst/return/${ret.return_data_id}`)
-                                                        i.bi.bi-eye.me-1
-                                                        | View
-                        else
-                            .text-center.py-5.text-muted
-                                i.bi.bi-inbox.display-1
-                                p.mt-3 No returns generated yet
-                                p.small Generate your first return to get started
+                        h5.card-title Each month
+                        p.small.text-muted
+                            | Pick the month, then go through the steps in order. Every figure ties to the GST Summary report and the books.
+                        form(method='GET' action='/gst/gstr1')
+                            select.custom-select.mb-3(name='period' style='max-width:12rem')
+                                each p in periods
+                                    option(value=p.code)= p.label
+                            if gstConfig
+                                - const steps = [{ url: '/gst/rcm', icon: 'bi-house', name: 'Reverse charge (rent)', when: 'self-invoice, any time in the month' }, { url: '/gst/gstr1', icon: 'bi-file-earmark-arrow-up', name: 'GSTR-1', when: 'download the JSON and upload by the 11th' }, { url: '/gst/itc', icon: 'bi-inbox', name: 'GSTR-2B and ITC', when: 'upload 2B after the 14th; Rule 42' }, { url: '/gst/gstr3b', icon: 'bi-calculator', name: 'GSTR-3B worksheet', when: 'type, pay and file by the 20th' }, { url: '/gst/workings', icon: 'bi-file-earmark-excel', name: 'GST Workings (Excel)', when: 'both returns laid out to file by hand, for the auditor' }]
+                                .list-group
+                                    each s, n in steps
+                                        button.list-group-item.list-group-item-action.d-flex.align-items-center.text-left(type='submit' formaction=s.url)
+                                            span.badge.badge-success.mr-3= n + 1
+                                            i.bi.mr-2(class=s.icon)
+                                            span.d-md-flex.align-items-center
+                                                span.d-block.d-md-inline.font-weight-bold.mr-2= s.name
+                                                span.d-block.d-md-inline.small.text-muted= s.when
+                            else
+                                button.btn.btn-secondary(type='button' disabled) Enter GSTIN first
+            .col-lg-5.mb-3
+                .card.h-100.border-info
+                    .card-body
+                        h5.card-title How to file
+                        p.small.text-muted Step by step: one-time setup, uploading GSTR-1, checking and paying GSTR-3B, and the yearly return.
+                        a.btn.btn-outline-info(href='/gst/guide')
+                            i.bi.bi-journal-text.mr-1
+                            | Open the guide
+                        .small.mt-3
+                            | GSTR-1 by the #[strong 11th] · GSTR-3B by the #[strong 20th]
+                        hr
+                        h6.mb-1 Set up once
+                        a.small(href='/gst/hsn')
+                            i.bi.bi-upc.mr-1
+                            | HSN codes for products
 
-        //- How to File Instructions
-        .row.mt-4
-            .col-12
-                .card.border-warning
-                    .card-header.bg-warning.text-dark
-                        h6.mb-0
-                            i.bi.bi-info-circle.me-2
-                            | How to File GST Returns (Manual Process)
-                    .card-body
-                        .row
-                            .col-md-6
-                                h6 Steps to File:
-                                ol.small
-                                    li Click "Generate GSTR-1" or "Generate GSTR-3B"
-                                    li Preview the data and verify correctness
-                                    li Click "Download JSON" to save the file
-                                    li Go to 
-                                        a(href='https://www.gst.gov.in' target='_blank') GST Portal 
-                                        i.bi.bi-box-arrow-up-right.ms-1
-                                    li Login with your credentials
-                                    li Navigate to Returns → File Returns
-                                    li Upload the downloaded JSON file
-                                    li Review, sign with DSC/EVC and submit
-                            
-                            .col-md-6
-                                h6 Important Notes:
-                                ul.small.text-muted
-                                    li Due date for GSTR-1: 11th of next month
-                                    li Due date for GSTR-3B: 20th of next month
-                                    li Keep downloaded JSON files for your records
-                                    li Verify HSN codes before filing
-                                    li Check GST amounts match your books
+        .card.mb-4
+            .card-header.d-flex.justify-content-between.align-items-center.py-2
+                span.font-weight-bold Files downloaded
+                a.small(href='/gst/history') All
+            if recentReturns && recentReturns.length
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Return
+                                th Period
+                                th Downloaded
+                                th.text-right Taxable value
+                                th.text-right CGST
+                                th.text-right SGST
+                        tbody
+                            each ret in recentReturns.slice(0, 10)
+                                tr
+                                    td.m-title #{ret.return_type} · #{ret.return_period.substring(0, 2) + '-' + ret.return_period.substring(2)}
+                                    td.m-hide= ret.return_period.substring(0, 2) + '-' + ret.return_period.substring(2)
+                                    td(data-label='Downloaded')= dateFmt(ret.creation_date)
+                                    td.text-right(data-label='Taxable value')= Number(ret.total_taxable_value || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                                    td.text-right(data-label='CGST')= Number(ret.total_cgst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+                                    td.text-right(data-label='SGST')= Number(ret.total_sgst || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })
+            else
+                .card-body.text-muted.small Nothing downloaded yet.

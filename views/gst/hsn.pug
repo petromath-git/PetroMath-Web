@@ -1,0 +1,132 @@
+extends ../layout
+
+block content
+    style.
+        .gst-hsn .hsn { font-family: SFMono-Regular, Consolas, monospace; font-weight: 600; letter-spacing: .5px; }
+        .gst-hsn table { font-size: .85rem; }
+        .gst-hsn input.hsn-input { width: 7.5rem; }
+        .gst-hsn input.hsn-input.changed { border-color: #28a745; background: #f0fff4; }
+        .gst-hsn .desc { max-width: 28rem; font-size: .78rem; color: #495057; }
+
+    .container-fluid.mt-3.gst-hsn.gst-page
+        nav(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active HSN codes
+
+        h4.mb-1 HSN codes
+        p.text-muted.small.mb-3
+            | GSTR-1 Table 12 uses the product's own HSN when it is in the list at the bottom. Petrol and diesel otherwise take the
+            | code printed on the oil company's latest invoice. Lubes get the code from the supplier's invoice PDF when you upload it
+            | on Lube Purchases. Anything still without a code takes the HSN of the same product at #{referenceLocations.join(' / ')},
+            | else the default for its kind. So you only need to enter a code here when the one in #[strong Used in returns] is wrong.
+
+        - const missing = products.filter(p => !p.valid).length
+        - const noDesc = products.filter(p => p.valid && !p.description).length
+        if missing || noDesc
+            .alert.alert-warning.py-2.small
+                if missing
+                    div #{missing} product#{missing > 1 ? 's have' : ' has'} no HSN, and none could be found from other outlets or the defaults. Enter it below.
+                if noDesc
+                    div #{noDesc} product#{noDesc > 1 ? 's use' : ' uses'} an HSN that is not in the list below, so GSTR-1 describes it by product name.
+
+        form#hsnForm(method='POST' action='/gst/hsn/products')
+            .card.mb-3
+                .card-header.py-2.d-flex.flex-wrap.justify-content-between.align-items-center
+                    span.font-weight-bold.mr-2 Products (#{products.length})
+                    div.d-flex.flex-wrap(style='gap:.5rem')
+                        button.btn.btn-sm.btn-outline-primary(type='button' onclick='fillSuggested()')
+                            i.bi.bi-magic.mr-1
+                            | Copy codes into products
+                        button.btn.btn-sm.btn-success(type='submit')
+                            i.bi.bi-check2.mr-1
+                            | Save
+                            span#changedCount
+                .table-responsive
+                    table.table.table-sm.table-striped.mb-0.m-stack
+                        thead
+                            tr
+                                th Product
+                                th Unit
+                                th.text-right GST
+                                th Product HSN
+                                th Used in returns
+                                th Portal description
+                        tbody
+                            each p in products
+                                tr
+                                    td.m-title
+                                        | #{p.product_name}
+                                        if p.is_fuel
+                                            span.badge.badge-light.ml-1 fuel
+                                    td(data-label='Unit')= p.unit
+                                    td.text-right(data-label='GST') #{Number(p.gst_rate)}%
+                                    td(data-label='Product HSN')
+                                        input.form-control.form-control-sm.hsn.hsn-input(type='text' inputmode='numeric' maxlength='8'
+                                            value=p.hsn_code || '' data-orig=p.hsn_code || '' data-name=`hsn[${p.product_id}]`
+                                            data-suggested=p.suggested ? p.suggested.code : '' class=p.valid ? '' : 'is-invalid')
+                                    td(data-label='Used in returns')
+                                        span.hsn= p.used.code || '—'
+                                        if p.used.source !== 'product'
+                                            .small.text-muted= p.used.source
+                                    td.desc.m-wide(data-label='Portal description')= p.description || (p.valid ? 'not in the list below' : '')
+
+        .card.mb-3
+            .card-header.py-2.font-weight-bold Default HSN by kind of product
+            .card-body.small.text-muted.pb-0
+                | Used when a product has no code of its own, from an invoice or from #{referenceLocations.join(' / ')}.
+                | Petrol and diesel are the codes on IOCL's invoices (2710 12 42 and 2710 19 44).
+            .card-body
+                form.form-row(method='POST' action='/gst/hsn/defaults')
+                    each d in defaults
+                        .col-6.col-md-3.col-lg-2.mb-2
+                            label.small.mb-0= d.category.charAt(0) + d.category.slice(1).toLowerCase()
+                            input.form-control.form-control-sm.hsn(type='text' name=`def[${d.category}]` value=d.hsn_code maxlength='8' required)
+                    .col-12
+                        button.btn.btn-sm.btn-primary(type='submit') Save defaults
+
+        .card.mb-4
+            .card-header.py-2.font-weight-bold HSN descriptions
+            .card-body.pb-0.small.text-muted
+                | Copy the description exactly as the portal shows it when you pick the HSN in GSTR-1 (Table 12). Click a row to edit it.
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th HSN
+                            th Description
+                    tbody
+                        each h in master
+                            tr(style='cursor:pointer' onclick=`editHsn(${JSON.stringify(h.hsn_code)}, ${JSON.stringify(h.description)})`)
+                                td.hsn.m-title= h.hsn_code
+                                td.desc.m-wide= h.description
+            .card-body
+                form.form-row(method='POST' action='/gst/hsn/master')
+                    .col-md-2.mb-2
+                        input#hsnCode.form-control.form-control-sm.hsn(type='text' name='hsn_code' placeholder='HSN' maxlength='8' required)
+                    .col-md-8.mb-2
+                        textarea#hsnDesc.form-control.form-control-sm(name='description' rows='2' maxlength='500' placeholder='Description as on the portal' required)
+                    .col-md-2.mb-2
+                        button.btn.btn-sm.btn-primary.btn-block(type='submit') Save code
+
+    script.
+        // Only changed inputs get a name, so only they are posted.
+        function markChanged(input) {
+            const changed = input.value.trim() !== input.dataset.orig;
+            input.classList.toggle('changed', changed);
+            if (changed) input.name = input.dataset.name; else input.removeAttribute('name');
+            const n = document.querySelectorAll('#hsnForm input.changed').length;
+            document.getElementById('changedCount').textContent = n ? ` (${n})` : '';
+        }
+        document.querySelectorAll('#hsnForm input.hsn-input').forEach(i => i.addEventListener('input', () => markChanged(i)));
+        function fillSuggested() {
+            document.querySelectorAll('#hsnForm input.hsn-input').forEach(i => {
+                if (i.dataset.suggested) { i.value = i.dataset.suggested; markChanged(i); }
+            });
+        }
+        function editHsn(code, desc) {
+            document.getElementById('hsnCode').value = code;
+            document.getElementById('hsnDesc').value = desc;
+            document.getElementById('hsnDesc').focus();
+        }

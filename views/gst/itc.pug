@@ -1,0 +1,229 @@
+extends ../layout
+
+block content
+    - const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    - const i = w.itc
+    - const rl = i.rule42
+    style.
+        .gst-itc table { font-size: .85rem; }
+        .gst-itc .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .gst-itc .mono { font-family: SFMono-Regular, Consolas, monospace; font-size: .8rem; }
+        .gst-itc tfoot td, .gst-itc tr.total td { font-weight: 600; border-top: 2px solid #adb5bd; }
+        .gst-itc .table-sub { font-size: .8rem; color: #6c757d; }
+        .gst-itc select.class-select { min-width: 12rem; }
+        @media (max-width: 767px) {
+            body.mobile-ready .gst-itc select.class-select { min-width: 0; width: 100%; }
+            body.mobile-ready .gst-itc table.m-stack > tbody > tr.supplier { background: #f1f3f5 !important; }
+            body.mobile-ready .gst-itc tr.supplier td { background: transparent; }
+        }
+        .gst-itc tr.supplier td { background: #f1f3f5; font-weight: 600; }
+
+    .container-fluid.mt-3.gst-itc.gst-page
+        nav(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active GSTR-2B and ITC
+
+        .d-flex.flex-wrap.justify-content-between.align-items-start.mb-2
+            div
+                h4.mb-1 GSTR-2B and ITC · #{w.period.label}
+                p.text-muted.small.mb-0 Credit you can take in GSTR-3B Table 4, and how much goes back under Rule 42 because petrol and diesel are not under GST.
+            form.form-inline(method='GET' action='/gst/itc')
+                select.custom-select.custom-select-sm.mr-2(name='period' onchange='this.form.submit()')
+                    each p in periods
+                        option(value=p.code selected=p.code === w.period.code)= p.label
+                a.btn.btn-sm.btn-outline-primary(href=`/gst/gstr3b?period=${w.period.code}`)
+                    | GSTR-3B worksheet
+                    i.bi.bi-arrow-right.ml-1
+
+        if i.warnings.length
+            .alert.alert-warning.small.py-2
+                ul.mb-0.pl-3
+                    each msg in i.warnings
+                        li= msg
+
+        //- Upload
+        .card.mb-3
+            .card-body.py-2.d-flex.flex-wrap.align-items-center.justify-content-between
+                div.small
+                    if i.uploaded
+                        i.bi.bi-check-circle-fill.text-success.mr-1
+                        | GSTR-2B loaded: #{i.uploadInfo.line_count} line(s), #{fmtTime(i.uploadInfo.upload_date)} by #{i.uploadInfo.uploaded_by}. Uploading again replaces it; classes you picked stay with the supplier.
+                    else
+                        i.bi.bi-exclamation-circle.text-warning.mr-1
+                        | Not loaded. On the portal: #[strong Returns Dashboard › GSTR-2B › View › Download], JSON or Excel (ready on the 14th).
+                form.d-flex.flex-wrap.align-items-center.mt-1(method='POST' action='/gst/itc/upload' enctype='multipart/form-data' style='gap:.5rem')
+                    input(type='hidden' name='period' value=w.period.code)
+                    input.form-control-file.form-control-sm(type='file' name='file' accept='.json,.xlsx,application/json' required style='width:auto;max-width:100%')
+                    button.btn.btn-sm.btn-primary(type='submit')
+                        i.bi.bi-upload.mr-1
+                        | Upload GSTR-2B
+
+        //- Rule 42 working
+        .row
+            .col-lg-6.mb-3
+                .card.h-100
+                    .card-header.py-2.font-weight-bold Rule 42 · common credit
+                    table.table.table-sm.mb-0
+                        tbody
+                            tr
+                                td Taxable sales (3.1(a))
+                                td.num ₹#{inr(rl.taxable)}
+                            tr
+                                td Petrol / diesel and nil-rated (3.1(c) + 3.1(e))
+                                td.num ₹#{inr(rl.exempt)}
+                            tr
+                                td Share not taxable (exempt ÷ total)
+                                td.num.font-weight-bold #{(rl.ratio * 100).toFixed(4)}%
+                            tr
+                                td Common credit (CGST + SGST)
+                                td.num ₹#{inr(rl.common.cgst + rl.common.sgst + rl.common.igst)}
+                            tr.total
+                                td Reversed under Rule 42 (D1)
+                                td.num ₹#{inr(rl.d1.cgst + rl.d1.sgst + rl.d1.igst)}
+                    .card-body.py-2.table-sub
+                        | Credit used only for lubes etc. stays in full. Credit used only for petrol / diesel, and blocked credit, goes back in full.
+                        | At year end the rule is redone on the year's turnover (annual return).
+            .col-lg-6.mb-3
+                .card.h-100.border-primary
+                    .card-header.py-2.font-weight-bold GSTR-3B Table 4
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th
+                                th.num IGST
+                                th.num CGST
+                                th.num SGST
+                        tbody
+                            - const t4 = [['4A(3) Reverse charge', i.t4a3], ['4A(5) All other ITC (GSTR-2B)', i.t4a5], ['4B(1) Reversed (Rule 42 + 17(5))', i.reversal], ['4C Net ITC', i.net, 'total']]
+                            if i.t4d2.cgst || i.t4d2.sgst || i.t4d2.igst
+                                - t4.push(['4D(2) Not available (2B says no)', i.t4d2])
+                            each row in t4
+                                tr(class=row[2])
+                                    td.m-title= row[0]
+                                    td.num(data-label='IGST')= inr(row[1].igst)
+                                    td.num(data-label='CGST')= inr(row[1].cgst)
+                                    td.num(data-label='SGST')= inr(row[1].sgst)
+
+        //- By class
+        .card.mb-3
+            .card-header.py-2.font-weight-bold Credit by use
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Use
+                            th.num Value
+                            th.num CGST
+                            th.num SGST
+                            th.num IGST
+                            th.num Credit kept (CGST + SGST + IGST)
+                    tbody
+                        each label, key in i.classes
+                            - const c = i.byClass[key]
+                            - const kept = key === 'TAXABLE' ? c.cgst + c.sgst + c.igst : key === 'COMMON' ? (c.cgst + c.sgst + c.igst) - (rl.d1.cgst + rl.d1.sgst + rl.d1.igst) : 0
+                            tr
+                                td.m-title= label
+                                td.num(data-label='Value')= inr(c.txval)
+                                td.num(data-label='CGST')= inr(c.cgst)
+                                td.num(data-label='SGST')= inr(c.sgst)
+                                td.num(data-label='IGST')= inr(c.igst)
+                                td.num(data-label='Credit kept')= inr(kept)
+
+        //- Lines
+        .card.mb-3#lines
+            .card-header.py-2
+                span.font-weight-bold GSTR-2B lines and reverse charge
+                .table-sub Changing a line also sets the supplier's other lines (that you have not set yourself) and is remembered for next month.
+            if i.rows.length || i.rcm.length
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Bill
+                                th Date
+                                th.num Value
+                                th.num CGST
+                                th.num SGST
+                                th.num IGST
+                                th In books
+                                th Use
+                        tbody
+                            each s in i.suppliers
+                                tr.supplier
+                                    td.m-title(colspan=2)
+                                        | #{s.name || s.gstin}
+                                        span.mono.text-muted.ml-2= s.gstin
+                                    td.num(data-label='Value')= inr(s.total.txval)
+                                    td.num(data-label='CGST')= inr(s.total.cgst)
+                                    td.num(data-label='SGST')= inr(s.total.sgst)
+                                    td.num(data-label='IGST')= inr(s.total.igst)
+                                    td.m-hide(colspan=2)
+                                each r in s.lines
+                                    tr
+                                        td.m-title
+                                            span.mono= r.doc_no
+                                            if r.section !== 'B2B'
+                                                span.badge.badge-light.ml-1= r.section
+                                            if r.reverse_charge === 'Y'
+                                                span.badge.badge-warning.ml-1 RCM
+                                        td(data-label='Date')= fmtDate(r.doc_date)
+                                        td.num(data-label='Value')= inr(r.taxable_value)
+                                        td.num(data-label='CGST')= inr(r.cgst)
+                                        td.num(data-label='SGST')= inr(r.sgst)
+                                        td.num(data-label='IGST')= inr(r.igst)
+                                        td(data-label='In books')
+                                            if r.bookMatch
+                                                i.bi.bi-check-circle-fill.text-success(title=`Purchase ${r.bookMatch.invoice_number} in PetroMath`)
+                                                span.d-md-none.small.ml-1= r.bookMatch.invoice_number
+                                            else
+                                                span.d-md-none.small.text-muted no
+                                        td.m-wide(data-label='Use')
+                                            form.mb-0(method='POST' action='/gst/itc/class')
+                                                input(type='hidden' name='period' value=w.period.code)
+                                                input(type='hidden' name='gst2b_id' value=r.gst2b_id)
+                                                input(type='hidden' name='all' value='1')
+                                                select.custom-select.custom-select-sm.class-select(name='itc_class' onchange='this.form.submit()'
+                                                    class=r.class_source === 'AUTO' && r.itc_class === 'COMMON' ? 'border-warning' : '')
+                                                    each label, key in i.classes
+                                                        option(value=key selected=r.itc_class === key)= label
+                            if i.rcm.length
+                                tr.supplier
+                                    td.m-title(colspan=8)
+                                        | Reverse charge self-invoices
+                                        a.small.font-weight-normal.ml-2(href=`/gst/rcm?period=${w.period.code}`) Edit
+                                each e in i.rcm
+                                    tr
+                                        td.m-title
+                                            span.mono= e.self_invoice_no
+                                            span.small.text-muted.ml-2 #{e.supplier_name} · #{e.description}
+                                        td(data-label='Date')= fmtDate(e.self_invoice_date)
+                                        td.num(data-label='Value')= inr(e.taxable_value)
+                                        td.num(data-label='CGST')= inr(e.cgst)
+                                        td.num(data-label='SGST')= inr(e.sgst)
+                                        td.num(data-label='IGST')= inr(e.igst)
+                                        td.m-hide
+                                        td.small.m-wide(data-label='Use')= i.classes[e.itc_class] || e.itc_class
+            else
+                .card-body.text-muted.small Nothing yet. Upload the GSTR-2B, and enter rent on the #[a(href=`/gst/rcm?period=${w.period.code}`) Reverse charge] page.
+
+        //- Purchase book check
+        if i.uploaded
+            .card.mb-4
+                .card-header.py-2
+                    span.font-weight-bold GSTR-2B against the lube purchase book
+                    .table-sub #{i.recon.matched} line(s) match a purchase entered in PetroMath.
+                .card-body.py-2
+                    if i.recon.inBookNot2b.length
+                        p.small.mb-1.font-weight-bold.text-danger In PetroMath but not in GSTR-2B (credit cannot be taken until the supplier files it):
+                        ul.small
+                            each b in i.recon.inBookNot2b
+                                li #{b.supplier_name} · #{b.invoice_number} · #{fmtDate(b.invoice_date)} · CGST ₹#{inr(b.cgst)} SGST ₹#{inr(b.sgst)}
+                    else
+                        p.small.mb-1.text-success Every purchase entered this month is in GSTR-2B.
+                    if i.recon.in2bNotBook.length
+                        p.small.mb-1.font-weight-bold In GSTR-2B but not in the lube purchase book (oil company charges, services, or a bill not entered yet):
+                        ul.small.mb-0
+                            each r in i.recon.in2bNotBook
+                                li #{r.supplier_name} · #{r.doc_no} · #{fmtDate(r.doc_date)} · value ₹#{inr(r.taxable_value)}

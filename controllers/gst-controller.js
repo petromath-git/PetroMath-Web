@@ -3,8 +3,12 @@ const GstReturnDataDao = require("../dao/gst-return-data-dao");
 const GstDataAggregationDao = require("../dao/gst-data-aggregation-dao");
 const GSTR1Generator = require("../services/gstr1-generator");
 const GSTR3BGenerator = require("../services/gstr3b-generator");
+const Gstr1ReturnService = require("../services/gstr1-return-service");
 const gstUtils = require("../utils/gst-utils");
 const dateFormat = require('dateformat');
+const moment = require('moment');
+const fs = require('fs');
+const path = require('path');
 
 module.exports = {
     /**
@@ -25,13 +29,16 @@ module.exports = {
             
             res.render('gst/dashboard', {
                 title: 'GST Returns',
+                mobileReady: true,
                 user: req.user,
                 gstConfig: gstConfig,
                 recentReturns: recentReturns,
                 currentPeriod: currentPeriod,
-                formattedPeriod: gstUtils.formatReturnPeriod(currentPeriod)
+                formattedPeriod: gstUtils.formatReturnPeriod(currentPeriod),
+                periods: gstUtils.getRecentPeriods(12),
+                dateFmt: (d) => moment(d).utcOffset(330).format('DD-MMM-YYYY HH:mm')
             });
-            
+
         } catch (error) {
             console.error('Error loading GST dashboard:', error);
             req.flash('error', 'Failed to load GST dashboard: ' + error.message);
@@ -46,6 +53,7 @@ module.exports = {
         try {
             const locationCode = req.user.location_code;
             const returnType = req.params.returnType; // GSTR1 or GSTR3B
+            if (returnType === 'GSTR1') return res.redirect('/gst/gstr1');
             
             // Get GST config
             const gstConfig = await GstConfigDao.findByLocationCode(locationCode);
@@ -279,7 +287,7 @@ previewReturn: async (req, res) => {
             // Get return
             const returnData = await GstReturnDataDao.findById(returnDataId);
             
-            if (!returnData) {
+            if (!returnData || returnData.location_code !== req.user.location_code) {
                 req.flash('error', 'Return not found');
                 return res.redirect('/gst/history');
             }
@@ -300,6 +308,100 @@ previewReturn: async (req, res) => {
             req.flash('error', 'Failed to load return details: ' + error.message);
             res.redirect('/gst/history');
         }
+    },
+
+    /**
+     * GSTR-1 built from the GST Summary: checks, HSN tables, tie-out, 3B figures
+     */
+    getGstr1: async (req, res) => {
+        const period = gstUtils.isValidReturnPeriod(req.query.period) ? req.query.period : gstUtils.getCurrentReturnPeriod();
+        const includeFuelInHsn = req.query.fuelHsn !== '0';
+        try {
+            const gstConfig = await GstConfigDao.findByLocationCode(req.user.location_code);
+            if (!gstConfig) {
+                req.flash('error', 'Enter the GSTIN for this location first.');
+                return res.redirect('/gst/config');
+            }
+            const result = await Gstr1ReturnService.buildGstr1(req.user.location_code, period, { includeFuelInHsn });
+            res.render('gst/gstr1', {
+                title: 'GSTR-1',
+                mobileReady: true,
+                user: req.user,
+                r: result,
+                periods: gstUtils.getRecentPeriods(12),
+                downloadUrl: `/gst/gstr1/download?period=${period}&fuelHsn=${includeFuelInHsn ? 1 : 0}`
+            });
+        } catch (error) {
+            console.error('Error building GSTR-1:', error);
+            req.flash('error', 'Could not build GSTR-1: ' + error.message);
+            res.redirect('/gst');
+        }
+    },
+
+    /**
+     * GSTR-1 JSON download; refused while the page shows errors
+     */
+    downloadGstr1: async (req, res) => {
+        const period = req.query.period;
+        if (!gstUtils.isValidReturnPeriod(period)) return res.status(400).send('Invalid period');
+        const includeFuelInHsn = req.query.fuelHsn !== '0';
+        try {
+            const locationCode = req.user.location_code;
+            const result = await Gstr1ReturnService.buildGstr1(locationCode, period, { includeFuelInHsn });
+            if (!result.canDownload) {
+                req.flash('error', 'Fix the errors listed on the page before downloading.');
+                return res.redirect(`/gst/gstr1?period=${period}&fuelHsn=${includeFuelInHsn ? 1 : 0}`);
+            }
+            const periodDates = gstUtils.getPeriodDates(period);
+            const totals = result.gstr3b.outward;
+            await GstReturnDataDao.create({
+                location_code: locationCode,
+                gstin: result.gstin,
+                return_type: 'GSTR1',
+                return_period: period,
+                financial_year: periodDates.financial_year,
+                from_date: periodDates.from_date,
+                to_date: periodDates.to_date,
+                return_json: JSON.stringify(result.json),
+                status: 'READY',
+                total_taxable_value: totals.txval.toFixed(2),
+                total_cgst: totals.camt.toFixed(2),
+                total_sgst: totals.samt.toFixed(2),
+                notes: includeFuelInHsn ? 'Fuel included in HSN summary' : 'Fuel left out of HSN summary',
+                created_by: req.user.Person_id || req.user.username
+            });
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Content-Disposition', `attachment; filename="GSTR1_${result.gstin}_${period}.json"`);
+            res.send(JSON.stringify(result.json));
+        } catch (error) {
+            console.error('Error downloading GSTR-1:', error);
+            req.flash('error', 'Could not build GSTR-1: ' + error.message);
+            res.redirect('/gst');
+        }
+    },
+
+    /**
+     * Step-by-step guide to upload and file on the GST portal
+     */
+    getGuide: async (req, res) => {
+        const gstConfig = await GstConfigDao.findByLocationCode(req.user.location_code);
+        // Screenshots are optional: public/images/gst-guide/<step>.png shows under that step once added.
+        const shotDir = path.join(__dirname, '..', 'public', 'images', 'gst-guide');
+        const shots = {};
+        try {
+            fs.readdirSync(shotDir).forEach(f => {
+                const m = f.match(/^([a-z0-9-]+)\.(png|jpg|jpeg|webp)$/i);
+                if (m) shots[m[1]] = `/images/gst-guide/${f}`;
+            });
+        } catch (e) { /* no screenshots yet */ }
+        res.render('gst/guide', {
+            title: 'How to file GSTR-1 and GSTR-3B',
+            mobileReady: true,
+            user: req.user,
+            gstConfig: gstConfig,
+            shots: shots,
+            lastMonth: gstUtils.getCurrentReturnPeriod()
+        });
     },
 
     /**
@@ -334,8 +436,8 @@ previewReturn: async (req, res) => {
             const { gstin } = req.body;
             
             // Validate GSTIN
-            if (!gstUtils.isValidGstin(gstin)) {
-                req.flash('error', 'Invalid GSTIN format');
+            if (!Gstr1ReturnService.isValidGstin(gstin)) {
+                req.flash('error', 'Invalid GSTIN (format or check digit). Copy it from your GST certificate.');
                 return res.redirect('/gst/config');
             }
             

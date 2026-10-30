@@ -452,8 +452,76 @@ module.exports = {
   });
 
   return result;
-}
-  
+},
+
+  // Fuel at the pump price, as the books post it: meter value plus off-meter credit
+  // sales (getFuelBillAdjustments). Bills charged below the pump price are a
+  // discount in the books, not less sales. 'amount' is the figure to report; the
+  // parts are kept for the breakdown columns. Shared by the GST Summary report and
+  // the GSTR-1 file so both always show the same fuel figure.
+  getFuelSales: async (locationCode, reportFromDate, reportToDate) => {
+    const [meterRows, adjRows] = await Promise.all([
+      module.exports.getSalesConsolidated(locationCode, reportFromDate, reportToDate),
+      module.exports.getFuelBillAdjustments(locationCode, reportFromDate, reportToDate)
+    ]);
+    const adj = new Map(adjRows.map(a => [a.product, a]));
+    return meterRows.map(row => {
+      const a = adj.get(row.product) || {};
+      const meter = parseFloat(row.amount || 0);
+      const offMeter = parseFloat(a.off_meter_amount || 0);
+      return Object.assign({}, row, {
+        litres: parseFloat(row.litres || 0) + parseFloat(a.off_meter_qty || 0),
+        meter_amount: meter,
+        off_meter_amount: offMeter,
+        amount: meter + offMeter
+      });
+    });
+  },
+
+  // GSTR-1: every credit-bill line to a customer with a GSTIN, fuel and non-fuel,
+  // with the HSN and the GST stored on the bill. Same filters as
+  // getNonFuelB2BSalesByBill (closing date in the period, customer GSTIN not empty),
+  // so the non-fuel lines add up to that report section. is_fuel uses the report's
+  // non-fuel rule reversed.
+  getB2BLinesForReturn: async (locationCode, reportFromDate, reportToDate) => {
+    const query = `
+      SELECT
+        tc.tcredit_id,
+        TRIM(tc.bill_no)                                        AS bill_no,
+        COALESCE(tc.credit_bill_date, DATE(tcl.closing_date))   AS bill_date,
+        mcl.creditlist_id,
+        COALESCE(mcl.Company_Name, '')                          AS customer,
+        UPPER(TRIM(mcl.gst))                                    AS gstin,
+        mp.product_id,
+        mp.product_name,
+        mp.unit,
+        TRIM(mp.hsn_code)                                       AS hsn_code,
+        CASE WHEN COALESCE(mp.is_lube_product, 0) = 0
+              AND mp.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode)
+             THEN 1 ELSE 0 END                                  AS is_fuel,
+        tc.qty,
+        tc.price,
+        tc.amount,
+        COALESCE(tc.cgst_percent, mp.cgst_percent, 0) + COALESCE(tc.sgst_percent, mp.sgst_percent, 0) AS gst_rate,
+        COALESCE(tc.cgst_amount, tc.amount * COALESCE(mp.cgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS cgst,
+        COALESCE(tc.sgst_amount, tc.amount * COALESCE(mp.sgst_percent, 0) / (100 + COALESCE(mp.cgst_percent, 0) + COALESCE(mp.sgst_percent, 0))) AS sgst
+      FROM t_credits tc
+      JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+      LEFT JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+      JOIN m_product mp ON tc.product_id = mp.product_id
+      WHERE tcl.closing_status = 'CLOSED'
+        AND tcl.location_code = :locationCode
+        AND DATE(tcl.closing_date) BETWEEN :reportFromDate AND :reportToDate
+        AND mcl.gst IS NOT NULL AND mcl.gst != ''
+      ORDER BY bill_date, tc.bill_no, tc.tcredit_id;
+    `;
+
+    return db.sequelize.query(query, {
+      replacements: { locationCode, reportFromDate, reportToDate },
+      type: Sequelize.QueryTypes.SELECT,
+    });
+  }
+
 }
 
 

@@ -82,8 +82,8 @@ module.exports = function(sequelize, DataTypes) {
                 unique: true,
                 fields: ['location_code']
             },
+            // Not unique: two outlets can share one registration (MC and MC2 = Muthu Corporation I & II)
             {
-                unique: true,
                 fields: ['gstin']
             }
         ]

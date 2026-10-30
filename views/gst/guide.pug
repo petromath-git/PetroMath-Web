@@ -1,0 +1,163 @@
+extends ../layout
+
+mixin shot(key, caption)
+    if shots[key]
+        figure.shot
+            img(src=shots[key] alt=caption loading='lazy')
+            figcaption= caption
+
+mixin step(n, title)
+    .step
+        .step-no= n
+        .step-body
+            h6.step-title= title
+            block
+
+block content
+    style.
+        .gst-guide { max-width: 920px; }
+        .gst-guide h5 { margin-top: 2rem; padding-bottom: .4rem; border-bottom: 2px solid #dee2e6; }
+        .gst-guide .step { display: flex; margin: 1rem 0; }
+        .gst-guide .step-no { flex: 0 0 2rem; height: 2rem; border-radius: 50%; background: #0d6efd; color: #fff; font-weight: 600; display: flex; align-items: center; justify-content: center; margin-right: .8rem; }
+        .gst-guide .step-body { flex: 1; min-width: 0; }
+        .gst-guide .step-title { font-weight: 600; margin: .3rem 0 .4rem; }
+        .gst-guide .btn-name { background: #eef2f7; border: 1px solid #ccd5e0; border-radius: 3px; padding: 0 .35rem; font-weight: 600; white-space: nowrap; }
+        .gst-guide .shot { margin: .6rem 0; }
+        .gst-guide .shot img { max-width: 100%; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+        .gst-guide .shot figcaption { font-size: .8rem; color: #6c757d; }
+        .gst-guide .due { font-size: .85rem; }
+        @media print { nav, .navbar, .no-print { display: none !important; } .gst-guide .step { break-inside: avoid; } }
+
+    .container.mt-3.gst-guide.gst-page
+        nav.no-print(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active How to file
+        h4.mb-1 How to file GSTR-1 and GSTR-3B yourself
+        p.text-muted
+            | For #{user.location_code}#{gstConfig ? ' · GSTIN ' + gstConfig.gstin : ''}. About 30 minutes a month once you have done it twice.
+            | Words in #[span.btn-name grey boxes] are the exact button names on the screen.
+
+        .card.border-info.mb-3
+            .card-body.py-2.due
+                strong Due dates (every month, for last month's sales)
+                ul.mb-1
+                    li #[strong GSTR-1] (sales detail): by the #[strong 11th]
+                    li #[strong GSTR-3B] (summary + tax payment): by the #[strong 20th]
+                    li Late fee is ₹50 a day for each return (₹20 a day if nothing to report), plus 18% a year interest on tax paid late.
+                .text-muted Add both dates in PetroMath Deadlines so you get the 9 AM reminder.
+
+        //- ------------------------------------------------------------------
+        h5 A. One-time setup (before your first filing)
+
+        +step(1, 'Get your GST portal login from the auditor')
+            p.mb-1 Ask the auditor for the #[strong username] and #[strong password] for gst.gov.in. Log in once and change the password.
+            p.mb-1 You don't need a digital signature (DSC): a proprietor or partnership files with #[strong EVC], an OTP. The OTP goes to the mobile number of the #[strong Primary Authorised Signatory]. Make sure that is #[em your] number. If it is the auditor's, change it under #[strong Services → Registration → Amendment of Registration Non-Core Fields].
+
+        +step(2, 'Check the GSTIN in PetroMath')
+            p.mb-1
+                | Open #[a(href='/gst/config') GST Returns → Settings] and check the GSTIN matches your certificate. PetroMath checks the last (check) digit, so a typing mistake is caught.
+
+        +step(3, 'Check every HSN code once')
+            p.mb-1
+                | Open #[a(href=`/gst/gstr1?period=${lastMonth}`) GSTR-1 for last month]. Every product sold is listed with its HSN code in #[strong Table 12]. Red items have no code or a wrong-length code: fix them in the Products master.
+            p.mb-1 Codes that look doubtful at most pumps (ask the auditor once, then correct the master):
+            ul.small
+                li Distilled water / acid water on 2710 (that is the lubricant code)
+                li AdBlue on 3102 (fertiliser urea)
+                li LPG cylinders on 2710
+                li HSD on 271020 (check whether 271019 is what was filed)
+            p.small.text-muted Since 2025 the portal only accepts HSN codes from its own list, and needs 6 digits when yearly turnover (fuel included) is over ₹5 crore.
+
+        +step(4, 'Do two months side by side with the auditor')
+            p.mb-1 For the first two months, let the auditor file as usual. On the portal, open the filed GSTR-1 (#[span.btn-name View] on the Returns Dashboard) and compare it with the PetroMath GSTR-1 page for the same month: B2B invoices, B2C total by rate, HSN table, and fuel (Table 8).
+            p.mb-1 Note especially whether the auditor puts petrol/diesel in the HSN table. Set the #[strong Petrol / diesel in HSN table] tick box on the GSTR-1 page the same way.
+            p.mb-0 When two months match, take over.
+
+        //- ------------------------------------------------------------------
+        h5 B. GSTR-1 every month (by the 11th)
+
+        +step(1, 'Make the file in PetroMath')
+            ol.mb-1
+                li Make sure every shift and day close of last month is closed.
+                li Open #[a(href='/gst') GST Returns], pick the month, open #[strong GSTR-1].
+                li Red box: fix each item (the page says where), then reload. The download stays locked until the red box is gone.
+                li Yellow box: read it. These don't stop the upload but may need a look.
+                li Check the #[strong Ties to GST Summary report] table: all green ticks.
+                li Click #[span.btn-name Download JSON]. A file like #[code GSTR1_33XXXXX_092026.json] is saved.
+            +shot('petromath-gstr1', 'PetroMath GSTR-1 page: red box empty, all ties green, Download JSON enabled.')
+
+        +step(2, 'Log in and open the return')
+            p.mb-1 Go to #[a(href='https://www.gst.gov.in' target='_blank' rel='noopener') www.gst.gov.in] → #[span.btn-name Login]. Then #[strong Services → Returns → Returns Dashboard]. Choose the #[strong Financial Year], #[strong Quarter] and #[strong Period] (month), then #[span.btn-name Search].
+            +shot('portal-dashboard', 'Returns Dashboard with the month selected.')
+
+        +step(3, 'Upload the file')
+            p.mb-1 On the GSTR-1 tile click #[span.btn-name Prepare Offline]. On the #[strong Upload] tab click #[span.btn-name Choose File] and pick the JSON from step 1.
+            p.mb-1 Wait a minute and refresh. The status should say #[strong Processed].
+            p.mb-1 If it says #[strong Processed with Error]: click #[span.btn-name Generate error report], then #[span.btn-name Download error report], and send that file to PetroMath support. Do not file.
+            +shot('portal-upload', 'Prepare Offline → Upload: status Processed.')
+
+        +step(4, 'Check the summary against PetroMath')
+            p.mb-1 Go #[span.btn-name Back] to the dashboard, click #[span.btn-name Prepare Online] on the GSTR-1 tile, then #[span.btn-name Generate Summary] at the bottom. Compare with the PetroMath page:
+            table.table.table-sm.small
+                thead
+                    tr
+                        th Portal table
+                        th PetroMath section
+                tbody
+                    tr
+                        td 4A – B2B, SEZ, DE invoices
+                        td Table 4A · B2B invoices (count and taxable value)
+                    tr
+                        td 7 – B2C (Others)
+                        td Table 7 · Filed line per rate
+                    tr
+                        td 8A, 8B, 8C, 8D – Nil Rated Supplies
+                        td Table 8 · Petrol / diesel (registered / unregistered)
+                    tr
+                        td 12 – HSN-wise summary (B2B and B2C tabs)
+                        td Table 12 · HSN summary
+                    tr
+                        td 13 – Documents issued
+                        td Table 13 · Documents issued
+            p.mb-1 If bills were cancelled, open table 13 on the portal and enter the cancelled count there.
+            p.mb-1 Uploaded the wrong file? Before filing you can click #[span.btn-name Reset] on the GSTR-1 page, which clears everything, and upload again. #[strong Reset is not possible after filing.]
+            +shot('portal-summary', 'GSTR-1 summary after Generate Summary.')
+
+        +step(5, 'File')
+            p.mb-1 Click #[span.btn-name File Statement], tick the declaration, choose the #[strong Authorised Signatory], click #[span.btn-name File with EVC] and enter the OTP. You get an #[strong ARN] (acknowledgement number) by SMS and email. Keep it.
+            +shot('portal-file', 'File Statement with EVC.')
+
+        //- ------------------------------------------------------------------
+        h5 C. GSTR-3B every month (by the 20th)
+
+        +step(1, 'Open GSTR-3B')
+            p.mb-1 Returns Dashboard → same month → GSTR-3B #[span.btn-name Prepare Online]. Answer the questions (all #[strong No] for a normal month) and click #[span.btn-name Next].
+
+        +step(2, 'Check sales (Table 3.1)')
+            p.mb-1 The portal fills 3.1 from your GSTR-1. Compare with the #[strong GSTR-3B · figures to check] box at the bottom of the PetroMath GSTR-1 page: 3.1(a) taxable value and tax, 3.1(e) non-GST (petrol/diesel). If they differ, stop and find out why before filing.
+            +shot('portal-3b-31', 'GSTR-3B table 3.1, auto-filled.')
+
+        +step(3, 'Check input credit (Table 4)')
+            p.mb-1 Table 4 is filled from #[strong GSTR-2B]: the invoices your suppliers (oil company for lubes, others) uploaded. Open GSTR-2B on the Returns Dashboard and check each lube purchase invoice is there. Claim only what is in GSTR-2B.
+            .alert.alert-warning.small.mb-1
+                strong Reversal of ITC on common costs (Rule 42).
+                |  Most of your sales (petrol, diesel) are outside GST. GST paid on lubes you resell can be claimed in full. GST paid on things used for the whole pump (repairs, AMC, software, other services, equipment) can only be claimed for the lube share of sales; the rest is reversed in Table 4(B)(1).
+                |  If you are unsure, do not claim GST on such common costs. That is always safe; it only costs you the credit. Ask the auditor once how they worked this out, and use the same method.
+            +shot('portal-3b-4', 'GSTR-3B table 4, ITC from GSTR-2B.')
+
+        +step(4, 'Pay and file')
+            p.mb-1 #[span.btn-name Save GSTR-3B] → #[span.btn-name Proceed to Payment]. The portal uses your ITC first; any balance shows as #[strong cash] to pay. Click #[span.btn-name Create Challan], pay by net banking, come back and click #[span.btn-name Make Payment / Post Credit to Ledger]. Then #[span.btn-name File GSTR-3B with EVC] and enter the OTP.
+            +shot('portal-3b-pay', 'GSTR-3B payment of tax.')
+
+        //- ------------------------------------------------------------------
+        h5 D. Once a year
+
+        ul
+            li #[strong GSTR-9] (annual return), due 31 December for the previous April–March. Mostly a total of the 12 monthly returns. Optional below ₹2 crore turnover, but a pump's turnover (fuel included) is usually above that.
+            li #[strong GSTR-9C] (reconciliation), only above ₹5 crore turnover. Since 2021 it is self-certified, so it no longer needs a CA's signature.
+            li There is #[strong no half-yearly GST return] for a regular pump. The quarterly scheme (QRMP) is only for turnover up to ₹5 crore. ITC-04 (half-yearly) is only for goods sent out for job work.
+
+        p.small.text-muted.mt-4
+            | Official GST portal user manuals with screenshots: #[a(href='https://tutorial.gst.gov.in' target='_blank' rel='noopener') tutorial.gst.gov.in] (Returns section). Button names on the portal change now and then; if one is different, look for the nearest match.
