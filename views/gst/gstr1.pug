@@ -1,0 +1,384 @@
+extends ../layout
+
+block content
+    - const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    - const qtyFmt = (n) => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 3 })
+    style.
+        .gstr1 .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .gstr1 .hsn { font-family: SFMono-Regular, Consolas, monospace; font-weight: 600; letter-spacing: .5px; }
+        .gstr1 table { font-size: .85rem; }
+        .gstr1 tfoot td { font-weight: 600; border-top: 2px solid #adb5bd; }
+        .gstr1 .section-title { font-size: 1rem; font-weight: 600; margin: 0; }
+        .gstr1 .table-sub { font-size: .8rem; color: #6c757d; }
+        .gstr1 .gap-2 { gap: .5rem; }
+        .gstr1 .col-6 > .card, .gstr1 .col-lg-3 > .card { margin-bottom: .5rem; }
+        .gstr1 tr.b2b-line { display: none; }
+        .gstr1.show-lines tr.b2b-line { display: table-row; }
+        @media (max-width: 767px) {
+            body.mobile-ready .gstr1:not(.show-lines) table.m-stack > tbody > tr.b2b-line { display: none; }
+            body.mobile-ready .gstr1 table.m-stack > tbody > tr.b2b-line { margin-left: 1rem; background: #f8f9fa !important; }
+            body.mobile-ready .gstr1 table.m-stack > tbody > tr.table-danger { background: #f8d7da !important; }
+            body.mobile-ready .gstr1 table.m-stack > tbody > tr.font-weight-bold { background: #f8f9fa !important; }
+            body.mobile-ready .gstr1 td.table-sub[style] { max-width: none !important; }
+        }
+        @media print {
+            .gstr1 tr.b2b-line { display: table-row; }
+            nav, .navbar, .no-print, .sidebar, footer { display: none !important; }
+            .gstr1 .card { break-inside: avoid; border: 1px solid #999 !important; }
+            body { font-size: 11px; }
+        }
+
+    .container-fluid.mt-3.gstr1.gst-page
+        nav.no-print(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active GSTR-1
+
+        .d-flex.flex-wrap.justify-content-between.align-items-start.gap-2.mb-3
+            div
+                h4.mb-1 GSTR-1 · #{r.period.label}
+                .text-muted.small
+                    | GSTIN #[strong= r.gstin] · #{r.period.from} to #{r.period.to} · FY #{r.period.financialYear}
+            form.d-flex.flex-wrap.align-items-center.gap-2.no-print(method='GET' action='/gst/gstr1')
+                select.custom-select.custom-select-sm(name='period' style='width:auto' onchange='this.form.submit()')
+                    each p in periods
+                        option(value=p.code selected=p.code === r.period.code)= p.label
+                .form-check.form-check-inline.mb-0
+                    input.form-check-input#fuelHsn(type='checkbox' checked=r.includeFuelInHsn onchange="document.getElementById('fuelHsnVal').value=this.checked?1:0;this.form.submit()")
+                    label.form-check-label.small(for='fuelHsn') Petrol / diesel in HSN table
+                input#fuelHsnVal(type='hidden' name='fuelHsn' value=r.includeFuelInHsn ? 1 : 0)
+                button.btn.btn-sm.btn-outline-secondary(type='button' onclick='window.print()')
+                    i.bi.bi-printer.mr-1
+                    | Print
+                a.btn.btn-sm.btn-outline-success(href=`/gst/workings?period=${r.period.code}` title='GSTR-1 and GSTR-3B laid out for typing on the portal')
+                    i.bi.bi-file-earmark-excel.mr-1
+                    | GST Workings (Excel)
+                a.btn.btn-sm.btn-outline-primary(href='/gst/guide' target='_blank')
+                    i.bi.bi-question-circle.mr-1
+                    | How to file
+                if r.canDownload
+                    a.btn.btn-sm.btn-success(href=downloadUrl)
+                        i.bi.bi-download.mr-1
+                        | Download JSON
+                else
+                    button.btn.btn-sm.btn-secondary(type='button' disabled title='Fix the errors first')
+                        i.bi.bi-lock.mr-1
+                        | Download JSON
+
+        //- Status
+        if r.errors.length
+            .alert.alert-danger
+                strong
+                    i.bi.bi-x-octagon.mr-1
+                    | #{r.errors.length} thing#{r.errors.length > 1 ? 's' : ''} to fix before this file can be uploaded
+                ul.mb-0.mt-2
+                    each e in r.errors
+                        li
+                            | #{e.msg}
+                            if e.fix
+                                span.text-muted  → #{e.fix}
+        else
+            .alert.alert-success.py-2
+                i.bi.bi-check-circle.mr-1
+                | Ready to upload. The file ties to the GST Summary report. Read the warnings below (if any), then follow #[a(href='/gst/guide' target='_blank') How to file].
+        if r.warnings.length
+            .alert.alert-warning
+                strong
+                    i.bi.bi-exclamation-triangle.mr-1
+                    | Check these (they do not stop the upload)
+                ul.mb-0.mt-2
+                    each w in r.warnings
+                        li= w.msg
+
+        //- Totals
+        - const totalTax = r.b2bTotals.camt + r.b2bTotals.samt + r.b2cTotals.camt + r.b2cTotals.samt
+        .row.mb-1
+            .col-6.col-lg-3
+                .card.h-100
+                    .card-body.py-2
+                        .table-sub B2B invoices (registered customers)
+                        .h5.mb-0.font-weight-bold #{r.invoices.length}
+                        .small Taxable ₹#{inr(r.b2bTotals.txval)}
+            .col-6.col-lg-3
+                .card.h-100
+                    .card-body.py-2
+                        .table-sub B2C (everyone else)
+                        .h5.mb-0.font-weight-bold ₹#{inr(r.b2cTotals.txval)}
+                        .small taxable value
+            .col-6.col-lg-3
+                .card.h-100
+                    .card-body.py-2
+                        .table-sub GST on sales (CGST + SGST)
+                        .h5.mb-0.font-weight-bold ₹#{inr(totalTax)}
+                        .small CGST ₹#{inr(r.b2bTotals.camt + r.b2cTotals.camt)} · SGST ₹#{inr(r.b2bTotals.samt + r.b2cTotals.samt)}
+            .col-6.col-lg-3
+                .card.h-100
+                    .card-body.py-2
+                        .table-sub Petrol / diesel (non-GST)
+                        .h5.mb-0.font-weight-bold ₹#{inr(r.fuelTotals.total)}
+                        .small Table 8, no tax
+
+        //- Tie-out
+        .card.mb-3
+            .card-header.py-2
+                p.section-title Ties to GST Summary report
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Figure
+                            th.num GST Summary
+                            th.num This file
+                            th.num Difference
+                            th
+                    tbody
+                        each t in r.tieOut
+                            tr(class=t.ok ? '' : 'table-danger')
+                                td.m-title= t.label
+                                td.num(data-label='GST Summary')= inr(t.report)
+                                td.num(data-label='This file')= inr(t.file)
+                                td.num(data-label='Difference')= inr(t.diff)
+                                td
+                                    if t.ok
+                                        i.bi.bi-check-circle-fill.text-success
+                                    else
+                                        i.bi.bi-x-circle-fill.text-danger
+
+        //- Table 12 HSN
+        each part in [{ key: 'B2B', title: 'Table 12 · HSN summary · B2B (registered customers)', rows: r.hsnB2B }, { key: 'B2C', title: 'Table 12 · HSN summary · B2C (everyone else)', rows: r.hsnB2C }]
+            .card.mb-3
+                .card-header.py-2.d-flex.justify-content-between.align-items-center
+                    p.section-title= part.title
+                    a.small.no-print(href='/gst/hsn') HSN codes
+                if part.rows.length
+                    .table-responsive
+                        table.table.table-sm.table-striped.mb-0.m-stack
+                            thead
+                                tr
+                                    th HSN
+                                    th Products
+                                    th Portal description
+                                    th UQC
+                                    th.num Qty
+                                    th.num Rate
+                                    th.num Taxable value
+                                    th.num CGST
+                                    th.num SGST
+                            tbody
+                                each h in part.rows
+                                    tr
+                                        td.m-title.hsn= h.hsn_sc || '—'
+                                        td(data-label='Products')= h.products.join(', ')
+                                        td.table-sub(style='max-width:22rem' data-label='Portal description')= r.hsnDesc.get(h.hsn_sc) || '(product names)'
+                                        td(data-label='UQC')= h.uqc
+                                        td.num(data-label='Qty')= qtyFmt(h.qty)
+                                        td.num(data-label='Rate') #{h.rt}%
+                                        td.num(data-label='Taxable value')= inr(h.txval)
+                                        td.num(data-label='CGST')= inr(h.camt)
+                                        td.num(data-label='SGST')= inr(h.samt)
+                            tfoot
+                                tr
+                                    td.m-title(colspan=6) Total
+                                    td.num(data-label='Taxable value')= inr(part.rows.reduce((t, h) => t + h.txval, 0))
+                                    td.num(data-label='CGST')= inr(part.rows.reduce((t, h) => t + h.camt, 0))
+                                    td.num(data-label='SGST')= inr(part.rows.reduce((t, h) => t + h.samt, 0))
+                else
+                    .card-body.text-muted.small Nothing this month.
+
+        //- B2B invoices
+        .card.mb-3
+            .card-header.py-2.d-flex.justify-content-between.align-items-center
+                p.section-title Table 4A · B2B invoices (#{r.invoices.length})
+                if r.invoices.length
+                    button.btn.btn-sm.btn-link.no-print(type='button' onclick="document.querySelector('.gstr1').classList.toggle('show-lines')") Show / hide items
+            if r.invoices.length
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Bill
+                                th Date
+                                th Customer
+                                th GSTIN
+                                th HSN
+                                th.num Taxable
+                                th.num CGST
+                                th.num SGST
+                                th.num Invoice value
+                        tbody
+                            each inv in r.invoices
+                                - const tx = inv.lines.reduce((t, l) => t + l.txval, 0)
+                                tr
+                                    td.m-title= inv.bill_no
+                                    td(data-label='Date')= inv.date
+                                    td(data-label='Customer')= inv.customer
+                                    td.hsn(data-label='GSTIN')= inv.gstin
+                                    td.hsn(data-label='HSN')= Array.from(new Set(inv.lines.map(l => l.hsn || '—'))).join(', ')
+                                    td.num(data-label='Taxable')= inr(tx)
+                                    td.num(data-label='CGST')= inr(inv.lines.reduce((t, l) => t + l.cgst, 0))
+                                    td.num(data-label='SGST')= inr(inv.lines.reduce((t, l) => t + l.sgst, 0))
+                                    td.num(data-label='Invoice value')= inr(inv.val)
+                                each l in inv.lines
+                                    tr.b2b-line.table-light
+                                        td.m-hide
+                                        td.table-sub.m-title(colspan=3)= l.product
+                                        td.hsn.table-sub(data-label='HSN') #{l.hsn || '—'} · #{l.rate}%
+                                        td.num.table-sub(data-label='Taxable')= inr(l.txval)
+                                        td.num.table-sub(data-label='CGST')= inr(l.cgst)
+                                        td.num.table-sub(data-label='SGST')= inr(l.sgst)
+                                        td.num.table-sub(data-label='Qty') #{qtyFmt(l.qty)}
+                        tfoot
+                            tr
+                                td.m-title(colspan=5) Total
+                                td.num(data-label='Taxable')= inr(r.invoices.reduce((t, inv) => t + inv.lines.reduce((s, l) => s + l.txval, 0), 0))
+                                td.num(data-label='CGST')= inr(r.invoices.reduce((t, inv) => t + inv.lines.reduce((s, l) => s + l.cgst, 0), 0))
+                                td.num(data-label='SGST')= inr(r.invoices.reduce((t, inv) => t + inv.lines.reduce((s, l) => s + l.sgst, 0), 0))
+                                td.num(data-label='Invoice value')= inr(r.invoices.reduce((t, inv) => t + inv.val, 0))
+            else
+                .card-body.text-muted.small No credit bills with GST items to registered customers this month.
+
+        //- B2C
+        .card.mb-3
+            .card-header.py-2
+                p.section-title Table 7 · B2C sales by product
+                .table-sub Credit customers without GSTIN, cash bills and metered lubes (day bills). Filed as one line per tax rate.
+            if r.b2c.length
+                .table-responsive
+                    table.table.table-sm.table-striped.mb-0.m-stack
+                        thead
+                            tr
+                                th Product
+                                th HSN
+                                th.num Rate
+                                th.num Qty
+                                th.num Taxable
+                                th.num CGST
+                                th.num SGST
+                                th.num Sale value
+                        tbody
+                            each b in r.b2c
+                                tr
+                                    td.m-title= b.product
+                                    td.hsn(data-label='HSN')= b.hsn || '—'
+                                    td.num(data-label='Rate') #{b.rate}%
+                                    td.num(data-label='Qty')= qtyFmt(b.qty)
+                                    td.num(data-label='Taxable')= inr(b.txval)
+                                    td.num(data-label='CGST')= inr(b.cgst)
+                                    td.num(data-label='SGST')= inr(b.sgst)
+                                    td.num(data-label='Sale value')= inr(b.amount)
+                        tfoot
+                            each s in r.b2cs
+                                tr
+                                    td.m-title(colspan=2) Filed line · #{s.rt}%
+                                    td.m-hide
+                                    td.m-hide
+                                    td.num(data-label='Taxable')= inr(s.txval)
+                                    td.num(data-label='CGST')= inr(s.camt)
+                                    td.num(data-label='SGST')= inr(s.samt)
+                                    td.m-hide
+            else
+                .card-body.text-muted.small No B2C sales of taxable items this month.
+
+        //- Fuel
+        .card.mb-3
+            .card-header.py-2
+                p.section-title Table 8 · Petrol / diesel (non-GST supply)
+                .table-sub Pump price × litres, as in the GST Summary. Registered = credit bills to customers with a GSTIN.
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Product
+                            th HSN
+                            th.num Litres
+                            th.num Total
+                            th.num Registered
+                            th.num Unregistered
+                    tbody
+                        each f in r.fuel
+                            tr
+                                td.m-title= f.product
+                                td.hsn(data-label='HSN')= f.hsn || '—'
+                                td.num(data-label='Litres')= qtyFmt(f.litres)
+                                td.num(data-label='Total')= inr(f.total)
+                                td.num(data-label='Registered')= inr(f.b2bValue)
+                                td.num(data-label='Unregistered')= inr(f.b2cValue)
+                    tfoot
+                        tr
+                            td.m-title(colspan=3) Total
+                            td.num(data-label='Total')= inr(r.fuelTotals.total)
+                            td.num(data-label='Registered')= inr(r.fuelTotals.b2b)
+                            td.num(data-label='Unregistered')= inr(r.fuelTotals.b2c)
+            if r.nil.b2b || r.nil.b2c
+                .card-body.small.py-2 Non-fuel items at 0%: registered ₹#{inr(r.nil.b2b)}, unregistered ₹#{inr(r.nil.b2c)} (filed as nil-rated).
+
+        //- Docs
+        .card.mb-3
+            .card-header.py-2
+                p.section-title Table 13 · Documents issued
+                .table-sub As your auditor files it: one day bill per day for lubes (OIL), petrol incl. XP95 (MS), diesel incl. Xtra Green (HSD) and CNG; days without a closed shift are counted as cancelled. Reverse charge self-invoices come from the #[a(href=`/gst/rcm?period=${r.period.code}`) Reverse charge] page.
+            if r.docs.length
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Type
+                                th Series
+                                th From
+                                th To
+                                th.num Total
+                                th.num Cancelled
+                                th.num Net issued
+                        tbody
+                            each d in r.docs
+                                tr
+                                    td.m-title.small= d.doc_num === 1 ? '1 · Outward supply' : '2 · Inward from unregistered'
+                                    td(data-label='Series')= d.series
+                                    td.hsn(data-label='From')= d.from
+                                    td.hsn(data-label='To')= d.to
+                                    td.num(data-label='Total')= d.totnum
+                                    td.num(data-label='Cancelled')= d.cancel
+                                    td.num(data-label='Net issued')= d.net_issue
+            else
+                .card-body.text-muted.small No closed shifts this month.
+
+        //- 3B
+        - const g = r.gstr3b
+        .card.mb-4.border-primary
+            .card-header.py-2.d-flex.justify-content-between.align-items-center
+                div
+                    p.section-title GSTR-3B · sales figures
+                    .table-sub The portal fills Table 3.1 from your GSTR-1. Credit, reverse charge and payment are on the worksheet.
+                a.btn.btn-sm.btn-primary.no-print(href=`/gst/gstr3b?period=${r.period.code}`)
+                    | GSTR-3B worksheet
+                    i.bi.bi-arrow-right.ml-1
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Table
+                            th.num Taxable / value
+                            th.num CGST
+                            th.num SGST
+                    tbody
+                        tr
+                            td.m-title 3.1(a) Outward taxable supplies
+                            td.num(data-label='Taxable / value')= inr(g.outward.txval)
+                            td.num(data-label='CGST')= inr(g.outward.camt)
+                            td.num(data-label='SGST')= inr(g.outward.samt)
+                        tr
+                            td.m-title 3.1(c) Nil rated / exempted
+                            td.num(data-label='Taxable / value')= inr(g.nil)
+                            td.num(data-label='CGST') —
+                            td.num(data-label='SGST') —
+                        tr
+                            td.m-title 3.1(e) Non-GST outward supplies (petrol, diesel)
+                            td.num(data-label='Taxable / value')= inr(g.nonGst)
+                            td.num(data-label='CGST') —
+                            td.num(data-label='SGST') —
+                        tr.font-weight-bold
+                            td.m-title Tax to pay before ITC
+                            td.m-hide
+                            td.num(data-label='CGST')= inr(g.outward.camt)
+                            td.num(data-label='SGST')= inr(g.outward.samt)

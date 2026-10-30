@@ -5,30 +5,9 @@ var locationdao = require("../dao/report-dao");
 var personDao = require("../dao/person-dao");
 const RentalDao = require("../dao/rental-dao");
 
-// Fuel at the pump price, as the books post it: meter value plus off-meter credit
-// sales (getFuelBillAdjustments). Bills charged below the pump price are a
-// discount in the books, not less sales. 'amount' is the figure to report; the
-// parts are kept for the breakdown columns.
-async function getFuelSales(locationCode, fromDate, toDate) {
-  const [meterRows, adjRows] = await Promise.all([
-    GstSummaryDao.getSalesConsolidated(locationCode, fromDate, toDate),
-    GstSummaryDao.getFuelBillAdjustments(locationCode, fromDate, toDate)
-  ]);
-  const adj = new Map(adjRows.map(a => [a.product, a]));
-  return meterRows.map(row => {
-    const a = adj.get(row.product) || {};
-    const meter = parseFloat(row.amount || 0);
-    const offMeter = parseFloat(a.off_meter_amount || 0);
-    return Object.assign({}, row, {
-      litres: parseFloat(row.litres || 0) + parseFloat(a.off_meter_qty || 0),
-      meter_amount: meter,
-      off_meter_amount: offMeter,
-      amount: meter + offMeter
-    });
-  });
-}
-
-
+// Fuel at the pump price (meter + off-meter): GstSummaryDao.getFuelSales, shared
+// with the GSTR-1 file so both show the same fuel figure.
+const getFuelSales = GstSummaryDao.getFuelSales;
 
 module.exports = {
   getgstsummaryReport: async (req, res) => {

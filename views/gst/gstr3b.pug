@@ -1,0 +1,308 @@
+extends ../layout
+
+block content
+    - const inr = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    - const i = w.itc
+    - const p = w.payment
+    - const dash = '—'
+    style.
+        .gst-3b table { font-size: .85rem; }
+        .gst-3b .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .gst-3b .section-title { font-size: 1rem; font-weight: 600; margin: 0; }
+        .gst-3b .table-sub { font-size: .8rem; color: #6c757d; }
+        .gst-3b tr.total td { font-weight: 600; border-top: 2px solid #adb5bd; }
+        .gst-3b td.type { font-weight: 600; background: #fffbe6; }
+        .gst-3b input.amt { max-width: 9rem; text-align: right; }
+        .gst-3b .gst-tools { gap: .4rem 0; }
+        @media (max-width: 767px) {
+            body.mobile-ready .gst-3b table.m-stack > tbody > tr.total { background: #f8f9fa !important; }
+            body.mobile-ready .gst-3b table.m-stack td.type { background: #fffbe6; border-radius: .25rem; padding: 0 .25rem !important; }
+            body.mobile-ready .gst-3b table.m-stack > tbody > tr.m-head { border: 0; background: transparent !important; padding: .25rem 0 0; margin-bottom: .25rem; }
+            body.mobile-ready .gst-3b input.amt { max-width: none; margin-left: 0 !important; }
+            body.mobile-ready .gst-3b .alert-primary .text-right { text-align: left !important; margin-top: .5rem; }
+        }
+        @media print {
+            nav, .navbar, .no-print, .sidebar, footer { display: none !important; }
+            .gst-3b .card { break-inside: avoid; border: 1px solid #999 !important; }
+            body { font-size: 11px; }
+        }
+
+    .container-fluid.mt-3.gst-3b.gst-page
+        nav.no-print(aria-label='breadcrumb')
+            ol.breadcrumb.mb-2
+                li.breadcrumb-item
+                    a(href='/gst') GST Returns
+                li.breadcrumb-item.active GSTR-3B worksheet
+
+        .d-flex.flex-wrap.justify-content-between.align-items-start.mb-2
+            div
+                h4.mb-1 GSTR-3B · #{w.period.label}
+                .text-muted.small
+                    | GSTIN #[strong= w.gstin] · due #[strong= w.period.due] · the #[span.type.px-1 yellow] figures are the ones you type on the portal
+            form.d-flex.flex-wrap.align-items-center.no-print.gst-tools(method='GET' action='/gst/gstr3b')
+                select.custom-select.custom-select-sm.mr-2(name='period' onchange='this.form.submit()' style='width:auto')
+                    each pr in periods
+                        option(value=pr.code selected=pr.code === w.period.code)= pr.label
+                a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/gstr1?period=${w.period.code}`) GSTR-1
+                a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/itc?period=${w.period.code}`) GSTR-2B / ITC
+                a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/rcm?period=${w.period.code}`) Reverse charge
+                a.btn.btn-sm.btn-outline-success.mr-2(href=`/gst/workings?period=${w.period.code}` title='GSTR-1 and GSTR-3B laid out for typing on the portal')
+                    i.bi.bi-file-earmark-excel.mr-1
+                    | GST Workings (Excel)
+                button.btn.btn-sm.btn-outline-secondary(type='button' onclick='window.print()')
+                    i.bi.bi-printer
+
+        if w.warnings.length
+            .alert.alert-warning.small.py-2
+                ul.mb-0.pl-3
+                    each msg in w.warnings
+                        li= msg
+
+        //- Pay summary
+        .alert.alert-primary.d-flex.flex-wrap.justify-content-between.align-items-center
+            div
+                .small Cash to pay (create challan: Payment of tax)
+                .h4.mb-0.font-weight-bold ₹#{inr(w.cashTotal)}
+            .small.text-right
+                div CGST ₹#{inr(p.cash.cgst + w.rcmCash.cgst + w.interest.cgst + w.lateFee.cgst)} · SGST ₹#{inr(p.cash.sgst + w.rcmCash.sgst + w.interest.sgst + w.lateFee.sgst)}
+                if p.cash.igst + w.rcmCash.igst
+                    div IGST ₹#{inr(p.cash.igst + w.rcmCash.igst)}
+                div.text-muted Credit ledger left for next month: CGST ₹#{inr(p.closing.cgst)} · SGST ₹#{inr(p.closing.sgst)}
+
+        //- 3.1
+        .card.mb-3
+            .card-header.py-2
+                p.section-title 3.1 Outward supplies and inward supplies liable to reverse charge
+                .table-sub (a), (c), (e) are filled from GSTR-1 on the portal; check they match. (d) you type.
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Nature of supplies
+                            th.num Taxable value
+                            th.num IGST
+                            th.num CGST
+                            th.num SGST
+                    tbody
+                        tr
+                            td.m-title (a) Outward taxable supplies
+                            td.num(data-label='Taxable value')= inr(w.t31a.txval)
+                            td.num(data-label='IGST')= inr(w.t31a.igst)
+                            td.num(data-label='CGST')= inr(w.t31a.cgst)
+                            td.num(data-label='SGST')= inr(w.t31a.sgst)
+                        tr
+                            td.m-title (b) Zero rated
+                            td.num(data-label='Taxable value') 0.00
+                            td.num(data-label='IGST') 0.00
+                            td.num(data-label='CGST')= dash
+                            td.num(data-label='SGST')= dash
+                        tr
+                            td.m-title (c) Nil rated, exempted
+                            td.num(data-label='Taxable value')= inr(w.t31c)
+                            td.num(data-label='IGST')= dash
+                            td.num(data-label='CGST')= dash
+                            td.num(data-label='SGST')= dash
+                        tr
+                            td.m-title (d) Inward supplies liable to reverse charge
+                            td.num.type(data-label='Taxable value')= inr(w.t31d.txval)
+                            td.num.type(data-label='IGST')= inr(w.t31d.igst)
+                            td.num.type(data-label='CGST')= inr(w.t31d.cgst)
+                            td.num.type(data-label='SGST')= inr(w.t31d.sgst)
+                        tr
+                            td.m-title (e) Non-GST outward supplies (petrol, diesel)
+                            td.num(data-label='Taxable value')= inr(w.t31e)
+                            td.num(data-label='IGST')= dash
+                            td.num(data-label='CGST')= dash
+                            td.num(data-label='SGST')= dash
+            .card-body.py-2.table-sub 3.1.1 and 3.2: all zero (no e-commerce sales, no sales to other states).
+
+        //- 4
+        .card.mb-3
+            .card-header.py-2
+                p.section-title 4 Eligible ITC
+                .table-sub 4A(5) is filled from GSTR-2B; 4A(3) and 4B(1) you type. Working on the #[a(href=`/gst/itc?period=${w.period.code}`) ITC page].
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Details
+                            th.num IGST
+                            th.num CGST
+                            th.num SGST
+                    tbody
+                        tr
+                            td.m-title A(1) Import of goods · A(2) Import of services · A(4) ISD
+                            td.num(data-label='IGST') 0.00
+                            td.num(data-label='CGST') 0.00
+                            td.num(data-label='SGST') 0.00
+                        tr
+                            td.m-title A(3) Inward supplies liable to reverse charge
+                            td.num.type(data-label='IGST')= inr(i.t4a3.igst)
+                            td.num.type(data-label='CGST')= inr(i.t4a3.cgst)
+                            td.num.type(data-label='SGST')= inr(i.t4a3.sgst)
+                        tr
+                            td.m-title A(5) All other ITC
+                            td.num(data-label='IGST')= inr(i.t4a5.igst)
+                            td.num(data-label='CGST')= inr(i.t4a5.cgst)
+                            td.num(data-label='SGST')= inr(i.t4a5.sgst)
+                        tr
+                            td.m-title
+                                | B(1) As per rules 38, 42 & 43 and section 17(5)
+                                .table-sub Rule 42 share #{(i.rule42.ratio * 100).toFixed(2)}% of common credit, plus petrol/diesel-only and blocked credit
+                            td.num.type(data-label='IGST')= inr(i.reversal.igst)
+                            td.num.type(data-label='CGST')= inr(i.reversal.cgst)
+                            td.num.type(data-label='SGST')= inr(i.reversal.sgst)
+                        tr
+                            td.m-title B(2) Others
+                            td.num(data-label='IGST') 0.00
+                            td.num(data-label='CGST') 0.00
+                            td.num(data-label='SGST') 0.00
+                        tr.total
+                            td.m-title C. Net ITC available (A − B)
+                            td.num(data-label='IGST')= inr(i.net.igst)
+                            td.num(data-label='CGST')= inr(i.net.cgst)
+                            td.num(data-label='SGST')= inr(i.net.sgst)
+                        tr
+                            td.m-title D(2) Ineligible ITC (section 16(4), place of supply)
+                            td.num(data-label='IGST')= inr(i.t4d2.igst)
+                            td.num(data-label='CGST')= inr(i.t4d2.cgst)
+                            td.num(data-label='SGST')= inr(i.t4d2.sgst)
+
+        //- 5
+        .card.mb-3
+            .card-header.py-2
+                p.section-title 5 Exempt, nil-rated and non-GST inward supplies
+            table.table.table-sm.mb-0.m-stack
+                thead
+                    tr
+                        th Nature of supplies
+                        th.num Inter-state
+                        th.num Intra-state
+                tbody
+                    tr
+                        td.m-title Composition / exempt / nil rated
+                        td.num(data-label='Inter-state') 0.00
+                        td.num(data-label='Intra-state') 0.00
+                    tr
+                        td.m-title
+                            | Non-GST supply (petrol, diesel bought)
+                            .table-sub
+                                | #{w.t5.invoices.length} oil company invoice(s), value before VAT, as the auditor has filed since May-2026.
+                                | Up to Apr-2026 the auditor filed the invoice value with VAT: ₹#{inr(w.t5.nonGstWithVat)}.
+                        td.num(data-label='Inter-state') 0.00
+                        td.num.type(data-label='Intra-state')= inr(w.t5.nonGst)
+            if w.t5.invoices.length
+                details.card-body.py-2.small.no-print
+                    summary Invoices
+                    table.table.table-sm.mb-0.mt-2.m-stack
+                        thead
+                            tr
+                                th Invoice
+                                th Date
+                                th.num Before VAT
+                                th.num VAT etc.
+                                th.num Invoice total
+                        tbody
+                            each f in w.t5.invoices
+                                tr
+                                    td.m-title= f.invoice_number
+                                    td(data-label='Date')= fmtDate(f.invoice_date)
+                                    td.num(data-label='Before VAT')= inr(f.line_amount)
+                                    td.num(data-label='VAT etc.')= inr(f.charges)
+                                    td.num(data-label='Invoice total')= inr(f.total_invoice_amount)
+
+        //- 6.1
+        .card.mb-3
+            .card-header.py-2
+                p.section-title 6.1 Payment of tax
+                .table-sub Tax rounded to the rupee as the portal shows it. Credit used IGST first; CGST and SGST credit never pay each other.
+            .table-responsive
+                table.table.table-sm.mb-0.m-stack
+                    thead
+                        tr
+                            th Description
+                            th.num Tax payable
+                            th.num Paid by IGST credit
+                            th.num Paid by CGST credit
+                            th.num Paid by SGST credit
+                            th.num Tax paid in cash
+                            th.num Interest
+                            th.num Late fee
+                    tbody
+                        tr.m-head
+                            td.font-weight-bold.m-title(colspan=8) (A) Other than reverse charge
+                        each h in ['igst', 'cgst', 'sgst']
+                            tr
+                                td.m-title= h.toUpperCase()
+                                td.num(data-label='Tax payable')= inr(w.liability[h])
+                                td.num.type(data-label='Paid by IGST credit')= inr(p.paid[h].igst)
+                                td.num.type(data-label='Paid by CGST credit')= inr(p.paid[h].cgst)
+                                td.num.type(data-label='Paid by SGST credit')= inr(p.paid[h].sgst)
+                                td.num.type(data-label='Tax paid in cash')= inr(p.cash[h])
+                                td.num(data-label='Interest')= inr(w.interest[h])
+                                td.num(data-label='Late fee')= inr(w.lateFee[h])
+                        tr.m-head
+                            td.font-weight-bold.m-title(colspan=8) (B) Reverse charge (cash only)
+                        each h in ['igst', 'cgst', 'sgst']
+                            tr
+                                td.m-title= h.toUpperCase()
+                                td.num(data-label='Tax payable')= inr(w.rcmCash[h])
+                                td.num(data-label='Paid by IGST credit')= dash
+                                td.num(data-label='Paid by CGST credit')= dash
+                                td.num(data-label='Paid by SGST credit')= dash
+                                td.num.type(data-label='Tax paid in cash')= inr(w.rcmCash[h])
+                                td.num(data-label='Interest')= dash
+                                td.num(data-label='Late fee')= dash
+
+        //- Inputs
+        .card.mb-4.no-print
+            .card-header.py-2
+                p.section-title Credit ledger and late payments
+                .table-sub
+                    | Balance brought forward: open #[strong Services › Ledgers › Electronic Credit Ledger] on the portal for the balance at the start of #{w.period.label}.
+                    if w.openingSource === 'last month'
+                        |  Filled in from last month's saved closing balance.
+                    |  Interest and late fee: the portal works them out in 5.1 when a return is late; copy them here.
+            .card-body
+                form(method='POST' action='/gst/gstr3b')
+                    input(type='hidden' name='period' value=w.period.code)
+                    .table-responsive
+                        table.table.table-sm.table-borderless.mb-2.m-stack(style='max-width:42rem')
+                            thead
+                                tr
+                                    th
+                                    th.num IGST
+                                    th.num CGST
+                                    th.num SGST
+                            tbody
+                                tr
+                                    td.m-title Credit ledger brought forward
+                                    td.num(data-label='IGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='ecl_open_igst' value=w.inputs.ecl_open_igst)
+                                    td.num(data-label='CGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='ecl_open_cgst' value=w.inputs.ecl_open_cgst)
+                                    td.num(data-label='SGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='ecl_open_sgst' value=w.inputs.ecl_open_sgst)
+                                tr
+                                    td.m-title Interest
+                                    td.num(data-label='IGST')= dash
+                                    td.num(data-label='CGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='interest_cgst' value=w.inputs.interest_cgst)
+                                    td.num(data-label='SGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='interest_sgst' value=w.inputs.interest_sgst)
+                                tr
+                                    td.m-title Late fee
+                                    td.num(data-label='IGST')= dash
+                                    td.num(data-label='CGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='late_fee_cgst' value=w.inputs.late_fee_cgst)
+                                    td.num(data-label='SGST')
+                                        input.form-control.form-control-sm.amt.ml-auto(type='number' step='0.01' min='0' name='late_fee_sgst' value=w.inputs.late_fee_sgst)
+                                tr.total
+                                    td.m-title Credit ledger left after this return
+                                    td.num(data-label='IGST')= inr(p.closing.igst)
+                                    td.num(data-label='CGST')= inr(p.closing.cgst)
+                                    td.num(data-label='SGST')= inr(p.closing.sgst)
+                    .form-group(style='max-width:42rem')
+                        label.small Note
+                        input.form-control.form-control-sm(type='text' name='notes' maxlength='500' value=w.inputs.notes || '')
+                    button.btn.btn-primary.btn-sm(type='submit') Save and recalculate

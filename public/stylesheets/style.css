@@ -4173,3 +4173,23 @@ body.mobile-ready .master-card > .card-body small {
     text-align: right !important;
   }
 }
+
+/* ===== GST RETURNS PAGES — MOBILE (/gst, GSTR-1, 2B/ITC, 3B, RCM, HSN) =====
+   Tables are .m-stack cards; this keeps the inputs from zooming on iOS and
+   tightens the headers. */
+@media screen and (max-width: 767px) {
+  body.mobile-ready .gst-page .form-control,
+  body.mobile-ready .gst-page .custom-select {
+    font-size: 16px;
+  }
+  body.mobile-ready .gst-page h4 {
+    font-size: 1.2rem;
+  }
+  body.mobile-ready .gst-page .breadcrumb {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+  }
+  body.mobile-ready .gst-page .card-header .btn {
+    margin-top: 0.25rem;
+  }
+}
