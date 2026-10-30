@@ -52,6 +52,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(255),
             allowNull: true
         },
+        // Claude conversations, one per line (https link or session id). SuperUser only.
+        claude_links: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
         creation_date: {
             type: DataTypes.DATE,
             allowNull: false,

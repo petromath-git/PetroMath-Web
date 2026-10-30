@@ -87,8 +87,26 @@ const fmtSize = (bytes) => (bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed
 
 const getAccess = (user) => ({
     locations: security.getAccessibleLocations(user),
-    canManage: security.hasMenuChk(user, 'DEV_TRACKER_MANAGE')
+    canManage: security.hasMenuChk(user, 'DEV_TRACKER_MANAGE'),
+    isSuperUser: !!user && user.Role === 'SuperUser'
 });
+
+// Claude conversation links (SuperUser only): one per line, each an https://
+// link or a Claude Code session id. Returns { error } or { value } for saving.
+const SESSION_ID = /^[A-Za-z0-9_-]{8,64}$/;
+const checkClaudeLinks = (text) => {
+    const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (const l of lines) {
+        if (!SESSION_ID.test(l) && !/^https:\/\/[^\s"'<>]+$/.test(l)) {
+            return { error: `Not a link or session id: ${l.slice(0, 60)}` };
+        }
+    }
+    return { value: lines.length ? lines.join('\n').slice(0, 4000) : null };
+};
+
+// For display: [{ url } | { sessionId }]
+const parseClaudeLinks = (text) => String(text || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+    .map(l => (l.startsWith('https://') ? { url: l } : { sessionId: l }));
 
 const pick = (value, allowed, fallback) => (allowed.includes(value) ? value : fallback);
 
@@ -214,6 +232,8 @@ module.exports = {
                 maxFiles: ATTACHMENT_MAX_FILES,
                 maxMb: ATTACHMENT_MAX_MB,
                 fmtSize,
+                claudeLinks: access.isSuperUser ? parseClaudeLinks(tracker.claude_links) : [],
+                isSuperUser: access.isSuperUser,
                 canManage: access.canManage,
                 fmtDate,
                 fmtDateTime: (d) => (d ? moment(d).format('DD-MMM-YYYY hh:mm A') : ''),
@@ -246,6 +266,7 @@ module.exports = {
                 mobileReady: true,
                 tracker,
                 locations,
+                isSuperUser: access.isSuperUser,
                 types: TYPES,
                 statuses: STATUSES,
                 priorities: PRIORITIES,
@@ -328,7 +349,16 @@ module.exports = {
             const station = resolveStation(req, access);
             if (station.error) return sendError(req, res, 400, station.error, `/dev-tracker/${trackerId}/edit`);
 
+            // Only SuperUser sees the field, so only a SuperUser save may change it
+            const extra = {};
+            if (access.isSuperUser && req.body.claude_links !== undefined) {
+                const links = checkClaudeLinks(req.body.claude_links);
+                if (links.error) return sendError(req, res, 400, links.error, `/dev-tracker/${trackerId}/edit`);
+                extra.claude_links = links.value;
+            }
+
             await devTrackerDao.updateTracker(trackerId, {
+                ...extra,
                 title: (req.body.title || existing.title).trim(),
                 description: req.body.description,
                 type: pick(req.body.type, TYPES, existing.type),

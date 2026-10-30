@@ -62,6 +62,13 @@ block content
                         .col-12.col-md-4
                             label Tags
                             input.form-control(type="text" name="tags" maxlength="255" value=tracker.tags)
+                        if isSuperUser
+                            .col-12
+                                label
+                                    i.bi.bi-robot.mr-1
+                                    | Claude conversations
+                                textarea.form-control.text-monospace.small(name="claude_links" rows="3" maxlength="4000" placeholder="One per line: https:// link or Claude Code session id")= tracker.claude_links
+                                .form-text.text-muted Only SuperUsers see this.
                         .col-12
                             .form-text.text-muted Hours spent come from the Work Log on the ticket page.
 
