@@ -10,11 +10,21 @@ style.
     .ticket-page .badge { font-weight: 500; }
     .task-done { text-decoration: line-through; }
     .ticket-text { white-space: pre-wrap; word-break: break-word; }
-    .ticket-row { border-left: 4px solid transparent; }
-    .ticket-row.priority-critical { border-left-color: #dc3545; }
-    .ticket-row.priority-high { border-left-color: #fd7e14; }
-    .ticket-row.priority-medium { border-left-color: #20c997; }
-    .ticket-row.priority-low { border-left-color: #adb5bd; }
+    /* Ticket list: a priority stripe on the left of each row */
+    .ticket-table tr.ticket-row { cursor: pointer; }
+    .ticket-table td { vertical-align: middle; }
+    .ticket-table tr.ticket-row > td:first-child { box-shadow: inset 4px 0 transparent; }
+    .ticket-table tr.priority-critical > td:first-child { box-shadow: inset 4px 0 #dc3545; }
+    .ticket-table tr.priority-high > td:first-child { box-shadow: inset 4px 0 #fd7e14; }
+    .ticket-table tr.priority-medium > td:first-child { box-shadow: inset 4px 0 #20c997; }
+    .ticket-table tr.priority-low > td:first-child { box-shadow: inset 4px 0 #adb5bd; }
+    /* Ticket details: label / value rows */
+    .ticket-page .ticket-facts { font-size: 0.95rem; }
+    .ticket-facts th { width: 38%; color: #6c757d; font-weight: 500; white-space: nowrap; }
+    .ticket-facts th, .ticket-facts td { padding: 0.4rem 0.75rem; vertical-align: middle; }
+    .ticket-facts tr:first-child th, .ticket-facts tr:first-child td { border-top: 0; }
+    .attachment-thumb { width: 64px; height: 64px; object-fit: cover; border: 1px solid #dee2e6; border-radius: 4px; }
+    .attachment-icon { width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid #dee2e6; border-radius: 4px; color: #dc3545; }
     .stat-card { border-left-width: 4px !important; color: inherit; }
     .comment { border-left: 3px solid #dee2e6; padding-left: 10px; }
     .comment-internal { border-left-color: #6c757d; background: #f8f9fa; }
@@ -27,4 +37,12 @@ style.
         .ticket-page .form-select { font-size: 16px; }
         .ticket-page .btn { min-height: 38px; }
         .ticket-page .stat-card h4 { font-size: 1.2rem; }
+        /* Cards: the priority stripe moves to the card's left edge */
+        body.mobile-ready .ticket-table tr.ticket-row > td:first-child { box-shadow: none; }
+        body.mobile-ready .ticket-table tr.priority-critical { border-left: 4px solid #dc3545; }
+        body.mobile-ready .ticket-table tr.priority-high { border-left: 4px solid #fd7e14; }
+        body.mobile-ready .ticket-table tr.priority-medium { border-left: 4px solid #20c997; }
+        body.mobile-ready .ticket-table tr.priority-low { border-left: 4px solid #adb5bd; }
+        .ticket-page .table-responsive-md { overflow: visible; }
+        .ticket-page .card:has(> .table-responsive-md > .m-stack) { border: 0; background: transparent; }
     }

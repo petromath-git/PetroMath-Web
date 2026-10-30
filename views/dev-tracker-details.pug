@@ -2,28 +2,74 @@ extends layout
 
 block content
     include mixins/dev-tracker-style
+    include mixins/ticket-attachment-picker
     - var typeBadge = { Bug: 'danger', Feature: 'primary', Enhancement: 'info', Task: 'secondary' }
     - var statusBadge = { 'Open': 'warning', 'In Progress': 'info', 'Testing': 'primary', 'Complete': 'success', 'Closed': 'secondary' }
     - var priorityBadge = { Critical: 'danger', High: 'warning', Medium: 'info', Low: 'secondary' }
     - var typeLabel = { Bug: 'Issue', Feature: 'Feature request', Enhancement: 'Enhancement', Task: 'Task' }
+
+    //- Label / value table of the ticket's facts. Shown above the description on
+    //- phones and in the side column on desktop.
+    mixin ticketFacts()
+        .card.mb-3
+            table.table.table-sm.mb-0.ticket-facts
+                tbody
+                    tr
+                        th Status
+                        td
+                            span.badge(class=`badge-${statusBadge[tracker.status] || 'secondary'}`)= tracker.status
+                    tr
+                        th Type
+                        td= typeLabel[tracker.type] || tracker.type
+                    tr
+                        th Priority
+                        td
+                            span(class=`text-${priorityBadge[tracker.priority]} font-weight-bold`)= tracker.priority
+                    tr
+                        th Station
+                        td= tracker.location_code || 'Platform'
+                    tr
+                        th Scope
+                        td= tracker.scope === 'ALL' ? 'All locations' : 'This station'
+                    tr
+                        th Raised by
+                        td= tracker.created_by || 'unknown'
+                    tr
+                        th Raised on
+                        td= fmtDateTime(tracker.creation_date)
+                    if canManage
+                        tr
+                            th Assigned to
+                            td= tracker.assigned_to || 'Unassigned'
+                        tr
+                            th Due
+                            td= tracker.due_date ? fmtDate(tracker.due_date) : '-'
+                        tr
+                            th Estimated
+                            td= tracker.estimated_hours ? Number(tracker.estimated_hours) + ' h' : '-'
+                        tr
+                            th Spent
+                            td
+                                strong= tracker.actual_hours ? Number(tracker.actual_hours) + ' h' : '0 h'
+                        if tracker.tags
+                            tr
+                                th Tags
+                                td
+                                    each tag in tracker.tags.split(',')
+                                        span.badge.badge-light.border.mr-1= tag.trim()
+                        if tracker.updated_by
+                            tr
+                                th Last updated by
+                                td= tracker.updated_by
+
     .container-fluid.ticket-page
         .d-flex.justify-content-between.align-items-start.flex-wrap.gap-2.mb-3
             .d-flex.align-items-start
                 a.btn.btn-outline-secondary.mr-3(href="/dev-tracker")
                     i.bi.bi-arrow-left
-                div
-                    h3.mb-1
-                        span.text-muted ##{tracker.tracker_id}
-                        |  #{tracker.title}
-                    .d-flex.flex-wrap.gap-1
-                        span.badge(class=`badge-${typeBadge[tracker.type] || 'secondary'}`)= typeLabel[tracker.type] || tracker.type
-                        span.badge(class=`badge-${statusBadge[tracker.status] || 'secondary'}`)= tracker.status
-                        span.badge(class=`badge-${priorityBadge[tracker.priority]}`)= tracker.priority
-                        span.badge.badge-light.border
-                            i.bi.bi-geo-alt.mr-1
-                            = tracker.location_code || 'Platform'
-                        if tracker.scope === 'ALL'
-                            span.badge.badge-dark All locations
+                h3.mb-0
+                    span.text-muted ##{tracker.tracker_id}
+                    |  #{tracker.title}
             if canManage
                 .d-flex.gap-2
                     a.btn.btn-primary(href=`/dev-tracker/${tracker.tracker_id}/edit`)
@@ -34,14 +80,53 @@ block content
 
         .row.g-3
             .col-12.col-lg-8
+                .d-lg-none
+                    +ticketFacts()
                 .card.mb-3
+                    .card-header
+                        i.bi.bi-card-text.mr-2
+                        | Details
                     .card-body
-                        .small.text-muted.mb-2
-                            | Raised by #{tracker.created_by || 'unknown'} on #{fmtDateTime(tracker.creation_date)}
                         if tracker.description
                             .ticket-text= tracker.description
                         else
                             span.text-muted No details given
+
+                // Attachments
+                - var remaining = maxFiles - attachments.length
+                .card.mb-3#attachments
+                    .card-header.d-flex.justify-content-between.align-items-center
+                        span
+                            i.bi.bi-paperclip.mr-2
+                            | Attachments
+                        span.small.text-muted #{attachments.length} of #{maxFiles}
+                    if attachments.length
+                        ul.list-group.list-group-flush
+                            each a in attachments
+                                - var fileUrl = `/dev-tracker/${tracker.tracker_id}/attachments/${a.doc_id}`
+                                li.list-group-item.d-flex.align-items-center.gap-2
+                                    a(href=fileUrl target="_blank" rel="noopener")
+                                        if a.mime_type === 'application/pdf'
+                                            span.attachment-icon
+                                                i.bi.bi-file-earmark-pdf
+                                        else
+                                            img.attachment-thumb(src=fileUrl alt=a.file_name loading="lazy")
+                                    .flex-grow-1(style="min-width:0")
+                                        a.d-block.text-truncate(href=fileUrl target="_blank" rel="noopener")= a.file_name
+                                        .small.text-muted #{fmtSize(a.file_size)} · #{a.created_by} · #{fmtDateTime(a.creation_date)}
+                                    a.btn.btn-sm.btn-outline-secondary(href=fileUrl + '?download=1' title="Download")
+                                        i.bi.bi-download
+                                    if canManage || a.created_by === user.User_Name
+                                        button.btn.btn-sm.btn-outline-danger(type="button" onclick=`deleteAttachment(${tracker.tracker_id}, ${a.doc_id})` title="Remove")
+                                            i.bi.bi-trash
+                    if remaining > 0
+                        form.card-body(method="POST" action=`/dev-tracker/${tracker.tracker_id}/attachments` enctype="multipart/form-data" class=attachments.length ? 'border-top' : '')
+                            +ticketAttachmentPicker(remaining, maxMb)
+                            button.btn.btn-sm.btn-outline-primary.mt-2(type="submit")
+                                i.bi.bi-upload.mr-1
+                                | Attach
+                    else
+                        .card-body.small.text-muted Limit reached. Remove a file to attach another.
 
                 // Conversation
                 .card.mb-3#comments
@@ -110,28 +195,9 @@ block content
                             .card-body.small.text-muted No tasks
 
             .col-12.col-lg-4
+                .d-none.d-lg-block
+                    +ticketFacts()
                 if canManage
-                    .card.mb-3
-                        .card-body.small
-                            .d-flex.justify-content-between.mb-1
-                                span.text-muted Assigned to
-                                span= tracker.assigned_to || 'Unassigned'
-                            .d-flex.justify-content-between.mb-1
-                                span.text-muted Due
-                                span= tracker.due_date ? fmtDate(tracker.due_date) : '-'
-                            .d-flex.justify-content-between.mb-1
-                                span.text-muted Estimated
-                                span= tracker.estimated_hours ? Number(tracker.estimated_hours) + ' h' : '-'
-                            .d-flex.justify-content-between.mb-1
-                                span.text-muted Spent
-                                strong= tracker.actual_hours ? Number(tracker.actual_hours) + ' h' : '0 h'
-                            if tracker.tags
-                                .mt-2
-                                    each tag in tracker.tags.split(',')
-                                        span.badge.badge-light.border.mr-1= tag.trim()
-                            if tracker.updated_by
-                                .text-muted.mt-2 Last updated by #{tracker.updated_by}
-
                     // Work log
                     .card.mb-3#worklog
                         .card-header
@@ -161,18 +227,23 @@ block content
                                         button.btn.btn-sm.btn-link.text-danger.p-0(type="button" onclick=`deleteWorklog(${w.worklog_id})` title="Remove")
                                             i.bi.bi-x-lg
 
+    script.
+        function send(url, method, body) {
+            return fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body ? JSON.stringify(body) : undefined
+            }).then(r => r.json()).then(d => {
+                if (!d.success) throw new Error(d.error || 'Failed');
+                return d;
+            }).catch(e => { alert(e.message); throw e; });
+        }
+        function deleteAttachment(id, docId) {
+            if (!confirm('Remove this attachment?')) return;
+            send('/dev-tracker/' + id + '/attachments/' + docId, 'DELETE').then(() => location.reload());
+        }
     if canManage
         script.
-            function send(url, method, body) {
-                return fetch(url, {
-                    method: method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: body ? JSON.stringify(body) : undefined
-                }).then(r => r.json()).then(d => {
-                    if (!d.success) throw new Error(d.error || 'Failed');
-                    return d;
-                }).catch(e => { alert(e.message); throw e; });
-            }
             function deleteTicket(id) {
                 if (!confirm('Delete this ticket?')) return;
                 send('/dev-tracker/' + id, 'DELETE').then(() => { window.location.href = '/dev-tracker'; });
