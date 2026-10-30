@@ -1,7 +1,9 @@
 // controllers/dev-tracker-controller.js
 const devTrackerDao = require('../dao/dev-tracker-dao');
+const DocumentStoreDao = require('../dao/document-store-dao');
 const security = require('../utils/app-security');
 const moment = require('moment');
+const path = require('path');
 
 /**
  * Support Tickets (/dev-tracker)
@@ -18,6 +20,70 @@ const TYPES = ['Bug', 'Feature', 'Enhancement', 'Task'];
 const REPORTER_TYPES = ['Bug', 'Feature', 'Enhancement'];
 const STATUSES = ['Open', 'In Progress', 'Testing', 'Complete', 'Closed'];
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'];
+
+// Attachments: screenshots / photos / PDFs in t_document_store
+// (entity_type SUPPORT_TICKET, entity_id = tracker_id).
+const ATTACHMENT_ENTITY = 'SUPPORT_TICKET';
+const ATTACHMENT_MAX_FILES = 2;
+const ATTACHMENT_MAX_MB = 5;
+const ATTACHMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const EXTENSION = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'application/pdf': '.pdf' };
+
+// The real type from the file's first bytes; the browser-declared type can be
+// anything. Returns null for anything that isn't a JPEG / PNG / WebP / PDF.
+const sniffType = (buf) => {
+    if (!buf || buf.length < 12) return null;
+    if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
+    if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'image/png';
+    if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
+    if (buf.toString('ascii', 0, 5) === '%PDF-') return 'application/pdf';
+    return null;
+};
+
+// Plain file name for storage and the download header: no path, no quotes or
+// control characters, extension matching the real type.
+const safeFileName = (original, mimeType) => {
+    const base = path.basename(original || 'attachment')
+        .replace(/\.[^.]*$/, '')
+        .replace(/[^\w\- ()]+/g, '_')
+        .trim()
+        .slice(0, 80) || 'attachment';
+    return base + EXTENSION[mimeType];
+};
+
+// Validates uploaded files against what the ticket already has.
+// Returns { error } or { files: [{ file_name, mime_type, buffer }] }.
+const checkAttachments = (req, existingCount) => {
+    if (req.uploadError) return { error: req.uploadError };
+    const uploaded = req.files || [];
+    if (existingCount + uploaded.length > ATTACHMENT_MAX_FILES) {
+        return { error: `A ticket can have at most ${ATTACHMENT_MAX_FILES} attachments` };
+    }
+    const files = [];
+    for (const f of uploaded) {
+        const mimeType = sniffType(f.buffer);
+        if (!mimeType) return { error: `${path.basename(f.originalname)} is not a valid photo or PDF` };
+        files.push({ file_name: safeFileName(f.originalname, mimeType), mime_type: mimeType, buffer: f.buffer });
+    }
+    return { files };
+};
+
+const saveAttachments = (files, tracker, userName) => Promise.all(files.map(f =>
+    DocumentStoreDao.create({
+        entity_type: ATTACHMENT_ENTITY,
+        entity_id: tracker.tracker_id,
+        doc_category: 'ATTACHMENT',
+        file_name: f.file_name,
+        mime_type: f.mime_type,
+        file_size: f.buffer.length,
+        file_data: f.buffer,
+        capture_source: 'UPLOAD',
+        location_code: tracker.location_code,
+        created_by: userName
+    })
+));
+
+const fmtSize = (bytes) => (bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB');
 
 const getAccess = (user) => ({
     locations: security.getAccessibleLocations(user),
@@ -52,6 +118,9 @@ const resolveStation = (req, access) => {
 };
 
 module.exports = {
+    ATTACHMENT_MAX_FILES,
+    ATTACHMENT_MAX_MB,
+    ATTACHMENT_MIME_TYPES,
 
     // GET /dev-tracker
     getDevTrackerPage: async (req, res, next) => {
@@ -71,6 +140,10 @@ module.exports = {
                 devTrackerDao.getLocations(access.locations)
             ]);
 
+            const docs = await DocumentStoreDao.findByEntities(ATTACHMENT_ENTITY, trackers.map(t => t.tracker_id));
+            const attachmentCount = {};
+            docs.forEach(d => { attachmentCount[d.entity_id] = (attachmentCount[d.entity_id] || 0) + 1; });
+
             const stats = {
                 open: trackers.filter(t => t.status === 'Open').length,
                 inProgress: trackers.filter(t => t.status === 'In Progress').length,
@@ -83,6 +156,7 @@ module.exports = {
                 user: req.user,
                 mobileReady: true,
                 trackers,
+                attachmentCount,
                 stats,
                 filters,
                 locations,
@@ -110,6 +184,8 @@ module.exports = {
                 canManage: access.canManage,
                 types: access.canManage ? TYPES : REPORTER_TYPES,
                 currentLocation: req.user.location_code,
+                maxFiles: ATTACHMENT_MAX_FILES,
+                maxMb: ATTACHMENT_MAX_MB,
                 messages: req.flash()
             });
         } catch (error) {
@@ -127,11 +203,17 @@ module.exports = {
                 return res.redirect('/dev-tracker');
             }
 
+            const attachments = (await DocumentStoreDao.findByEntity(ATTACHMENT_ENTITY, tracker.tracker_id)).reverse();
+
             res.render('dev-tracker-details', {
                 title: 'Support Tickets',
                 user: req.user,
                 mobileReady: true,
                 tracker,
+                attachments,
+                maxFiles: ATTACHMENT_MAX_FILES,
+                maxMb: ATTACHMENT_MAX_MB,
+                fmtSize,
                 canManage: access.canManage,
                 fmtDate,
                 fmtDateTime: (d) => (d ? moment(d).format('DD-MMM-YYYY hh:mm A') : ''),
@@ -187,6 +269,10 @@ module.exports = {
             const station = resolveStation(req, access);
             if (station.error) return sendError(req, res, 400, station.error, '/dev-tracker/new');
 
+            // Check the files before creating anything
+            const upload = checkAttachments(req, 0);
+            if (upload.error) return sendError(req, res, 400, upload.error, '/dev-tracker/new');
+
             const trackerData = {
                 title,
                 description: req.body.description,
@@ -208,6 +294,17 @@ module.exports = {
             }
 
             const newTracker = await devTrackerDao.createTracker(trackerData);
+
+            if (upload.files.length) {
+                try {
+                    await saveAttachments(upload.files, newTracker, userName);
+                } catch (err) {
+                    // The ticket is saved; the files can be added again from its page
+                    console.error('Error saving ticket attachments:', err);
+                    req.flash('error', 'Ticket created, but the attachments could not be saved. Please attach them again.');
+                    return res.redirect(`/dev-tracker/${newTracker.tracker_id}`);
+                }
+            }
 
             if (wantsJson(req)) {
                 return res.json({ success: true, message: 'Ticket created', tracker: newTracker });
@@ -293,6 +390,73 @@ module.exports = {
         } catch (error) {
             console.error('Error in addComment:', error);
             sendError(req, res, 500, 'Failed to add comment: ' + error.message, `/dev-tracker/${trackerId}`);
+        }
+    },
+
+    // POST /dev-tracker/:id/attachments - anyone who can see the ticket
+    addAttachments: async (req, res, next) => {
+        const trackerId = req.params.id;
+        const back = `/dev-tracker/${trackerId}#attachments`;
+        try {
+            const tracker = await devTrackerDao.findTrackerById(trackerId, getAccess(req.user));
+            if (!tracker) return sendError(req, res, 404, 'Ticket not found', '/dev-tracker');
+
+            const existing = await DocumentStoreDao.findByEntity(ATTACHMENT_ENTITY, tracker.tracker_id);
+            const upload = checkAttachments(req, existing.length);
+            if (upload.error) return sendError(req, res, 400, upload.error, back);
+            if (!upload.files.length) return sendError(req, res, 400, 'Choose a file to attach', back);
+
+            await saveAttachments(upload.files, tracker, req.user.User_Name);
+            if (wantsJson(req)) return res.json({ success: true });
+            req.flash('success', upload.files.length === 1 ? 'File attached' : 'Files attached');
+            res.redirect(back);
+        } catch (error) {
+            console.error('Error in addAttachments:', error);
+            sendError(req, res, 500, 'Failed to attach file: ' + error.message, back);
+        }
+    },
+
+    // GET /dev-tracker/:id/attachments/:docId - only if this user can see the ticket
+    getAttachment: async (req, res, next) => {
+        try {
+            const tracker = await devTrackerDao.findTrackerById(req.params.id, getAccess(req.user));
+            const doc = tracker && await DocumentStoreDao.findById(req.params.docId);
+            if (!doc || doc.entity_type !== ATTACHMENT_ENTITY || String(doc.entity_id) !== String(tracker.tracker_id) || doc.status !== 'ACTIVE') {
+                return res.status(404).send('Attachment not found');
+            }
+            const download = req.query.download === '1';
+            res.set({
+                'Content-Type': doc.mime_type,
+                'Content-Length': doc.file_size,
+                'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${safeFileName(doc.file_name, doc.mime_type)}"`,
+                'X-Content-Type-Options': 'nosniff',
+                'Cache-Control': 'private, max-age=86400'
+            });
+            res.send(doc.file_data);
+        } catch (error) {
+            console.error('Error in getAttachment:', error);
+            res.status(500).send('Failed to load attachment');
+        }
+    },
+
+    // DELETE /dev-tracker/:id/attachments/:docId - the person who attached it, or manage users
+    deleteAttachment: async (req, res, next) => {
+        try {
+            const access = getAccess(req.user);
+            const tracker = await devTrackerDao.findTrackerById(req.params.id, access);
+            const doc = tracker && await DocumentStoreDao.findMetaById(req.params.docId);
+            if (!doc || doc.entity_type !== ATTACHMENT_ENTITY || String(doc.entity_id) !== String(tracker.tracker_id)) {
+                return res.status(404).json({ success: false, error: 'Attachment not found' });
+            }
+            if (!access.canManage && doc.created_by !== req.user.User_Name) {
+                return res.status(403).json({ success: false, error: 'Only the person who attached it can remove it' });
+            }
+            // Hard delete: frees the slot without leaving blobs behind
+            await DocumentStoreDao.deleteById(doc.doc_id);
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error in deleteAttachment:', error);
+            res.status(500).json({ success: false, error: 'Failed to remove attachment: ' + error.message });
         }
     },
 

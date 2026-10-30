@@ -75,31 +75,63 @@ block content
 
         if trackers && trackers.length > 0
             .card
-                .list-group.list-group-flush
-                    each tracker in trackers
-                        a.list-group-item.list-group-item-action.ticket-row(href=`/dev-tracker/${tracker.tracker_id}` class=`priority-${tracker.priority.toLowerCase()}`)
-                            .d-flex.justify-content-between.align-items-start.gap-2
-                                .flex-grow-1(style="min-width:0")
-                                    .font-weight-bold.text-truncate
-                                        span.text-muted.mr-1 ##{tracker.tracker_id}
-                                        = tracker.title
-                                    .d-flex.flex-wrap.gap-1.mt-1.small
-                                        span.badge(class=`badge-${typeBadge[tracker.type] || 'secondary'}`)= typeLabel[tracker.type] || tracker.type
+                .table-responsive-md
+                    table.table.table-hover.table-sm.mb-0.m-stack.ticket-table
+                        thead.thead-light
+                            tr
+                                th.text-right #
+                                th Title
+                                th Type
+                                th Status
+                                th Station
+                                if canManage
+                                    th Priority
+                                th Raised on
+                                th Raised by
+                                if canManage
+                                    th.text-right Tasks
+                                    th.text-right Hours
+                                th.text-center(title="Attachments")
+                                    i.bi.bi-paperclip
+                        tbody
+                            each tracker in trackers
+                                - var files = attachmentCount[tracker.tracker_id] || 0
+                                tr.ticket-row(data-href=`/dev-tracker/${tracker.tracker_id}` class=`priority-${tracker.priority.toLowerCase()}`)
+                                    td.text-right.text-muted.m-hide ##{tracker.tracker_id}
+                                    td.m-title
+                                        a.text-body(href=`/dev-tracker/${tracker.tracker_id}`)
+                                            span.text-muted.d-md-none ##{tracker.tracker_id}&nbsp;
+                                            = tracker.title
+                                    td(data-label="Type")= typeLabel[tracker.type] || tracker.type
+                                    td(data-label="Status")
                                         span.badge(class=`badge-${statusBadge[tracker.status] || 'secondary'}`)= tracker.status
-                                        span.badge.badge-light.border
-                                            i.bi.bi-geo-alt.mr-1
-                                            = tracker.location_code || 'Platform'
+                                    td.text-nowrap(data-label="Station")
+                                        = tracker.location_code || 'Platform'
                                         if tracker.scope === 'ALL'
-                                            span.badge.badge-dark All locations
-                                        if canManage
-                                            span.badge(class=`badge-${priorityBadge[tracker.priority]}`)= tracker.priority
+                                            span.text-muted.small  (all)
+                                    if canManage
+                                        td(data-label="Priority")
+                                            span(class=`text-${priorityBadge[tracker.priority]} font-weight-bold`)= tracker.priority
+                                    td.text-nowrap(data-label="Raised on")= fmtDate(tracker.creation_date)
+                                    td(data-label="Raised by")= tracker.created_by
+                                    if canManage
+                                        td.text-right(data-label="Tasks")
                                             if tracker.tasks && tracker.tasks.length
-                                                span.badge.badge-light.border #{tracker.tasks.filter(t => t.task_status === 'Done').length}/#{tracker.tasks.length} tasks
-                                .text-right.small.text-muted.text-nowrap
-                                    div= fmtDate(tracker.creation_date)
-                                    div= tracker.created_by
-                                    if canManage && tracker.actual_hours
-                                        div #{Number(tracker.actual_hours)} h
+                                                | #{tracker.tasks.filter(t => t.task_status === 'Done').length}/#{tracker.tasks.length}
+                                            else
+                                                span.text-muted -
+                                        td.text-right(data-label="Hours")= tracker.actual_hours ? Number(tracker.actual_hours) : '-'
+                                    td.text-center(data-label="Files" class=files ? '' : 'm-hide')
+                                        if files
+                                            i.bi.bi-paperclip
+                                            | #{files}
+            script.
+                document.querySelectorAll('.ticket-table tr[data-href]').forEach(function (row) {
+                    row.addEventListener('click', function (e) {
+                        if (e.target.closest('a, button')) return;
+                        window.location.href = row.getAttribute('data-href');
+                    });
+                });
         else
             .card.card-body.text-center.text-muted.py-5
                 i.bi.bi-inbox.display-4
