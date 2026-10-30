@@ -39,7 +39,26 @@ module.exports = {
          ORDER BY FIELD(mp.location_code, :locationCodes), mp.product_id`,
         { locationCodes }),
 
-    getHsnDefaults: () => select(`SELECT category, hsn_code FROM m_gst_hsn_default ORDER BY category`, {}),
+    // HSN the oil company prints on its invoices, per fuel product: the latest invoice that has one.
+    getFuelInvoiceHsn: (locationCode) => select(
+        `SELECT x.product_id, x.hsn_code, x.invoice_number, x.invoice_date
+         FROM (SELECT tid.product_id, REPLACE(TRIM(tid.hsn_code), ' ', '') AS hsn_code, ti.invoice_number, ti.invoice_date,
+                      ROW_NUMBER() OVER (PARTITION BY tid.product_id ORDER BY ti.invoice_date DESC, ti.id DESC) AS rn
+               FROM t_tank_invoice_dtl tid
+               JOIN t_tank_invoice ti ON ti.id = tid.invoice_id
+               WHERE ti.location_id = :locationCode
+                 AND tid.hsn_code IS NOT NULL AND TRIM(tid.hsn_code) <> '') x
+         WHERE x.rn = 1`,
+        { locationCode }),
+
+    // Fills a product's HSN from a supplier invoice, only when it has no full 8-digit code yet.
+    fillProductHsn: (locationCode, productId, hsnCode, user) => run(
+        `UPDATE m_product SET hsn_code = :hsnCode, updated_by = :user
+         WHERE product_id = :productId AND location_code = :locationCode
+           AND (hsn_code IS NULL OR REPLACE(TRIM(hsn_code), ' ', '') NOT REGEXP '^[0-9]{8}$')`,
+        { locationCode, productId, hsnCode, user }),
+
+    getHsnDefaults: () =>select(`SELECT category, hsn_code FROM m_gst_hsn_default ORDER BY category`, {}),
 
     saveHsnDefault: (category, hsnCode, user) => run(
         `INSERT INTO m_gst_hsn_default (category, hsn_code, updated_by) VALUES (:category, :hsnCode, :user)

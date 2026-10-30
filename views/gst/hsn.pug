@@ -17,9 +17,10 @@ block content
 
         h4.mb-1 HSN codes
         p.text-muted.small.mb-3
-            | GSTR-1 Table 12 uses the product's own HSN when it is in the list at the bottom. If not, it takes the HSN of the same
-            | product at #{referenceLocations.join(' / ')}, else the default for its kind (petrol, diesel, lube, ...).
-            | So you only need to enter a code here when the one in #[strong Used in returns] is wrong.
+            | GSTR-1 Table 12 uses the product's own HSN when it is in the list at the bottom. Petrol and diesel otherwise take the
+            | code printed on the oil company's latest invoice. Lubes get the code from the supplier's invoice PDF when you upload it
+            | on Lube Purchases. Anything still without a code takes the HSN of the same product at #{referenceLocations.join(' / ')},
+            | else the default for its kind. So you only need to enter a code here when the one in #[strong Used in returns] is wrong.
 
         - const missing = products.filter(p => !p.valid).length
         - const noDesc = products.filter(p => p.valid && !p.description).length
@@ -74,8 +75,8 @@ block content
         .card.mb-3
             .card-header.py-2.font-weight-bold Default HSN by kind of product
             .card-body.small.text-muted.pb-0
-                | Used when neither the product nor the same product at #{referenceLocations.join(' / ')} has an HSN from the list.
-                | Petrol and diesel follow MUE's filed returns; MC files diesel under 27101944, so confirm with the auditor.
+                | Used when a product has no code of its own, from an invoice or from #{referenceLocations.join(' / ')}.
+                | Petrol and diesel are the codes on IOCL's invoices (2710 12 42 and 2710 19 44).
             .card-body
                 form.form-row(method='POST' action='/gst/hsn/defaults')
                     each d in defaults

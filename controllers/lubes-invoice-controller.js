@@ -12,6 +12,7 @@ const { v4: uuidv4 } = require('uuid');
 const InvoiceParserService = require('../services/invoice-parser-service');
 const LubeInvoicePdf = require('../services/lube-invoice-pdf-service');
 const InvoiceProductMapDao = require('../dao/invoice-product-map-dao');
+const GstFilingDao = require('../dao/gst-filing-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
 const locationDao = require('../dao/location-dao');
 const ProductDao = require('../dao/product-dao');
@@ -287,7 +288,7 @@ module.exports = {
                 return id;
             });
 
-            if (b.pdf_source) await learnFromPdf(b.pdf_source, supplier, productById, locationCode);
+            if (b.pdf_source) await learnFromPdf(b.pdf_source, supplier, productById, locationCode, req.user.Person_id);
 
             return res.json({
                 success: true,
@@ -767,6 +768,7 @@ readInvoicePdf: async (req, res) => {
                 sku_code: l.sku_code,
                 map_key: l.map_key,
                 sku_name: l.sku_name,
+                hsn: l.hsn || null,
                 invoice_qty: l.qty,
                 unit: l.unit,
                 qty_ltr: l.qty_ltr,
@@ -819,15 +821,22 @@ readInvoicePdf: async (req, res) => {
 };
 
 // After a save that started from a PDF: remember which product each supplier
-// SKU was saved as (next PDF from this supplier fills it in), and the
-// supplier's GSTIN if the master doesn't have one yet. Best effort — the
-// invoice itself is already saved.
-async function learnFromPdf(src, supplier, productById, locationCode) {
+// SKU was saved as (next PDF from this supplier fills it in), the supplier's
+// GSTIN if the master doesn't have one yet, and the HSN printed on the invoice
+// for products without a full 8-digit HSN (used by GST Returns). Best effort —
+// the invoice itself is already saved.
+async function learnFromPdf(src, supplier, productById, locationCode, user) {
     try {
-        const mappings = (Array.isArray(src.skus) ? src.skus : [])
-            .filter(s => s && PDF_MAP_KEY_RE.test(String(s.map_key)) && productById.has(parseInt(s.product_id)))
+        const skus = (Array.isArray(src.skus) ? src.skus : []).filter(s => s && productById.has(parseInt(s.product_id)));
+        const mappings = skus
+            .filter(s => PDF_MAP_KEY_RE.test(String(s.map_key)))
             .map(s => ({ invoice_product_name: s.map_key, product_id: parseInt(s.product_id) }));
         if (mappings.length) await InvoiceProductMapDao.saveLubesMappings(locationCode, supplier.supplier_id, mappings);
+
+        for (const s of skus) {
+            const hsn = String(s.hsn || '').replace(/\s+/g, '');
+            if (/^\d{8}$/.test(hsn)) await GstFilingDao.fillProductHsn(locationCode, parseInt(s.product_id), hsn, user);
+        }
 
         const gstin = String(src.supplier_gstin || '').toUpperCase().trim();
         if (GSTIN_RE.test(gstin) && !supplier.gstin) {

@@ -453,7 +453,7 @@ document.addEventListener('DOMContentLoaded', function () {
             pdf_source: pdfSource ? {
                 supplier_gstin: pdfSource.supplier_gstin,
                 skus: rows.filter(tr => tr._src && tr.querySelector('.pi-product').value)
-                    .map(tr => ({ map_key: tr._src.map_key, product_id: tr.querySelector('.pi-product').value }))
+                    .map(tr => ({ map_key: tr._src.map_key, hsn: tr._src.hsn, product_id: tr.querySelector('.pi-product').value }))
             } : null,
             items: rows.filter(tr => tr.querySelector('.pi-product').value).map(tr => {
                 const p = productById.get(tr.querySelector('.pi-product').value);

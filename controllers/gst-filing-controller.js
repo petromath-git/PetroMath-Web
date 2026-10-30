@@ -65,7 +65,7 @@ module.exports = {
                 GstFilingDao.getProductsForHsn(locationCode),
                 GstFilingDao.getHsnMaster(),
                 GstFilingDao.getHsnDefaults(),
-                GstHsnService.loadResolver()
+                GstHsnService.loadResolver(locationCode)
             ]);
             const desc = new Map(master.map(h => [h.hsn_code, h.description]));
             products.forEach(p => {
