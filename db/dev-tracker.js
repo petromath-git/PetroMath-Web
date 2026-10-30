@@ -52,6 +52,11 @@ module.exports = function(sequelize, DataTypes) {
             type: DataTypes.STRING(255),
             allowNull: true
         },
+        // Cause / fix / files / DB / PRs / verify / gotchas for the next person. SuperUser only.
+        dev_notes: {
+            type: DataTypes.TEXT,
+            allowNull: true
+        },
         // Claude conversations, one per line (https link or session id). SuperUser only.
         claude_links: {
             type: DataTypes.TEXT,
