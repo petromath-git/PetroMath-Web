@@ -256,6 +256,18 @@ module.exports = {
     },
 
     /**
+     * The last n return periods { code: MMYYYY, label: 'Mon YYYY' }, newest first, from last month
+     */
+    getRecentPeriods: (n) => {
+        const periods = [];
+        for (let i = 1; i <= n; i++) {
+            const m = moment().subtract(i, 'month');
+            periods.push({ code: m.format('MMYYYY'), label: m.format('MMM YYYY') });
+        }
+        return periods;
+    },
+
+    /**
      * Check if due date has passed for filing
      */
     isDueDatePassed: (returnPeriod) => {
