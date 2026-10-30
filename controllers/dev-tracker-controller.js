@@ -20,6 +20,7 @@ const TYPES = ['Bug', 'Feature', 'Enhancement', 'Task'];
 const REPORTER_TYPES = ['Bug', 'Feature', 'Enhancement'];
 const STATUSES = ['Open', 'In Progress', 'Testing', 'Complete', 'Closed'];
 const PRIORITIES = ['Low', 'Medium', 'High', 'Critical'];
+const { HOURS_RANGES, TOKEN_RANGES } = devTrackerDao;
 
 // Attachments: screenshots / photos / PDFs in t_document_store
 // (entity_type SUPPORT_TICKET, entity_id = tracker_id).
@@ -150,7 +151,10 @@ module.exports = {
                 priority: pick(req.query.priority, PRIORITIES, null),
                 scope: access.canManage ? pick(req.query.scope, ['LOCATION', 'ALL'], null) : null,
                 location_code: req.query.location_code || null,
-                search: (req.query.search || '').trim() || null
+                search: (req.query.search || '').trim() || null,
+                // Hours are shown to manage users, Claude tokens to SuperUser only
+                hours: access.canManage ? pick(req.query.hours, Object.keys(HOURS_RANGES), null) : null,
+                tokens: access.isSuperUser ? pick(req.query.tokens, Object.keys(TOKEN_RANGES), null) : null
             };
 
             const [trackers, locations] = await Promise.all([
@@ -179,6 +183,9 @@ module.exports = {
                 filters,
                 locations,
                 canManage: access.canManage,
+                isSuperUser: access.isSuperUser,
+                hoursRanges: HOURS_RANGES,
+                tokenRanges: TOKEN_RANGES,
                 fmtDate,
                 messages: req.flash()
             });

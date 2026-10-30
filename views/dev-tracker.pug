@@ -30,7 +30,7 @@ block content
                             h4.mb-0= s[1]
                             small.text-muted= s[0]
 
-        - var hasFilters = filters.search || filters.status || filters.type || filters.location_code || filters.scope
+        - var hasFilters = filters.search || filters.status || filters.type || filters.location_code || filters.scope || filters.hours || filters.tokens
         button.btn.btn-outline-secondary.btn-sm.w-100.mb-2.d-md-none(type="button" data-toggle="collapse" data-target="#ticketFilters")
             i.bi.bi-funnel.mr-1
             | Filters
@@ -68,6 +68,19 @@ block content
                             option(value="") All
                             option(value="LOCATION" selected=(filters.scope === 'LOCATION')) Station request
                             option(value="ALL" selected=(filters.scope === 'ALL')) All locations
+                    .col-6.col-md-2
+                        label.small Hours
+                        select.form-control.form-control-sm(name="hours")
+                            option(value="") All
+                            each r, key in hoursRanges
+                                option(value=key selected=(filters.hours === key))= r.label
+                if isSuperUser
+                    .col-6.col-md-2
+                        label.small Claude tokens
+                        select.form-control.form-control-sm(name="tokens")
+                            option(value="") All
+                            each r, key in tokenRanges
+                                option(value=key selected=(filters.tokens === key))= r.label
                 .col-12.col-md-1.d-flex.gap-1
                     button.btn.btn-sm.btn-primary.flex-fill(type="submit") Go
                     a.btn.btn-sm.btn-outline-secondary(href="/dev-tracker" title="Clear")
@@ -91,6 +104,9 @@ block content
                                 if canManage
                                     th.text-right Tasks
                                     th.text-right Hours
+                                if isSuperUser
+                                    th.text-right(title="Claude tokens") Tokens
+                                    th.text-right(title="Claude cost at API list price") Cost
                                 th.text-center(title="Attachments")
                                     i.bi.bi-paperclip
                         tbody
@@ -121,6 +137,9 @@ block content
                                             else
                                                 span.text-muted -
                                         td.text-right(data-label="Hours")= tracker.actual_hours ? Number(tracker.actual_hours) : '-'
+                                    if isSuperUser
+                                        td.text-right.text-nowrap(data-label="Tokens")= tracker.claude_tokens ? `${(Number(tracker.claude_tokens) / 1e6).toFixed(1)}M` : '-'
+                                        td.text-right.text-nowrap(data-label="Cost")= tracker.claude_cost_usd ? `$${Number(tracker.claude_cost_usd).toFixed(2)}` : '-'
                                     td.text-center(data-label="Files" class=files ? '' : 'm-hide')
                                         if files
                                             i.bi.bi-paperclip
