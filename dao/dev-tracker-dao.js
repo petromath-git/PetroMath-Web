@@ -24,6 +24,34 @@ const visibilityWhere = (access) => {
 
 const notDeleted = { is_deleted: { [Op.or]: [0, null] } };
 
+// List filter ranges: key -> label + [min, max) on the column. 'none' = not filled.
+const HOURS_RANGES = {
+    none: { label: 'Not logged' },
+    lt1: { label: 'Under 1 h', max: 1 },
+    '1-4': { label: '1 - 4 h', min: 1, max: 4 },
+    '4-8': { label: '4 - 8 h', min: 4, max: 8 },
+    '8-20': { label: '8 - 20 h', min: 8, max: 20 },
+    gt20: { label: '20 h +', min: 20 }
+};
+const TOKEN_RANGES = {
+    none: { label: 'Not logged' },
+    lt10: { label: 'Under 10M', max: 10e6 },
+    '10-50': { label: '10M - 50M', min: 10e6, max: 50e6 },
+    '50-100': { label: '50M - 100M', min: 50e6, max: 100e6 },
+    '100-250': { label: '100M - 250M', min: 100e6, max: 250e6 },
+    gt250: { label: '250M +', min: 250e6 }
+};
+
+const rangeWhere = (range) => {
+    if (!range.min && !range.max) return null;
+    const cond = {};
+    if (range.min) cond[Op.gte] = range.min;
+    if (range.max) cond[Op.lt] = range.max;
+    // Empty and 0 belong to 'Not logged', not to 'Under N'
+    if (!range.min) cond[Op.gt] = 0;
+    return cond;
+};
+
 // Keep the ticket's actual_hours = SUM of its work log
 const syncActualHours = async (trackerId, transaction) => {
     const total = await DevTrackerWorklog.sum('hours', { where: { tracker_id: trackerId }, transaction });
@@ -35,6 +63,8 @@ const syncActualHours = async (trackerId, transaction) => {
 
 module.exports = {
     visibilityWhere,
+    HOURS_RANGES,
+    TOKEN_RANGES,
 
     // Ticket list for the dashboard. Closed tickets are hidden unless asked for.
     findTrackers: (access, filters = {}) => {
@@ -55,6 +85,15 @@ module.exports = {
             // Dev notes are SuperUser-only, so only their searches look in them
             if (access.isSuperUser) fields.push({ dev_notes: { [Op.like]: like } });
             where[Op.and] = [{ [Op.or]: fields }];
+        }
+        // Range keys are checked against HOURS_RANGES / TOKEN_RANGES in the controller
+        if (filters.hours) {
+            const range = HOURS_RANGES[filters.hours];
+            where.actual_hours = rangeWhere(range) || { [Op.or]: [null, 0] };
+        }
+        if (filters.tokens) {
+            const range = TOKEN_RANGES[filters.tokens];
+            where.claude_tokens = rangeWhere(range) || { [Op.or]: [null, 0] };
         }
 
         return DevTracker.findAll({
