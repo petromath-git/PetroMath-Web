@@ -317,7 +317,10 @@ block content
         .card.mb-3
             .card-header.py-2
                 p.section-title Table 13 · Documents issued
-                .table-sub As your auditor files it: one day bill per day for lubes (OIL), petrol incl. XP95 (MS), diesel incl. Xtra Green (HSD) and CNG; days without a closed shift are counted as cancelled. Reverse charge self-invoices come from the #[a(href=`/gst/rcm?period=${r.period.code}`) Reverse charge] page.
+                .table-sub
+                    | As your auditor files it: one day bill per day for lubes (OIL), petrol incl. XP95 (MS), diesel incl. Xtra Green (HSD) and CNG; days without a closed shift are counted as cancelled.
+                    if r.rcmEnabled
+                        |  Reverse charge self-invoices come from the #[a(href=`/gst/rcm?period=${r.period.code}`) Reverse charge] page.
             if r.docs.length
                 .table-responsive
                     table.table.table-sm.mb-0.m-stack

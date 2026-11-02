@@ -45,7 +45,8 @@ block content
                         option(value=pr.code selected=pr.code === w.period.code)= pr.label
                 a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/gstr1?period=${w.period.code}`) GSTR-1
                 a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/itc?period=${w.period.code}`) GSTR-2B / ITC
-                a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/rcm?period=${w.period.code}`) Reverse charge
+                if i.rcmEnabled
+                    a.btn.btn-sm.btn-outline-secondary.mr-2(href=`/gst/rcm?period=${w.period.code}`) Reverse charge
                 a.btn.btn-sm.btn-outline-success.mr-2(href=`/gst/workings?period=${w.period.code}` title='GSTR-1 and GSTR-3B laid out for typing on the portal')
                     i.bi.bi-file-earmark-excel.mr-1
                     | GST Workings (Excel)

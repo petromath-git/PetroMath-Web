@@ -1,4 +1,5 @@
 const GstConfigDao = require("../dao/gst-config-dao");
+const GstFilingDao = require("../dao/gst-filing-dao");
 const GstReturnDataDao = require("../dao/gst-return-data-dao");
 const GstDataAggregationDao = require("../dao/gst-data-aggregation-dao");
 const GSTR1Generator = require("../services/gstr1-generator");
@@ -36,6 +37,7 @@ module.exports = {
                 currentPeriod: currentPeriod,
                 formattedPeriod: gstUtils.formatReturnPeriod(currentPeriod),
                 periods: gstUtils.getRecentPeriods(12),
+                rcmEnabled: await GstFilingDao.isRcmEnabled(locationCode),
                 dateFmt: (d) => moment(d).utcOffset(330).format('DD-MMM-YYYY HH:mm')
             });
 
