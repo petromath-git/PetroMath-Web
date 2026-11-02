@@ -4,81 +4,78 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Density at 15°C Calculator | PetroMath</title>
-<meta name="description" content="Free density chart for petrol pumps: enter the hydrometer reading and temperature of the tanker sample to get density at 15°C (ASTM Table 53B) and check it against the invoice.">
+<meta name="description" content="Free density chart for petrol pumps: enter the hydrometer reading and temperature of the tanker sample to get density at 15°C (ASTM Table 53B).">
 <meta name="theme-color" content="#0d1b2e">
 <link rel="icon" href="/images/mc_logo.jpg">
 <link rel="manifest" href="/manifest.webmanifest">
 <!-- Self-contained on purpose (no login, no external CSS/JS): the service
      worker keeps a copy so it still opens at the decanting bay without signal. -->
 <style>
+  /* Used outdoors at the decanting bay, often in direct sun: pure white page,
+     black text, thick dark borders, no faint greys or soft shadows. The
+     result sits on a solid black panel so it stands out from the inputs. */
   :root {
     --navy: #0d1b2e;
-    --amber: #f4c11e;
-    --ink: #12161c;
-    --muted: #6b7686;
-    --line: #dde2e9;
-    --ok: #157347;
-    --ok-bg: #e3f4ea;
-    --bad: #b02a37;
-    --bad-bg: #fbe5e7;
-    --warn: #8a5a00;
-    --warn-bg: #fff4d6;
+    --amber: #ffc400;
+    --ink: #000;
+    --dim: #2b2b2b;
+    --edge: #1f1f1f;
+    --bad: #c00000;
+    --focus: #0050ff;
     font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: #f2f4f7; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  body { margin: 0; background: #fff; color: var(--ink); -webkit-font-smoothing: antialiased; }
   header {
     background: var(--navy); color: #fff;
     padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
     display: flex; align-items: center; gap: 10px;
   }
-  header a.back { color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  header a.back { color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; font-weight: 700; }
   header img { width: 30px; height: 30px; border-radius: 7px; }
-  header h1 { font-size: 1.05rem; margin: 0 0 0 auto; font-weight: 600; color: var(--amber); }
+  header h1 { font-size: 1.15rem; margin: 0 0 0 auto; font-weight: 800; color: var(--amber); }
   main { max-width: 480px; margin: 0 auto; padding: 16px 14px 32px; }
 
-  .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 3px rgba(16,24,40,.08); margin-bottom: 14px; }
-  .seg { display: grid; grid-template-columns: 1fr 1fr; background: #e7eaef; border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 16px; }
+  .card { background: #fff; margin-bottom: 16px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
   .seg button {
-    border: 0; background: transparent; border-radius: 9px; padding: 11px 6px;
-    font: inherit; font-weight: 600; font-size: 0.98rem; color: #3d4654; cursor: pointer;
+    border: 2.5px solid var(--edge); background: #fff; border-radius: 12px; padding: 12px 6px;
+    font: inherit; font-weight: 800; font-size: 1.2rem; color: var(--ink); cursor: pointer;
   }
-  .seg button.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(16,24,40,.15); }
-  .seg button small { display: block; font-weight: 500; font-size: 0.75rem; color: var(--muted); }
+  .seg button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .seg button small { display: block; font-weight: 700; font-size: 0.85rem; color: inherit; }
 
-  label { display: block; font-weight: 600; font-size: 0.9rem; margin: 0 0 6px; }
-  label span { font-weight: 400; color: var(--muted); }
-  .field { margin-bottom: 14px; }
+  label { display: block; font-weight: 800; font-size: 1.05rem; margin: 0 0 7px; color: var(--ink); }
+  label span { font-weight: 600; color: var(--dim); }
+  .field { margin-bottom: 18px; }
   .field:last-child { margin-bottom: 0; }
   .input-wrap { position: relative; }
   input {
-    width: 100%; font: inherit; font-size: 1.45rem; font-weight: 600;
-    padding: 12px 64px 12px 14px; border: 1.5px solid var(--line); border-radius: 11px;
+    width: 100%; font: inherit; font-size: 1.9rem; font-weight: 800;
+    padding: 12px 74px 12px 14px; border: 2.5px solid var(--edge); border-radius: 12px;
     background: #fff; color: var(--ink); -moz-appearance: textfield;
   }
   input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  input:focus { outline: none; border-color: #2f6fed; box-shadow: 0 0 0 3px rgba(47,111,237,.15); }
-  input.err { border-color: var(--bad); }
-  .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 0.9rem; pointer-events: none; }
-  .hint { font-size: 0.8rem; color: var(--bad); margin-top: 5px; min-height: 0; }
+  /* Example text: clearly not a value (light, thin, smaller) */
+  input::placeholder { color: #a7adb5; font-weight: 400; font-size: 1.2rem; opacity: 1; }
+  input:focus { outline: 3px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+  input.err { border-color: var(--bad); border-width: 3px; background: #fff2f2; }
+  .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--ink); font-weight: 700; font-size: 1.05rem; pointer-events: none; }
+  .hint { font-size: 1rem; font-weight: 700; color: var(--bad); margin-top: 6px; }
+  .hint:empty { display: none; }
 
-  .result { text-align: center; padding: 20px 16px; }
-  .result .lbl { font-size: 0.85rem; color: var(--muted); font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
-  .result .val { font-size: 3rem; font-weight: 800; line-height: 1.1; margin: 6px 0 2px; letter-spacing: -0.01em; }
-  .result .val small { font-size: 1rem; font-weight: 600; color: var(--muted); }
-  .result .sub { font-size: 0.85rem; color: var(--muted); }
-  .result.empty .val { color: #c3c9d2; }
+  .result { background: #000; color: #fff; border-radius: 14px; text-align: center; padding: 20px 16px 22px; }
+  .result .lbl { font-size: 1rem; color: var(--amber); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .result .val { font-size: 3.6rem; font-weight: 900; line-height: 1.1; margin: 6px 0 4px; letter-spacing: -0.01em; }
+  .result .val small { font-size: 1.15rem; font-weight: 700; color: #fff; }
+  .result .sub { font-size: 1rem; font-weight: 600; color: #fff; }
+  .result.empty .val { color: #8c8c8c; }
 
-  .note { border-radius: 10px; padding: 10px 12px; font-size: 0.88rem; margin-top: 12px; display: none; }
-  .note.warn { display: block; background: var(--warn-bg); color: var(--warn); }
+  .note { border-radius: 10px; padding: 12px; font-size: 1rem; font-weight: 700; margin-top: 14px; display: none; text-align: left; }
+  .note.warn { display: block; background: var(--amber); color: #000; }
 
-  .verdict { border-radius: 12px; padding: 14px; margin-top: 14px; display: none; text-align: center; }
-  .verdict b { display: block; font-size: 1.15rem; margin-bottom: 2px; }
-  .verdict.ok { display: block; background: var(--ok-bg); color: var(--ok); }
-  .verdict.bad { display: block; background: var(--bad-bg); color: var(--bad); }
-
-  .foot { font-size: 0.78rem; color: var(--muted); line-height: 1.5; padding: 0 4px; }
-  .foot a { color: inherit; }
+  .foot { font-size: 0.88rem; color: var(--dim); line-height: 1.5; padding: 0 2px; }
+  .foot a { color: inherit; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -101,7 +98,7 @@
     <div class="field">
       <label for="obs">Hydrometer reading <span>(observed density)</span></label>
       <div class="input-wrap">
-        <input id="obs" type="text" inputmode="decimal" autocomplete="off" placeholder="745.5">
+        <input id="obs" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 745.5">
         <span class="unit">kg/m³</span>
       </div>
       <div class="hint" id="obsHint"></div>
@@ -110,7 +107,7 @@
     <div class="field">
       <label for="temp">Sample temperature</label>
       <div class="input-wrap">
-        <input id="temp" type="text" inputmode="decimal" autocomplete="off" placeholder="31.5">
+        <input id="temp" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 31.5">
         <span class="unit">°C</span>
       </div>
       <div class="hint" id="tempHint"></div>
@@ -124,22 +121,10 @@
     <div class="note" id="rangeNote"></div>
   </div>
 
-  <div class="card">
-    <div class="field">
-      <label for="inv">Invoice density at 15°C <span>(optional)</span></label>
-      <div class="input-wrap">
-        <input id="inv" type="text" inputmode="decimal" autocomplete="off" placeholder="from the invoice">
-        <span class="unit">kg/m³</span>
-      </div>
-      <div class="hint" id="invHint"></div>
-    </div>
-    <div class="verdict" id="verdict"></div>
-  </div>
-
   <p class="foot">
     Converted as per ASTM D1250 / IP 200 Petroleum Measurement Table 53B (refined products, glass hydrometer) —
-    the same table used in the oil company density chart. A gap of up to ±3.0 kg/m³ between the sample and the
-    invoice is treated as acceptable. Readings in g/ml (e.g. 0.7455) are also accepted.
+    the same table used in the oil company density chart. Takes readings of 700–780 kg/m³ for petrol and
+    790–880 kg/m³ for diesel (g/ml such as 0.7455 also works), at 0–55°C.
     <br><br>Free tool by <a href="/">PetroMath</a> — fuel station management software.
   </p>
 </main>
@@ -173,15 +158,16 @@
     return r;
   }
 
-  // Usual density at 15°C (BIS specs: MS IS 2796, HSD IS 1460)
+  // min/max: the usual density at 15°C (BIS specs: MS IS 2796, HSD IS 1460).
+  // readMin/readMax: hydrometer readings accepted. Diesel starts at 790 because a
+  // light load (816 at 15°C) reads below 800 once the sample is above ~40°C.
   var PRODUCTS = {
-    MS:  { name: 'petrol (MS)',  min: 720, max: 775 },
-    HSD: { name: 'diesel (HSD)', min: 815, max: 845 }
+    MS:  { name: 'petrol (MS)',  label: 'Petrol', min: 720, max: 775, readMin: 700, readMax: 780 },
+    HSD: { name: 'diesel (HSD)', label: 'Diesel', min: 815, max: 845, readMin: 790, readMax: 880 }
   };
-  var TOLERANCE = 3.0;
 
   var $ = function (id) { return document.getElementById(id); };
-  var obsEl = $('obs'), tempEl = $('temp'), invEl = $('inv');
+  var obsEl = $('obs'), tempEl = $('temp');
   var product = 'MS';
   try { product = localStorage.getItem('pm-density-product') === 'HSD' ? 'HSD' : 'MS'; } catch (e) {}
 
@@ -192,15 +178,20 @@
     return isFinite(n) ? n : NaN;
   }
 
-  // Accept g/ml (0.7455) as well as kg/m3 (745.5)
+  // Hydrometer reading for the selected product; accepts g/ml (0.7455) as
+  // well as kg/m3 (745.5)
   function readDensity(el, hintEl) {
     var n = readNum(el);
     hintEl.textContent = '';
     el.classList.remove('err');
     if (n === null) return null;
     if (!isNaN(n) && n > 0.5 && n < 1.2) n = n * 1000;
-    if (isNaN(n) || n < 600 || n > 1100) {
-      hintEl.textContent = 'Enter density in kg/m³, e.g. 745.5';
+    var spec = PRODUCTS[product];
+    if (isNaN(n) || n < spec.readMin || n > spec.readMax) {
+      var o = PRODUCTS[product === 'MS' ? 'HSD' : 'MS'];
+      hintEl.textContent = (!isNaN(n) && n >= o.readMin && n <= o.readMax)
+        ? 'This looks like ' + o.label.toLowerCase() + ' — tap ' + o.label + ' above.'
+        : spec.label + ' readings are ' + spec.readMin + ' to ' + spec.readMax + ' kg/m³.';
       el.classList.add('err');
       return NaN;
     }
@@ -215,27 +206,25 @@
       b.classList.toggle('on', on);
       b.setAttribute('aria-selected', on ? 'true' : 'false');
     });
-    obsEl.placeholder = p === 'HSD' ? '828.5' : '745.5';
-    invEl.placeholder = p === 'HSD' ? 'e.g. 838.0' : 'e.g. 755.0';
+    obsEl.placeholder = p === 'HSD' ? 'e.g. 828.5' : 'e.g. 745.5';
     update();
   }
 
   function update() {
     var obs = readDensity(obsEl, $('obsHint'));
     var t = readNum(tempEl);
-    var inv = readDensity(invEl, $('invHint'));
-    var card = $('resultCard'), note = $('rangeNote'), verdict = $('verdict');
+    var card = $('resultCard'), note = $('rangeNote');
 
     $('tempHint').textContent = '';
     tempEl.classList.remove('err');
-    if (t !== null && (isNaN(t) || t < -10 || t > 60)) {
-      $('tempHint').textContent = 'Enter temperature in °C, e.g. 31.5';
+    if (t !== null && (isNaN(t) || t < 0 || t > 55)) {
+      $('tempHint').textContent = 'Enter a temperature between 0 and 55°C';
       tempEl.classList.add('err');
       t = NaN;
     }
 
     note.className = 'note';
-    verdict.className = 'verdict';
+    note.textContent = '';
 
     if (obs === null || t === null || isNaN(obs) || isNaN(t)) {
       card.classList.add('empty');
@@ -260,28 +249,19 @@
         : 'Outside the usual ' + spec.min + '–' + spec.max + ' kg/m³ for ' + spec.name + '. Check the reading, or the sample may not be ' + spec.name + '.';
     }
 
-    if (inv === null || isNaN(inv)) return;
-    var diff = Math.round((shown - inv) * 10) / 10;
-    var sign = diff > 0 ? '+' : '';
-    if (Math.abs(diff) <= TOLERANCE) {
-      verdict.className = 'verdict ok';
-      verdict.innerHTML = '<b>Matches invoice</b>Difference ' + sign + diff.toFixed(1) + ' kg/m³ (within ±' + TOLERANCE.toFixed(1) + ')';
-    } else {
-      verdict.className = 'verdict bad';
-      verdict.innerHTML = '<b>Does not match invoice</b>Difference ' + sign + diff.toFixed(1) + ' kg/m³ (more than ±' + TOLERANCE.toFixed(1) + '). Re-check the sample; if it repeats, inform the oil company before decanting.';
-    }
   }
 
   document.querySelectorAll('.seg button').forEach(function (b) {
     b.addEventListener('click', function () { setProduct(b.getAttribute('data-product')); });
   });
-  [obsEl, tempEl, invEl].forEach(function (el) { el.addEventListener('input', update); });
+  [obsEl, tempEl].forEach(function (el) { el.addEventListener('input', update); });
 
-  // Enter on the phone keyboard moves to the next box
-  [obsEl, tempEl].forEach(function (el, i) {
-    el.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); [tempEl, invEl][i].focus(); }
-    });
+  // Enter on the phone keyboard: reading -> temperature -> close keyboard
+  obsEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); tempEl.focus(); }
+  });
+  tempEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); tempEl.blur(); }
   });
 
   setProduct(product);
