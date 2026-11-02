@@ -62,9 +62,60 @@ block content
                         i.bi.bi-download.mr-1
                         | Download JSON
                 else
-                    button.btn.btn-sm.btn-secondary(type='button' disabled title='Fix the errors first')
+                    button.btn.btn-sm.btn-secondary(type='button' disabled title=r.unitView ? 'Download the combined return' : 'Fix the errors first')
                         i.bi.bi-lock.mr-1
                         | Download JSON
+                if r.unitView
+                    input(type='hidden' name='unit' value=r.unitView.location_code)
+
+        //- Shared GSTIN: one return for all units, with each unit's own figures to check
+        if r.units
+            - const reg = r.registration
+            - const fuelArg = `&fuelHsn=${r.includeFuelInHsn ? 1 : 0}`
+            .card.mb-3.border-info
+                .card-header.py-2.d-flex.flex-wrap.justify-content-between.align-items-center
+                    div
+                        p.section-title.mb-0 One return for #{reg.units.length} units on GSTIN #{reg.gstin}
+                        .table-sub #{reg.units.map(u => `${u.prefix} = ${u.location_code} (${u.name})`).join(' · ')}. File the combined return; the unit columns are for checking.
+                    .btn-group.btn-group-sm.no-print.mt-1
+                        a.btn(href=`/gst/gstr1?period=${r.period.code}${fuelArg}` class=r.unitView ? 'btn-outline-info' : 'btn-info') Combined
+                        each u in reg.units
+                            a.btn(href=`/gst/gstr1?period=${r.period.code}${fuelArg}&unit=${u.location_code}` class=r.unitView && r.unitView.location_code === u.location_code ? 'btn-info' : 'btn-outline-info')= u.location_code
+                if r.unitView
+                    .card-body.py-2.small.bg-light
+                        i.bi.bi-info-circle.mr-1
+                        | Showing #[strong= r.unitView.location_code] only. Its figures tie to the GST Summary report of #{r.unitView.location_code}. This is not a file to upload.
+                - const unitFig = (x) => { const b2bTx = x.invoices.reduce((t, inv) => t + inv.lines.reduce((s, l) => s + (l.rate ? l.txval : 0), 0), 0); return { inv: x.invoices.length, b2b: b2bTx, b2cs: x.b2cs.reduce((t, b) => t + b.txval, 0), cgst: x.gstr3b.outward.camt, sgst: x.gstr3b.outward.samt, outward: x.gstr3b.outward.txval, nil: x.gstr3b.nil, nonGst: x.gstr3b.nonGst, docs: x.docs.filter(d => d.doc_num === 1).reduce((t, d) => t + d.net_issue, 0), tied: x.tieOut.every(t => t.ok) }; }
+                - const cols = r.units.map(u => Object.assign({ code: u.location_code }, unitFig(u.r)))
+                - const tot = cols.reduce((t, c) => { ['inv', 'b2b', 'b2cs', 'cgst', 'sgst', 'outward', 'nil', 'nonGst', 'docs'].forEach(k => { t[k] = (t[k] || 0) + c[k]; }); t.tied = t.tied && c.tied; return t; }, { tied: true })
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Figure
+                                each c in cols
+                                    th.num= c.code
+                                th.num Total (filed)
+                        tbody
+                            each row in [['B2B invoices', 'inv', 'n'], ['B2B taxable value', 'b2b'], ['B2C taxable value (Table 7)', 'b2cs'], ['3.1(a) taxable value', 'outward'], ['CGST', 'cgst'], ['SGST', 'sgst'], ['Nil rated (non-fuel 0%)', 'nil'], ['Petrol / diesel (non-GST)', 'nonGst'], ['Table 13 outward documents', 'docs', 'n']]
+                                tr
+                                    td.m-title= row[0]
+                                    each c in cols
+                                        td.num(data-label=c.code)= row[2] ? c[row[1]] : inr(c[row[1]])
+                                    td.num.font-weight-bold(data-label='Total')= row[2] ? tot[row[1]] : inr(tot[row[1]])
+                            tr
+                                td.m-title Ties to its GST Summary
+                                each c in cols
+                                    td.num(data-label=c.code)
+                                        if c.tied
+                                            i.bi.bi-check-circle-fill.text-success
+                                        else
+                                            i.bi.bi-x-circle-fill.text-danger
+                                td.num(data-label='Total')
+                                    if tot.tied
+                                        i.bi.bi-check-circle-fill.text-success
+                                    else
+                                        i.bi.bi-x-circle-fill.text-danger
 
         //- Status
         if r.errors.length
@@ -210,7 +261,10 @@ block content
                             each inv in r.invoices
                                 - const tx = inv.lines.reduce((t, l) => t + l.txval, 0)
                                 tr
-                                    td.m-title= inv.bill_no
+                                    td.m-title
+                                        | #{inv.bill_no}
+                                        if inv.unit
+                                            span.badge.badge-light.ml-1= inv.unit
                                     td(data-label='Date')= inv.date
                                     td(data-label='Customer')= inv.customer
                                     td.hsn(data-label='GSTIN')= inv.gstin
@@ -259,7 +313,10 @@ block content
                         tbody
                             each b in r.b2c
                                 tr
-                                    td.m-title= b.product
+                                    td.m-title
+                                        | #{b.product}
+                                        if b.unit
+                                            span.badge.badge-light.ml-1= b.unit
                                     td.hsn(data-label='HSN')= b.hsn || '—'
                                     td.num(data-label='Rate') #{b.rate}%
                                     td.num(data-label='Qty')= qtyFmt(b.qty)
@@ -298,7 +355,10 @@ block content
                     tbody
                         each f in r.fuel
                             tr
-                                td.m-title= f.product
+                                td.m-title
+                                    | #{f.product}
+                                    if f.unit
+                                        span.badge.badge-light.ml-1= f.unit
                                 td.hsn(data-label='HSN')= f.hsn || '—'
                                 td.num(data-label='Litres')= qtyFmt(f.litres)
                                 td.num(data-label='Total')= inr(f.total)

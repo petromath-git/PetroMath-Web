@@ -155,16 +155,26 @@ function addSummarySheet(wb, w, locationName) {
     s.line([`GSTIN ${w.gstin}`]);
     s.section('Outward supplies');
     s.header(['Particulars', 'Amount', 'CGST', 'SGST']);
-    const hsnAll = [].concat((r.json.hsn && r.json.hsn.hsn_b2b) || [], (r.json.hsn && r.json.hsn.hsn_b2c) || []).filter(h => h.rt > 0);
-    const byRate = new Map();
-    hsnAll.forEach(h => {
-        const key = `${h.desc.substring(0, 28)} @ ${h.rt}%`;
-        const t = byRate.get(key) || { txval: 0, camt: 0, samt: 0 };
-        t.txval += h.txval; t.camt += h.camt; t.samt += h.samt; byRate.set(key, t);
-    });
-    byRate.forEach((t, k) => s.line([k, r2(t.txval), r2(t.camt), r2(t.samt)]));
-    r.fuel.forEach(f => s.line([`Non-GST ${f.product}`, r2(f.total)]));
-    w.itc.rcm.forEach(e => s.line([`RCM — ${e.description}`, num(e.taxable_value), num(e.cgst), num(e.sgst)]));
+    // Taxable sales by HSN description and rate, then fuel, for one GSTR-1 build.
+    const outwardLines = (x) => {
+        const hsnAll = [].concat((x.json.hsn && x.json.hsn.hsn_b2b) || [], (x.json.hsn && x.json.hsn.hsn_b2c) || []).filter(h => h.rt > 0);
+        const byRate = new Map();
+        hsnAll.forEach(h => {
+            const key = `${h.desc.substring(0, 28)} @ ${h.rt}%`;
+            const t = byRate.get(key) || { txval: 0, camt: 0, samt: 0 };
+            t.txval += h.txval; t.camt += h.camt; t.samt += h.samt; byRate.set(key, t);
+        });
+        byRate.forEach((t, k) => s.line([k, r2(t.txval), r2(t.camt), r2(t.samt)]));
+        x.fuel.forEach(f => s.line([`Non-GST ${f.product}`, r2(f.total)]));
+    };
+    // Shared GSTIN: a block per unit, as the auditor lays it out (UNIT - 1, UNIT - 2).
+    if (r.units) {
+        r.units.forEach((u, k) => {
+            s.line([`UNIT - ${k + 1} (${u.location_code})`], { bold: true });
+            outwardLines(u.r);
+        });
+    } else outwardLines(r);
+    w.itc.rcm.forEach(e => s.line([`RCM — ${e.description}${e.unit && r.units ? ` (${e.unit})` : ''}`, num(e.taxable_value), num(e.cgst), num(e.sgst)]));
     s.line(['Total (sales + RCM)', r2(w.t31a.txval + w.t31e + w.t31d.txval), r2(w.t31a.cgst + w.t31d.cgst), r2(w.t31a.sgst + w.t31d.sgst)], { bold: true });
     s.line(['GSTR-1 (taxable + non-GST)', r2(w.t31a.txval + w.t31e + w.t31c), w.t31a.cgst, w.t31a.sgst]);
 
@@ -177,6 +187,10 @@ function addSummarySheet(wb, w, locationName) {
     });
     s.line(['Less: reversed (Rule 42 + 17(5))', null, -i.reversal.cgst, -i.reversal.sgst]);
     s.line(['Net ITC', null, i.net.cgst, i.net.sgst], { bold: true });
+    if (r.units) {
+        r.units.forEach((u, k) => s.line([`Non-GST inward supplies Unit - ${k + 1} (${u.location_code})`,
+            r2(w.t5.invoices.filter(f => f.unit === u.location_code).reduce((t, f) => t + num(f.line_amount), 0))]));
+    }
     s.line(['Non-GST inward supplies (fuel bought, before VAT)', w.t5.nonGst]);
 
     s.section('Tax payable');
@@ -208,8 +222,8 @@ function addDetailSheet(wb, w, fmtDate) {
     if (i.rcm.length) i.rcm.forEach(e => s.line([e.supplier_name, e.description, e.self_invoice_no, fmtDate(e.self_invoice_date), num(e.taxable_value), num(e.igst), num(e.cgst), num(e.sgst), i.classes[e.itc_class] || e.itc_class]));
     else s.none();
     s.section('Fuel bought (oil company invoices)');
-    s.header(['Invoice', 'Date', 'Before VAT', 'VAT etc.', 'Invoice total']);
-    if (w.t5.invoices.length) w.t5.invoices.forEach(f => s.line([f.invoice_number, fmtDate(f.invoice_date), num(f.line_amount), num(f.charges), num(f.total_invoice_amount)]));
+    s.header(['Invoice', 'Date', 'Before VAT', 'VAT etc.', 'Invoice total', 'Unit']);
+    if (w.t5.invoices.length) w.t5.invoices.forEach(f => s.line([f.invoice_number, fmtDate(f.invoice_date), num(f.line_amount), num(f.charges), num(f.total_invoice_amount), f.unit]));
     else s.none();
 }
 

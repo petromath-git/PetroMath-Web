@@ -29,6 +29,10 @@ block content
             div
                 h4.mb-1 GSTR-2B and ITC · #{w.period.label}
                 p.text-muted.small.mb-0 Credit you can take in GSTR-3B Table 4, and how much goes back under Rule 42 because petrol and diesel are not under GST.
+                if w.registration.combined
+                    .small.text-info.mt-1
+                        i.bi.bi-diagram-2.mr-1
+                        | One GSTR-2B for GSTIN #{w.gstin}, shared by #{w.registration.label}: upload it once, from either location. Rule 42 uses the sales of all units together.
             form.form-inline(method='GET' action='/gst/itc')
                 select.custom-select.custom-select-sm.mr-2(name='period' onchange='this.form.submit()')
                     each p in periods
@@ -197,6 +201,8 @@ block content
                                     tr
                                         td.m-title
                                             span.mono= e.self_invoice_no
+                                            if w.registration.combined
+                                                span.badge.badge-light.ml-1= e.unit
                                             span.small.text-muted.ml-2 #{e.supplier_name} · #{e.description}
                                         td(data-label='Date')= fmtDate(e.self_invoice_date)
                                         td.num(data-label='Value')= inr(e.taxable_value)

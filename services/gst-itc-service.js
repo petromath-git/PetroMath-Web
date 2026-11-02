@@ -133,11 +133,13 @@ function parse2b(buffer) {
 }
 
 // Lube purchase invoices in the books for the month and the month before (a supplier
-// may file a late-month bill in the next 2B), one row per invoice.
-async function purchaseBook(locationCode, returnPeriod) {
+// may file a late-month bill in the next 2B), one row per invoice. locationCodes: every
+// unit of the GSTIN, since the 2B is one for the registration.
+async function purchaseBook(locationCodes, returnPeriod) {
     const { from_date, to_date } = gstUtils.getPeriodDates(returnPeriod);
     const from = moment(from_date).subtract(1, 'month').format('YYYY-MM-DD');
-    const lines = await GstDataAggregationDao.getPurchaseData(locationCode, from, to_date);
+    const lines = [].concat(...await Promise.all([].concat(locationCodes)
+        .map(code => GstDataAggregationDao.getPurchaseData(code, from, to_date))));
     const byInvoice = new Map();
     lines.forEach(l => {
         const key = `${String(l.supplier_gstin || '').toUpperCase()}|${normDoc(l.invoice_number)}`;
@@ -160,7 +162,8 @@ function findInBook(book, row) {
     return book.find(b => normDoc(b.invoice_number) === no && (!b.supplier_gstin || b.supplier_gstin === row.supplier_gstin));
 }
 
-async function upload2b(locationCode, returnPeriod, buffer, ownGstin, user) {
+// locationCode: where the GSTIN's 2B is kept (registration.primary); unitCodes: all units.
+async function upload2b(locationCode, returnPeriod, buffer, ownGstin, user, unitCodes) {
     const parsed = parse2b(buffer);
     if (ownGstin && parsed.gstin && parsed.gstin !== ownGstin) {
         throw new Error(`This 2B is for GSTIN ${parsed.gstin}, not ${ownGstin}.`);
@@ -170,7 +173,7 @@ async function upload2b(locationCode, returnPeriod, buffer, ownGstin, user) {
     }
     const [supplierClasses, book] = await Promise.all([
         GstFilingDao.getSupplierClasses(locationCode),
-        purchaseBook(locationCode, returnPeriod)
+        purchaseBook(unitCodes || [locationCode], returnPeriod)
     ]);
     const supplierClass = new Map(supplierClasses.map(s => [s.supplier_gstin, s.itc_class]));
     // Class: the supplier's saved choice, else TAXABLE when the bill is in the lube
@@ -197,15 +200,20 @@ async function setClass(locationCode, gst2bId, itcClass, applyToSupplier, user) 
     }
 }
 
-// turnover: { taxable, exempt } of the month, from the GSTR-1 build (3.1(a) and nil + non-GST).
-async function buildItc(locationCode, returnPeriod, turnover) {
-    const [rows, rcm, rcmEnabled, uploadInfo, book] = await Promise.all([
-        GstFilingDao.get2bInvoices(locationCode, returnPeriod),
-        GstFilingDao.getRcmForReturn(locationCode, returnPeriod),
-        GstFilingDao.isRcmEnabled(locationCode),
-        GstFilingDao.get2bUploadInfo(locationCode, returnPeriod),
-        purchaseBook(locationCode, returnPeriod)
+// registration: services/gst-registration-service (the GSTIN's units; 2B kept under primary).
+// turnover: { taxable, exempt } of the month for the whole GSTIN, from the GSTR-1 build
+// (3.1(a) and nil + non-GST): Rule 42 applies to the registration, not to one unit.
+async function buildItc(registration, returnPeriod, turnover) {
+    const unitCodes = registration.units.map(u => u.location_code);
+    const [rows, rcmByUnit, rcmFlags, uploadInfo, book] = await Promise.all([
+        GstFilingDao.get2bInvoices(registration.primary, returnPeriod),
+        Promise.all(unitCodes.map(code => GstFilingDao.getRcmForReturn(code, returnPeriod))),
+        Promise.all(unitCodes.map(code => GstFilingDao.isRcmEnabled(code))),
+        GstFilingDao.get2bUploadInfo(registration.primary, returnPeriod),
+        purchaseBook(unitCodes, returnPeriod)
     ]);
+    const rcm = [].concat(...rcmByUnit.map((list, i) => list.map(e => Object.assign({}, e, { unit: unitCodes[i] }))));
+    const rcmEnabled = rcmFlags.some(Boolean);
     const warnings = [];
 
     const t4a3 = zero(), t4a5 = zero(), t4d2 = zero(), rcmLiability = zero();

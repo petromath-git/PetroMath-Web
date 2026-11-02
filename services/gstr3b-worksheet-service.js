@@ -7,6 +7,9 @@
 //   4A(5), 4B(1)    GSTR-2B credit and the Rule 42 / 17(5) reversal (/gst/itc)
 //   5               petrol / diesel bought (non-GST inward), before VAT as the auditor has filed
 //                   since May-2026 (FY25-26 returns used the invoice value with VAT; both shown)
+// One worksheet per GSTIN: where locations share one (MC + MC2), every figure covers all
+// units and the inputs are kept under the first unit (registration.primary).
+//
 //   6.1             liability rounded to the rupee as the portal shows it, paid from the
 //                   credit ledger (IGST credit first, CGST and SGST never cross) then cash.
 //                   Reverse charge, interest and late fee are cash only.
@@ -14,6 +17,7 @@ const moment = require('moment');
 const Gstr1ReturnService = require('./gstr1-return-service');
 const GstItcService = require('./gst-itc-service');
 const GstFilingDao = require('../dao/gst-filing-dao');
+const GstRegistrationService = require('./gst-registration-service');
 const gstUtils = require('../utils/gst-utils');
 
 const HEADS = ['igst', 'cgst', 'sgst'];
@@ -56,14 +60,16 @@ async function openingBalance(locationCode, returnPeriod) {
 }
 
 async function buildWorksheet(locationCode, returnPeriod, overrides) {
-    const gstr1 = await Gstr1ReturnService.buildGstr1(locationCode, returnPeriod);
+    const registration = await GstRegistrationService.getRegistration(locationCode);
+    const gstr1 = await Gstr1ReturnService.buildReturn(locationCode, returnPeriod);
     const g = gstr1.gstr3b;
     const { from_date, to_date } = gstUtils.getPeriodDates(returnPeriod);
-    const [itc, fuelPurchases, opening] = await Promise.all([
-        GstItcService.buildItc(locationCode, returnPeriod, { taxable: g.outward.txval, exempt: g.nil + g.nonGst }),
-        GstFilingDao.getFuelPurchases(locationCode, from_date, to_date),
-        openingBalance(locationCode, returnPeriod)
+    const [itc, fuelByUnit, opening] = await Promise.all([
+        GstItcService.buildItc(registration, returnPeriod, { taxable: g.outward.txval, exempt: g.nil + g.nonGst }),
+        Promise.all(registration.units.map(u => GstFilingDao.getFuelPurchases(u.location_code, from_date, to_date))),
+        openingBalance(registration.primary, returnPeriod)
     ]);
+    const fuelPurchases = [].concat(...fuelByUnit.map((list, i) => list.map(f => Object.assign({}, f, { unit: registration.units[i].location_code }))));
     const inputs = Object.assign({}, opening.row, overrides || {});
     HEADS.forEach(h => { inputs[`ecl_open_${h}`] = num(inputs[`ecl_open_${h}`]); });
     ['interest_cgst', 'interest_sgst', 'late_fee_cgst', 'late_fee_sgst'].forEach(k => { inputs[k] = num(inputs[k]); });
@@ -96,6 +102,7 @@ async function buildWorksheet(locationCode, returnPeriod, overrides) {
             due: moment(to_date).add(1, 'month').date(20).format('DD-MMM-YYYY')
         },
         gstin: gstr1.gstin,
+        registration,
         gstr1,
         itc,
         t31a,
@@ -119,7 +126,7 @@ async function saveWorksheet(locationCode, returnPeriod, body, user) {
     overrides.notes = String(body.notes || '').substring(0, 500);
     const w = await buildWorksheet(locationCode, returnPeriod, overrides);
     await GstFilingDao.savePeriod(Object.assign({}, overrides, {
-        location_code: locationCode,
+        location_code: w.registration.primary,
         return_period: returnPeriod,
         ecl_close_igst: w.payment.closing.igst,
         ecl_close_cgst: w.payment.closing.cgst,
