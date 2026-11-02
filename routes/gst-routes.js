@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const GstController = require('../controllers/gst-controller');
 const GstFilingController = require('../controllers/gst-filing-controller');
+const GstFilingDao = require('../dao/gst-filing-dao');
 const multer = require('multer');
 const login = require('connect-ensure-login');
 
@@ -14,6 +15,14 @@ const isGstRole = (req, res, next) => {
     res.status(403).send('You do not have access to this page.');
 };
 const gstAccess = [isLoginEnsured, isGstRole];
+// Reverse charge self-invoices only where Location Config GST_RCM_SELF_INVOICE = Y
+const rcmOn = async (req, res, next) => {
+    try {
+        if (await GstFilingDao.isRcmEnabled(req.user.location_code)) return next();
+        req.flash('error', 'Reverse charge self-invoices are off for this location (Location Config: GST_RCM_SELF_INVOICE).');
+        res.redirect('/gst');
+    } catch (e) { next(e); }
+};
 const upload2b = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // Dashboard - /gst
@@ -37,10 +46,10 @@ router.post('/hsn/master', gstAccess, GstFilingController.saveHsnMaster);
 router.post('/hsn/defaults', gstAccess, GstFilingController.saveHsnDefaults);
 
 // Reverse charge self-invoices (rent from an unregistered landlord) - /gst/rcm?period=MMYYYY
-router.get('/rcm', gstAccess, GstFilingController.getRcm);
-router.post('/rcm', gstAccess, GstFilingController.saveRcm);
-router.post('/rcm/copy', gstAccess, GstFilingController.copyRcm);
-router.post('/rcm/:id/delete', gstAccess, GstFilingController.deleteRcm);
+router.get('/rcm', gstAccess, rcmOn, GstFilingController.getRcm);
+router.post('/rcm', gstAccess, rcmOn, GstFilingController.saveRcm);
+router.post('/rcm/copy', gstAccess, rcmOn, GstFilingController.copyRcm);
+router.post('/rcm/:id/delete', gstAccess, rcmOn, GstFilingController.deleteRcm);
 
 // GSTR-2B upload, ITC classes and Rule 42 - /gst/itc?period=MMYYYY
 router.get('/itc', gstAccess, GstFilingController.getItc);

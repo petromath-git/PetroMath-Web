@@ -30,9 +30,9 @@ block content
                                 each p in periods
                                     option(value=p.code)= p.label
                             if gstConfig
-                                - const steps = [{ url: '/gst/rcm', icon: 'bi-house', name: 'Reverse charge (rent)', when: 'self-invoice, any time in the month' }, { url: '/gst/gstr1', icon: 'bi-file-earmark-arrow-up', name: 'GSTR-1', when: 'download the JSON and upload by the 11th' }, { url: '/gst/itc', icon: 'bi-inbox', name: 'GSTR-2B and ITC', when: 'upload 2B after the 14th; Rule 42' }, { url: '/gst/gstr3b', icon: 'bi-calculator', name: 'GSTR-3B worksheet', when: 'type, pay and file by the 20th' }, { url: '/gst/workings', icon: 'bi-file-earmark-excel', name: 'GST Workings (Excel)', when: 'both returns laid out to file by hand, for the auditor' }]
+                                - const steps = [rcmEnabled && { url: '/gst/rcm', icon: 'bi-house', name: 'Reverse charge (rent)', when: 'self-invoice, any time in the month' }, { url: '/gst/gstr1', icon: 'bi-file-earmark-arrow-up', name: 'GSTR-1', when: 'download the JSON and upload by the 11th' }, { url: '/gst/itc', icon: 'bi-inbox', name: 'GSTR-2B and ITC', when: 'upload 2B after the 14th; Rule 42' }, { url: '/gst/gstr3b', icon: 'bi-calculator', name: 'GSTR-3B worksheet', when: 'type, pay and file by the 20th' }, { url: '/gst/workings', icon: 'bi-file-earmark-excel', name: 'GST Workings (Excel)', when: 'both returns laid out to file by hand, for the auditor' }]
                                 .list-group
-                                    each s, n in steps
+                                    each s, n in steps.filter(Boolean)
                                         button.list-group-item.list-group-item-action.d-flex.align-items-center.text-left(type='submit' formaction=s.url)
                                             span.badge.badge-success.mr-3= n + 1
                                             i.bi.mr-2(class=s.icon)
