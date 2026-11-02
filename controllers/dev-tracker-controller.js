@@ -2,8 +2,8 @@
 const devTrackerDao = require('../dao/dev-tracker-dao');
 const DocumentStoreDao = require('../dao/document-store-dao');
 const security = require('../utils/app-security');
+const attachmentUpload = require('../utils/attachment-upload');
 const moment = require('moment');
-const path = require('path');
 
 /**
  * Support Tickets (/dev-tracker)
@@ -27,47 +27,11 @@ const { HOURS_RANGES, TOKEN_RANGES } = devTrackerDao;
 const ATTACHMENT_ENTITY = 'SUPPORT_TICKET';
 const ATTACHMENT_MAX_FILES = 2;
 const ATTACHMENT_MAX_MB = 5;
-const ATTACHMENT_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
-const EXTENSION = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp', 'application/pdf': '.pdf' };
+const ATTACHMENT_COUNT_ERROR = `A ticket can have at most ${ATTACHMENT_MAX_FILES} attachments`;
 
-// The real type from the file's first bytes; the browser-declared type can be
-// anything. Returns null for anything that isn't a JPEG / PNG / WebP / PDF.
-const sniffType = (buf) => {
-    if (!buf || buf.length < 12) return null;
-    if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return 'image/jpeg';
-    if (buf.slice(0, 8).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))) return 'image/png';
-    if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WEBP') return 'image/webp';
-    if (buf.toString('ascii', 0, 5) === '%PDF-') return 'application/pdf';
-    return null;
-};
-
-// Plain file name for storage and the download header: no path, no quotes or
-// control characters, extension matching the real type.
-const safeFileName = (original, mimeType) => {
-    const base = path.basename(original || 'attachment')
-        .replace(/\.[^.]*$/, '')
-        .replace(/[^\w\- ()]+/g, '_')
-        .trim()
-        .slice(0, 80) || 'attachment';
-    return base + EXTENSION[mimeType];
-};
-
-// Validates uploaded files against what the ticket already has.
-// Returns { error } or { files: [{ file_name, mime_type, buffer }] }.
-const checkAttachments = (req, existingCount) => {
-    if (req.uploadError) return { error: req.uploadError };
-    const uploaded = req.files || [];
-    if (existingCount + uploaded.length > ATTACHMENT_MAX_FILES) {
-        return { error: `A ticket can have at most ${ATTACHMENT_MAX_FILES} attachments` };
-    }
-    const files = [];
-    for (const f of uploaded) {
-        const mimeType = sniffType(f.buffer);
-        if (!mimeType) return { error: `${path.basename(f.originalname)} is not a valid photo or PDF` };
-        files.push({ file_name: safeFileName(f.originalname, mimeType), mime_type: mimeType, buffer: f.buffer });
-    }
-    return { files };
-};
+// Validates uploaded files (real type from the bytes) against what the ticket already has.
+const checkAttachments = (req, existingCount) =>
+    attachmentUpload.checkFiles(req, existingCount, ATTACHMENT_MAX_FILES, ATTACHMENT_COUNT_ERROR);
 
 const saveAttachments = (files, tracker, userName) => Promise.all(files.map(f =>
     DocumentStoreDao.create({
@@ -84,7 +48,7 @@ const saveAttachments = (files, tracker, userName) => Promise.all(files.map(f =>
     })
 ));
 
-const fmtSize = (bytes) => (bytes >= 1024 * 1024 ? (bytes / 1024 / 1024).toFixed(1) + ' MB' : Math.max(1, Math.round(bytes / 1024)) + ' KB');
+const { fmtSize } = attachmentUpload;
 
 const getAccess = (user) => ({
     locations: security.getAccessibleLocations(user),
@@ -139,7 +103,6 @@ const resolveStation = (req, access) => {
 module.exports = {
     ATTACHMENT_MAX_FILES,
     ATTACHMENT_MAX_MB,
-    ATTACHMENT_MIME_TYPES,
 
     // GET /dev-tracker
     getDevTrackerPage: async (req, res, next) => {
@@ -464,15 +427,7 @@ module.exports = {
             if (!doc || doc.entity_type !== ATTACHMENT_ENTITY || String(doc.entity_id) !== String(tracker.tracker_id) || doc.status !== 'ACTIVE') {
                 return res.status(404).send('Attachment not found');
             }
-            const download = req.query.download === '1';
-            res.set({
-                'Content-Type': doc.mime_type,
-                'Content-Length': doc.file_size,
-                'Content-Disposition': `${download ? 'attachment' : 'inline'}; filename="${safeFileName(doc.file_name, doc.mime_type)}"`,
-                'X-Content-Type-Options': 'nosniff',
-                'Cache-Control': 'private, max-age=86400'
-            });
-            res.send(doc.file_data);
+            attachmentUpload.sendDocument(res, doc, req.query.download === '1');
         } catch (error) {
             console.error('Error in getAttachment:', error);
             res.status(500).send('Failed to load attachment');

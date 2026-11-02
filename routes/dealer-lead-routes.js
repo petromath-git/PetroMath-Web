@@ -3,7 +3,15 @@ const router = express.Router();
 const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const security = require('../utils/app-security');
+const { uploadMiddleware } = require('../utils/attachment-upload');
 const dealerLeadController = require('../controllers/dealer-lead-controller');
+
+// Attachments: memory storage -> BLOB in t_document_store; the controller checks the actual bytes
+const attachments = uploadMiddleware({
+    maxFiles: dealerLeadController.ATTACHMENT_MAX_FILES,
+    maxMb: dealerLeadController.ATTACHMENT_MAX_MB,
+    countError: dealerLeadController.ATTACHMENT_COUNT_ERROR
+});
 
 // Lead list, follow-ups and export need MANAGE_DEALER_LEADS (SuperUser + PowerUser + TeleCaller)
 const canManage = [isLoginEnsured, security.hasPermission('MANAGE_DEALER_LEADS')];
@@ -53,6 +61,11 @@ router.get('/admin/:leadId(\\d+)', canManage, (req, res, next) => {
 router.post('/admin/:leadId(\\d+)/activity', canManage, (req, res, next) => {
     dealerLeadController.logActivity(req, res, next);
 });
+
+// Attachments (photos / PDFs), served only through the lead so its access check applies
+router.post('/admin/:leadId(\\d+)/attachments', canManage, attachments, dealerLeadController.addAttachments);
+router.get('/admin/:leadId(\\d+)/attachments/:docId(\\d+)', canManage, dealerLeadController.getAttachment);
+router.delete('/admin/:leadId(\\d+)/attachments/:docId(\\d+)', canManage, dealerLeadController.deleteAttachment);
 
 // POST /admin/:leadId - Correct the lead's details
 router.post('/admin/:leadId(\\d+)', canManage, (req, res, next) => {

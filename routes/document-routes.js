@@ -28,9 +28,10 @@ router.get('/:doc_id', isLoginEnsured, async (req, res) => {
         if (doc.entity_type === 'LUBE_INVOICE' && doc.location_code !== req.user.location_code) {
             return res.status(404).send('Document not found');
         }
-        // Support ticket attachments are served by /dev-tracker/:id/attachments/:docId,
-        // which checks the user can see that ticket.
-        if (doc.entity_type === 'SUPPORT_TICKET') {
+        // Support ticket / dealer lead attachments are served by their own routes
+        // (/dev-tracker/:id/attachments, /dealer-leads/admin/:id/attachments),
+        // which check the user can see that ticket / lead.
+        if (doc.entity_type === 'SUPPORT_TICKET' || doc.entity_type === 'DEALER_LEAD') {
             return res.status(404).send('Document not found');
         }
 
