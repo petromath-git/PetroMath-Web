@@ -8,6 +8,7 @@ const GstWorkbookService = require('../services/gst-workbook-service');
 const LocationDao = require('../dao/location-dao');
 const Gstr3bWorksheetService = require('../services/gstr3b-worksheet-service');
 const GstRegistrationService = require('../services/gst-registration-service');
+const Gstr1ReturnService = require('../services/gstr1-return-service');
 const gstUtils = require('../utils/gst-utils');
 
 const userOf = (req) => req.user.Person_id || req.user.username;
@@ -242,6 +243,43 @@ module.exports = {
             req.flash('error', 'Could not copy: ' + error.message);
             res.redirect(`/gst/rcm?period=${period}`);
         }
+    },
+
+    // ---------- Credit customer GSTIN, from the GSTR-1 page ----------
+    // Enter, correct or clear a credit customer's GSTIN without going to the customer master;
+    // the page is rebuilt on return, so the customer's bills move between B2B and B2C.
+    saveCustomerGstin: async (req, res) => {
+        const period = periodOf(req.body.period);
+        const back = `/gst/gstr1?period=${period}&fuelHsn=${req.body.fuelHsn === '0' ? 0 : 1}` +
+            (req.body.unit ? `&unit=${encodeURIComponent(req.body.unit)}` : '') + '#customers';
+        try {
+            const reg = await GstRegistrationService.getRegistration(req.user.location_code);
+            const customer = await GstFilingDao.getCreditCustomer(parseInt(req.body.creditlist_id, 10));
+            if (!customer || !reg.units.some(u => u.location_code === customer.location_code)) {
+                req.flash('error', 'Customer not found for this GSTIN.');
+                return res.redirect(back);
+            }
+            if (req.body.action === 'clear') {
+                await GstFilingDao.setCustomerGstin(customer.creditlist_id, customer.location_code, null, userOf(req));
+                req.flash('success', `GSTIN removed for ${customer.customer}. Their bills are now in B2C (Table 7).`);
+                return res.redirect(back);
+            }
+            const gstin = String(req.body.gstin || '').replace(/\s+/g, '').toUpperCase();
+            if (!Gstr1ReturnService.isValidGstin(gstin)) {
+                req.flash('error', `"${gstin}" is not a valid GSTIN for ${customer.customer} (15 characters, last one a check digit). Nothing saved.`);
+                return res.redirect(back);
+            }
+            if (gstin === reg.gstin) {
+                req.flash('error', `${gstin} is your own GSTIN, not ${customer.customer}'s. Nothing saved.`);
+                return res.redirect(back);
+            }
+            await GstFilingDao.setCustomerGstin(customer.creditlist_id, customer.location_code, gstin, userOf(req));
+            req.flash('success', `GSTIN ${gstin} saved for ${customer.customer}. Their bills are now in B2B (Table 4A).`);
+        } catch (error) {
+            console.error('Error saving customer GSTIN:', error);
+            req.flash('error', 'Could not save the GSTIN: ' + error.message);
+        }
+        res.redirect(back);
     },
 
     // ---------- GSTR-2B and ITC ----------
