@@ -258,7 +258,15 @@
   }
 
   document.querySelectorAll('.seg button').forEach(function (b) {
-    b.addEventListener('click', function () { setProduct(b.getAttribute('data-product')); });
+    // Switching fuel = a different sample: start with empty boxes
+    b.addEventListener('click', function () {
+      var p = b.getAttribute('data-product');
+      if (p === product) return;
+      obsEl.value = '';
+      tempEl.value = '';
+      setProduct(p);
+      obsEl.focus();
+    });
   });
   [obsEl, tempEl].forEach(function (el) { el.addEventListener('input', update); });
 
