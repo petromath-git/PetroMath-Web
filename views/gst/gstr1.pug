@@ -237,6 +237,79 @@ block content
                 else
                     .card-body.text-muted.small Nothing this month.
 
+        //- Credit customers of the month: enter / correct / clear the GSTIN right here
+        if r.customers && r.customers.length
+            - const order = { INVALID: 0, B2B: 1, B2C: 2 }
+            - const custs = r.customers.slice().sort((x, y) => order[x.status] - order[y.status] || y.non_fuel - x.non_fuel)
+            - const count = (st) => custs.filter(c => c.status === st).length
+            .card.mb-3#customers(class=count('INVALID') ? 'border-danger' : '')
+                .card-header.py-2.d-flex.flex-wrap.justify-content-between.align-items-center
+                    div
+                        p.section-title Credit customers this month (#{custs.length})
+                        .table-sub
+                            | With a valid GSTIN a customer's bills go in B2B (Table 4A), without one in B2C (Table 7). Enter, correct or remove the GSTIN here; the return is worked out again at once.
+                            |  #{count('B2B')} B2B · #{count('B2C')} B2C
+                            if count('INVALID')
+                                span.text-danger.font-weight-bold  · #{count('INVALID')} invalid
+                    .d-flex.no-print.mt-1(style='gap:.4rem')
+                        input#custFind.form-control.form-control-sm(type='search' placeholder='Find customer' style='width:12rem')
+                        select#custShow.custom-select.custom-select-sm(style='width:auto')
+                            option(value='') All
+                            option(value='INVALID' selected=count('INVALID') > 0) Invalid
+                            option(value='B2B') B2B
+                            option(value='B2C') B2C
+                .table-responsive(style='max-height:28rem;overflow-y:auto')
+                    table.table.table-sm.mb-0.m-stack#custTable
+                        thead
+                            tr
+                                th Customer
+                                th.num Bills
+                                th.num Non-fuel sales
+                                th.num Fuel
+                                th Filed as
+                                th GSTIN
+                        tbody
+                            each c in custs
+                                tr(data-status=c.status data-name=c.customer.toLowerCase())
+                                    td.m-title
+                                        | #{c.customer}
+                                        if r.units && !r.unitView
+                                            span.badge.badge-light.ml-1= c.location_code
+                                    td.num(data-label='Bills')= c.bills
+                                    td.num(data-label='Non-fuel sales')= inr(c.non_fuel)
+                                    td.num(data-label='Fuel')= inr(c.fuel)
+                                    td(data-label='Filed as')
+                                        if c.status === 'B2B'
+                                            span.badge.badge-success B2B
+                                        else if c.status === 'B2C'
+                                            span.badge.badge-secondary B2C
+                                        else
+                                            span.badge.badge-danger Invalid GSTIN
+                                    td.m-wide.no-print(data-label='GSTIN')
+                                        form.d-flex.flex-wrap.align-items-center.mb-0(method='POST' action='/gst/gstr1/customer-gstin' style='gap:.3rem')
+                                            input(type='hidden' name='period' value=r.period.code)
+                                            input(type='hidden' name='fuelHsn' value=r.includeFuelInHsn ? 1 : 0)
+                                            if r.unitView
+                                                input(type='hidden' name='unit' value=r.unitView.location_code)
+                                            input(type='hidden' name='creditlist_id' value=c.creditlist_id)
+                                            input.form-control.form-control-sm.hsn(type='text' name='gstin' value=c.gstin maxlength='15'
+                                                placeholder='15-character GSTIN' style='width:11.5rem' class=c.status === 'INVALID' ? 'is-invalid' : '' autocomplete='off')
+                                            button.btn.btn-sm.btn-outline-primary(type='submit' name='action' value='save') Save
+                                            if c.gstin
+                                                button.btn.btn-sm.btn-outline-danger(type='submit' name='action' value='clear' formnovalidate
+                                                    onclick=`return confirm('Remove the GSTIN of ${c.customer.replace(/'/g, '')}? Their bills move to B2C.')`) Remove
+                script.
+                    (function () {
+                        const find = document.getElementById('custFind'), show = document.getElementById('custShow');
+                        function apply() {
+                            const q = find.value.trim().toLowerCase(), st = show.value;
+                            document.querySelectorAll('#custTable tbody tr').forEach(tr => {
+                                tr.style.display = (!q || tr.dataset.name.includes(q)) && (!st || tr.dataset.status === st) ? '' : 'none';
+                            });
+                        }
+                        find.addEventListener('input', apply); show.addEventListener('change', apply); apply();
+                    })();
+
         //- B2B invoices
         .card.mb-3
             .card-header.py-2.d-flex.justify-content-between.align-items-center

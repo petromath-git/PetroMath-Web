@@ -134,7 +134,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     const stateCode = ownGstin.substring(0, 2);
     const { from_date, to_date, financial_year } = gstUtils.getPeriodDates(returnPeriod);
 
-    const [b2bLines, b2bReportRows, b2cItems, fuelRows, nonFuelConsolidated, saleDays, products, rcmEntries, hsnMaster, rentals] = await Promise.all([
+    const [b2bLines, b2bReportRows, b2cItems, fuelRows, nonFuelConsolidated, saleDays, products, rcmEntries, hsnMaster, rentals, creditCustomers] = await Promise.all([
         GstSummaryDao.getB2BLinesForReturn(locationCode, from_date, to_date),
         GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, from_date, to_date),
         GstSummaryDao.getNonFuelSalesByItem(locationCode, from_date, to_date),
@@ -144,7 +144,8 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         GstFilingDao.getProductsForHsn(locationCode),
         GstFilingDao.getRcmForReturn(locationCode, returnPeriod),
         GstFilingDao.getHsnMaster(),
-        RentalDao.getGstInvoices(locationCode, from_date, to_date)
+        RentalDao.getGstInvoices(locationCode, from_date, to_date),
+        GstFilingDao.getCreditCustomersForPeriod(locationCode, from_date, to_date)
     ]);
     const hsnDesc = new Map(hsnMaster.map(h => [h.hsn_code, h.description]));
     const hsnResolver = await GstHsnService.loadResolver(locationCode);
@@ -226,7 +227,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         item.txval += txval; item.camt += cgst; item.samt += sgst;
         inv.items.set(rate, item);
     }
-    badCustomers.forEach(msg => errors.push({ msg, fix: 'Credit Customers master: correct or clear the GSTIN, then come back.' }));
+    badCustomers.forEach(msg => errors.push({ msg, fix: 'Correct or clear it under "Credit customers this month" below.' }));
 
     // Rent invoices: b2b (no IRN) / e-invoiced / b2cs, all in the HSN summary.
     const rentalView = [];
@@ -500,6 +501,12 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         hsnSources: Array.from(hsnChecked).map(name => Object.assign({ product: name }, hsnFor.get(name) || { code: '', source: 'none' }))
             .filter(h => h.source !== 'product'),
         docs: docView,
+        // Credit customers of the month with their GSTIN, editable on the page (B2B <-> B2C).
+        customers: creditCustomers.map(c => {
+            const gstin = c.gstin || '';
+            const status = !gstin ? 'B2C' : (!isValidGstin(gstin) || gstin === ownGstin) ? 'INVALID' : 'B2B';
+            return Object.assign({}, c, { gstin, status, non_fuel: num(c.non_fuel), fuel: num(c.fuel) });
+        }),
         rentals: rentalView,
         einvoiced,
         rcmEnabled: await GstFilingDao.isRcmEnabled(locationCode),
@@ -628,6 +635,7 @@ function combineGstr1(registration, period, units) {
         hsnSources: all('hsnSources'),
         docs,
         rentals: all('rentals'),
+        customers: all('customers'),
         einvoiced: { count: sum('einvoiced', 'count'), txval: sum('einvoiced', 'txval'), camt: sum('einvoiced', 'camt'), samt: sum('einvoiced', 'samt') },
         rcmEnabled: units.some(({ r }) => r.rcmEnabled),
         tieOut: [].concat(...units.map(({ unit, r }) => r.tieOut.map(t => Object.assign({}, t, { label: `${unit.location_code} · ${t.label}` })))),
