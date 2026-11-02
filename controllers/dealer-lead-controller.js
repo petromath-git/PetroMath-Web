@@ -1,5 +1,14 @@
 const dealerLeadDao = require('../dao/dealer-lead-dao');
+const DocumentStoreDao = require('../dao/document-store-dao');
+const attachmentUpload = require('../utils/attachment-upload');
 const moment = require('moment');
+
+// Attachments (visiting card, bunk photo, quote PDF...) in t_document_store
+// (entity_type DEALER_LEAD, entity_id = lead_id). Served only via /dealer-leads/admin/:id/attachments.
+const ATTACHMENT_ENTITY = 'DEALER_LEAD';
+const ATTACHMENT_MAX_FILES = 2;
+const ATTACHMENT_MAX_MB = 5;
+const ATTACHMENT_COUNT_ERROR = `A lead can have at most ${ATTACHMENT_MAX_FILES} attachments`;
 
 const VALID_ROLES = ['OWNER', 'MANAGER', 'OTHER'];
 
@@ -84,7 +93,23 @@ const whatsappNumber = (phone) => {
     return digits.length === 10 ? '91' + digits : null;
 };
 
+// The lead's attachment, or null if it isn't this lead's
+const findLeadAttachment = async (lead, docId, withData) => {
+    const doc = withData ? await DocumentStoreDao.findById(docId) : await DocumentStoreDao.findMetaById(docId);
+    if (!doc || doc.entity_type !== ATTACHMENT_ENTITY || Number(doc.entity_id) !== Number(lead.lead_id) || doc.status !== 'ACTIVE') return null;
+    return doc;
+};
+
+// The lead, if this user may work it
+const findVisibleLead = async (req) => {
+    const lead = await dealerLeadDao.getLeadById(parseInt(req.params.leadId, 10) || 0);
+    return lead && canSeeLead(req.user, lead) ? lead : null;
+};
+
 module.exports = {
+    ATTACHMENT_MAX_FILES,
+    ATTACHMENT_MAX_MB,
+    ATTACHMENT_COUNT_ERROR,
 
     // GET - Public lead capture form (no login required)
     getPublicForm: (req, res) => {
@@ -183,9 +208,10 @@ module.exports = {
                 req.flash('error', 'Lead not found.');
                 return res.redirect('/dealer-leads/admin');
             }
-            const [activities, assignees] = await Promise.all([
+            const [activities, assignees, attachments] = await Promise.all([
                 dealerLeadDao.getActivities(lead.lead_id),
-                dealerLeadDao.getAssignees()
+                dealerLeadDao.getAssignees(),
+                DocumentStoreDao.findByEntity(ATTACHMENT_ENTITY, lead.lead_id)
             ]);
             activities.forEach(a => {
                 a.activity_label = a.activity_type === 'EDIT' ? 'Details edited' : labelOf(ACTIVITY_TYPES, a.activity_type);
@@ -208,10 +234,75 @@ module.exports = {
                 roles: VALID_ROLES,
                 waNumber: whatsappNumber(lead.phone_number),
                 backQuery: (req.query.back || '').toString(),
+                attachments,
+                maxFiles: ATTACHMENT_MAX_FILES,
+                maxMb: ATTACHMENT_MAX_MB,
+                canRemoveAny: req.user.Role !== 'TeleCaller',
+                fmtSize: attachmentUpload.fmtSize,
                 moment
             });
         } catch (error) {
             next(error);
+        }
+    },
+
+    // POST - Attach photos / PDFs to a lead (fetch from the detail page; JSON reply)
+    addAttachments: async (req, res) => {
+        try {
+            const lead = await findVisibleLead(req);
+            if (!lead) return res.status(404).json({ success: false, error: 'Lead not found' });
+
+            const existing = await DocumentStoreDao.findByEntity(ATTACHMENT_ENTITY, lead.lead_id);
+            const upload = attachmentUpload.checkFiles(req, existing.length, ATTACHMENT_MAX_FILES, ATTACHMENT_COUNT_ERROR);
+            if (upload.error) return res.status(400).json({ success: false, error: upload.error });
+            if (!upload.files.length) return res.status(400).json({ success: false, error: 'Choose a file to attach' });
+
+            const captureSource = req.body.capture_source === 'CAMERA' ? 'CAMERA' : 'UPLOAD';
+            await Promise.all(upload.files.map(f => DocumentStoreDao.create({
+                entity_type: ATTACHMENT_ENTITY,
+                entity_id: lead.lead_id,
+                doc_category: 'ATTACHMENT',
+                file_name: f.file_name,
+                mime_type: f.mime_type,
+                file_size: f.buffer.length,
+                file_data: f.buffer,
+                capture_source: captureSource,
+                created_by: req.user.User_Name
+            })));
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error attaching to dealer lead:', error);
+            res.status(500).json({ success: false, error: 'Failed to attach file. Please try again.' });
+        }
+    },
+
+    // GET - Show / download an attachment, only if this user can see the lead
+    getAttachment: async (req, res) => {
+        try {
+            const lead = await findVisibleLead(req);
+            const doc = lead && await findLeadAttachment(lead, parseInt(req.params.docId, 10), true);
+            if (!doc) return res.status(404).send('Attachment not found');
+            attachmentUpload.sendDocument(res, doc, req.query.download === '1');
+        } catch (error) {
+            console.error('Error loading dealer lead attachment:', error);
+            res.status(500).send('Failed to load attachment');
+        }
+    },
+
+    // DELETE - Remove an attachment: the person who attached it, or a non-TeleCaller
+    deleteAttachment: async (req, res) => {
+        try {
+            const lead = await findVisibleLead(req);
+            const doc = lead && await findLeadAttachment(lead, parseInt(req.params.docId, 10), false);
+            if (!doc) return res.status(404).json({ success: false, error: 'Attachment not found' });
+            if (req.user.Role === 'TeleCaller' && doc.created_by !== req.user.User_Name) {
+                return res.status(403).json({ success: false, error: 'Only the person who attached it can remove it' });
+            }
+            await DocumentStoreDao.deleteById(doc.doc_id);
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error removing dealer lead attachment:', error);
+            res.status(500).json({ success: false, error: 'Failed to remove attachment' });
         }
     },
 
