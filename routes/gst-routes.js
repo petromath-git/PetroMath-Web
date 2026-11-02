@@ -38,6 +38,8 @@ router.post('/config', gstAccess, GstController.saveConfig);
 // GSTR-1 file built from the GST Summary - /gst/gstr1?period=MMYYYY
 router.get('/gstr1', gstAccess, GstController.getGstr1);
 router.get('/gstr1/download', gstAccess, GstController.downloadGstr1);
+// Enter / clear a credit customer's GSTIN from the GSTR-1 page (moves their bills B2B <-> B2C)
+router.post('/gstr1/customer-gstin', gstAccess, GstFilingController.saveCustomerGstin);
 
 // HSN codes per product + HSN descriptions - /gst/hsn
 router.get('/hsn', gstAccess, GstFilingController.getHsn);

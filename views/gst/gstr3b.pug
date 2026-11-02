@@ -39,6 +39,10 @@ block content
                 h4.mb-1 GSTR-3B · #{w.period.label}
                 .text-muted.small
                     | GSTIN #[strong= w.gstin] · due #[strong= w.period.due] · the #[span.type.px-1 yellow] figures are the ones you type on the portal
+                if w.registration.combined
+                    .small.text-info.mt-1
+                        i.bi.bi-diagram-2.mr-1
+                        | One return for #{w.registration.label} (same GSTIN): every figure covers all units. The inputs below are kept once for the GSTIN.
             form.d-flex.flex-wrap.align-items-center.no-print.gst-tools(method='GET' action='/gst/gstr3b')
                 select.custom-select.custom-select-sm.mr-2(name='period' onchange='this.form.submit()' style='width:auto')
                     each pr in periods
@@ -206,7 +210,10 @@ block content
                         tbody
                             each f in w.t5.invoices
                                 tr
-                                    td.m-title= f.invoice_number
+                                    td.m-title
+                                        | #{f.invoice_number}
+                                        if f.unit && w.registration.combined
+                                            span.badge.badge-light.ml-1= f.unit
                                     td(data-label='Date')= fmtDate(f.invoice_date)
                                     td.num(data-label='Before VAT')= inr(f.line_amount)
                                     td.num(data-label='VAT etc.')= inr(f.charges)

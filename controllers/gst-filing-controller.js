@@ -1,13 +1,14 @@
 // GST self-filing pages beside GSTR-1 (/gst/gstr1): HSN codes, reverse-charge entries,
 // GSTR-2B upload with the ITC / Rule 42 working, and the GSTR-3B worksheet.
 const moment = require('moment');
-const GstConfigDao = require('../dao/gst-config-dao');
 const GstFilingDao = require('../dao/gst-filing-dao');
 const GstItcService = require('../services/gst-itc-service');
 const GstHsnService = require('../services/gst-hsn-service');
 const GstWorkbookService = require('../services/gst-workbook-service');
 const LocationDao = require('../dao/location-dao');
 const Gstr3bWorksheetService = require('../services/gstr3b-worksheet-service');
+const GstRegistrationService = require('../services/gst-registration-service');
+const Gstr1ReturnService = require('../services/gstr1-return-service');
 const gstUtils = require('../utils/gst-utils');
 
 const userOf = (req) => req.user.Person_id || req.user.username;
@@ -244,6 +245,43 @@ module.exports = {
         }
     },
 
+    // ---------- Credit customer GSTIN, from the GSTR-1 page ----------
+    // Enter, correct or clear a credit customer's GSTIN without going to the customer master;
+    // the page is rebuilt on return, so the customer's bills move between B2B and B2C.
+    saveCustomerGstin: async (req, res) => {
+        const period = periodOf(req.body.period);
+        const back = `/gst/gstr1?period=${period}&fuelHsn=${req.body.fuelHsn === '0' ? 0 : 1}` +
+            (req.body.unit ? `&unit=${encodeURIComponent(req.body.unit)}` : '') + '#customers';
+        try {
+            const reg = await GstRegistrationService.getRegistration(req.user.location_code);
+            const customer = await GstFilingDao.getCreditCustomer(parseInt(req.body.creditlist_id, 10));
+            if (!customer || !reg.units.some(u => u.location_code === customer.location_code)) {
+                req.flash('error', 'Customer not found for this GSTIN.');
+                return res.redirect(back);
+            }
+            if (req.body.action === 'clear') {
+                await GstFilingDao.setCustomerGstin(customer.creditlist_id, customer.location_code, null, userOf(req));
+                req.flash('success', `GSTIN removed for ${customer.customer}. Their bills are now in B2C (Table 7).`);
+                return res.redirect(back);
+            }
+            const gstin = String(req.body.gstin || '').replace(/\s+/g, '').toUpperCase();
+            if (!Gstr1ReturnService.isValidGstin(gstin)) {
+                req.flash('error', `"${gstin}" is not a valid GSTIN for ${customer.customer} (15 characters, last one a check digit). Nothing saved.`);
+                return res.redirect(back);
+            }
+            if (gstin === reg.gstin) {
+                req.flash('error', `${gstin} is your own GSTIN, not ${customer.customer}'s. Nothing saved.`);
+                return res.redirect(back);
+            }
+            await GstFilingDao.setCustomerGstin(customer.creditlist_id, customer.location_code, gstin, userOf(req));
+            req.flash('success', `GSTIN ${gstin} saved for ${customer.customer}. Their bills are now in B2B (Table 4A).`);
+        } catch (error) {
+            console.error('Error saving customer GSTIN:', error);
+            req.flash('error', 'Could not save the GSTIN: ' + error.message);
+        }
+        res.redirect(back);
+    },
+
     // ---------- GSTR-2B and ITC ----------
     getItc: async (req, res) => {
         const period = periodOf(req.query.period);
@@ -272,9 +310,10 @@ module.exports = {
                 req.flash('error', 'Choose the GSTR-2B JSON file.');
                 return res.redirect(`/gst/itc?period=${period}`);
             }
-            const gstConfig = await GstConfigDao.findByLocationCode(req.user.location_code);
-            const parsed = await GstItcService.upload2b(req.user.location_code, period, req.file.buffer,
-                gstConfig ? String(gstConfig.gstin).toUpperCase() : null, userOf(req));
+            // One 2B per GSTIN: kept under the first unit when locations share a GSTIN.
+            const reg = await GstRegistrationService.getRegistration(req.user.location_code);
+            const parsed = await GstItcService.upload2b(reg.primary, period, req.file.buffer, reg.gstin, userOf(req),
+                reg.units.map(u => u.location_code));
             const skipped = parsed.skipped.length ? ` Not read: ${parsed.skipped.join(', ')} (enter those on the portal yourself).` : '';
             req.flash('success', `GSTR-2B loaded: ${parsed.rows.length} line(s).${skipped}`);
         } catch (error) {
@@ -287,7 +326,8 @@ module.exports = {
     set2bClass: async (req, res) => {
         const period = periodOf(req.body.period);
         try {
-            await GstItcService.setClass(req.user.location_code, parseInt(req.body.gst2b_id, 10), req.body.itc_class,
+            const reg = await GstRegistrationService.getRegistration(req.user.location_code);
+            await GstItcService.setClass(reg.primary, parseInt(req.body.gst2b_id, 10), req.body.itc_class,
                 req.body.all === '1', userOf(req));
         } catch (error) {
             console.error('Error setting ITC class:', error);
@@ -325,10 +365,13 @@ module.exports = {
                 Gstr3bWorksheetService.buildWorksheet(locationCode, period),
                 LocationDao.findByLocationCode(locationCode)
             ]);
-            const wb = await GstWorkbookService.buildWorkbook(w, (location && location.location_name) || locationCode);
+            const reg = w.registration;
+            const name = reg.combined ? reg.units.map(u => u.name).join(' + ') : ((location && location.location_name) || locationCode);
+            const wb = await GstWorkbookService.buildWorkbook(w, name);
             const label = moment(gstUtils.getPeriodDates(period).from_date).format('MMM-YYYY');
+            const fileCode = reg.combined ? reg.units.map(u => u.location_code).join('-') : locationCode;
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename="GST_Workings_${locationCode}_${label}.xlsx"`);
+            res.setHeader('Content-Disposition', `attachment; filename="GST_Workings_${fileCode}_${label}.xlsx"`);
             await wb.xlsx.write(res);
             res.end();
         } catch (error) {
