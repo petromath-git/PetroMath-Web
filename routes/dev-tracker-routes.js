@@ -7,37 +7,19 @@ const router = express.Router();
 const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const security = require("../utils/app-security");
-const multer = require('multer');
+const { uploadMiddleware } = require('../utils/attachment-upload');
 const devTrackerController = require('../controllers/dev-tracker-controller');
-const { ATTACHMENT_MAX_FILES, ATTACHMENT_MAX_MB, ATTACHMENT_MIME_TYPES } = devTrackerController;
+const { ATTACHMENT_MAX_FILES, ATTACHMENT_MAX_MB } = devTrackerController;
 
 const canRaise = [isLoginEnsured, security.hasMenu('DEV_TRACKER')];
 const canManage = [isLoginEnsured, security.hasMenu('DEV_TRACKER_MANAGE')];
 
-// Attachments: memory storage -> BLOB in t_document_store. The declared type is
-// only a first filter; the controller checks the file's actual bytes.
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: ATTACHMENT_MAX_MB * 1024 * 1024, files: ATTACHMENT_MAX_FILES, fields: 30 },
-    fileFilter: (req, file, cb) => {
-        if (ATTACHMENT_MIME_TYPES.includes(file.mimetype)) return cb(null, true);
-        cb(new Error('Only photos (JPEG, PNG, WebP) and PDF files can be attached'));
-    }
+// Attachments: memory storage -> BLOB in t_document_store; the controller checks the actual bytes
+const attachments = uploadMiddleware({
+    maxFiles: ATTACHMENT_MAX_FILES,
+    maxMb: ATTACHMENT_MAX_MB,
+    countError: `At most ${ATTACHMENT_MAX_FILES} files per ticket`
 });
-
-// Runs multer, turning its errors into a message for the controller
-// (req.uploadError) instead of an unhandled 500.
-const attachments = (req, res, next) => {
-    upload.array('attachments', ATTACHMENT_MAX_FILES)(req, res, (err) => {
-        if (err) {
-            if (err.code === 'LIMIT_FILE_SIZE') req.uploadError = `Each file must be ${ATTACHMENT_MAX_MB} MB or smaller`;
-            else if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') req.uploadError = `At most ${ATTACHMENT_MAX_FILES} files per ticket`;
-            else req.uploadError = err.message;
-            req.files = [];
-        }
-        next();
-    });
-};
 
 // Pages (fixed paths before /:id)
 router.get('/', canRaise, devTrackerController.getDevTrackerPage);
