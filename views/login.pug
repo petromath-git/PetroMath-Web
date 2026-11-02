@@ -75,8 +75,15 @@ block content
                                     i.bi.bi-box-arrow-in-right.me-2
                                     span Login
                     
+                    // Free tool, no login needed (used at decanting)
+                    //- (page is position:fixed with overflow hidden, so kept to one short line)
+                    div.text-center.mt-3
+                        a.btn.btn-outline-light.btn-sm(href='/density')
+                            i.bi.bi-droplet-half.me-1
+                            | Density @ 15°C — no login needed
+
                     // Footer
-                    div.text-center.mt-4
+                    div.text-center.mt-2
                         small.text-white-50 &copy; #{new Date().getFullYear()} PetroMath. All rights reserved.
 
     +pwaInstallHint(true)
