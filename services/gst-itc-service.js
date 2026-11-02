@@ -199,9 +199,10 @@ async function setClass(locationCode, gst2bId, itcClass, applyToSupplier, user) 
 
 // turnover: { taxable, exempt } of the month, from the GSTR-1 build (3.1(a) and nil + non-GST).
 async function buildItc(locationCode, returnPeriod, turnover) {
-    const [rows, rcm, uploadInfo, book] = await Promise.all([
+    const [rows, rcm, rcmEnabled, uploadInfo, book] = await Promise.all([
         GstFilingDao.get2bInvoices(locationCode, returnPeriod),
-        GstFilingDao.getRcmEntries(locationCode, returnPeriod),
+        GstFilingDao.getRcmForReturn(locationCode, returnPeriod),
+        GstFilingDao.isRcmEnabled(locationCode),
         GstFilingDao.get2bUploadInfo(locationCode, returnPeriod),
         purchaseBook(locationCode, returnPeriod)
     ]);
@@ -254,6 +255,7 @@ async function buildItc(locationCode, returnPeriod, turnover) {
         uploadInfo,
         rows,
         rcm,
+        rcmEnabled,
         suppliers: Array.from(suppliers.values()).sort((a, b) => (a.name || '').localeCompare(b.name || '')),
         classes: ITC_CLASSES,
         byClass: Object.fromEntries(Object.entries(byClass).map(([k, v]) => [k, round(v)])),

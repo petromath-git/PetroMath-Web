@@ -3,6 +3,7 @@
 // per-month GSTR-3B inputs. Plus the purchase / sale-day figures the returns need.
 const db = require("../db/db-connection");
 const Sequelize = require("sequelize");
+const { getLocationConfigValue } = require("../utils/location-config");
 
 const select = (sql, replacements) => db.sequelize.query(sql, { replacements, type: Sequelize.QueryTypes.SELECT });
 const run = (sql, replacements, transaction) => db.sequelize.query(sql, { replacements, transaction });
@@ -71,7 +72,16 @@ module.exports = {
         { locationCode, productId, hsnCode, user }),
 
     // ---------- Reverse charge ----------
-    getRcmEntries: (locationCode, returnPeriod) => select(
+    // Self-invoices are used only where m_location_config GST_RCM_SELF_INVOICE = Y (e.g. rent paid
+    // to a landlord without GST registration). Reverse charge lines in GSTR-2B count either way.
+    isRcmEnabled: async (locationCode) =>
+        String(await getLocationConfigValue(locationCode, 'GST_RCM_SELF_INVOICE', 'N')).toUpperCase() === 'Y',
+
+    // Self-invoices that go into the returns: none when reverse charge is off for the location.
+    getRcmForReturn: async (locationCode, returnPeriod) =>
+        (await module.exports.isRcmEnabled(locationCode)) ? module.exports.getRcmEntries(locationCode, returnPeriod) : [],
+
+    getRcmEntries:(locationCode, returnPeriod) => select(
         `SELECT * FROM t_gst_rcm_inward
          WHERE location_code = :locationCode AND return_period = :returnPeriod
          ORDER BY self_invoice_date, rcm_id`,
