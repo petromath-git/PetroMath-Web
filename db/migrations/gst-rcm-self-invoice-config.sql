@@ -2,7 +2,7 @@
 -- GST_RCM_SELF_INVOICE = Y shows the Reverse charge step and puts its self-invoices into
 -- GSTR-1 Table 13 and GSTR-3B 3.1(d) / 4A(3) / 6.1(B). N hides it and leaves them out.
 -- Reverse charge lines in the uploaded GSTR-2B count either way.
--- Default N; Y for MUE and MC (their auditor-filed returns carry rent under reverse charge).
+-- Default N for every location; set Y on the Location Config screen where rent is paid under reverse charge.
 -- Safe to run twice.
 
 INSERT INTO m_location_config_catalog
@@ -21,9 +21,7 @@ ON DUPLICATE KEY UPDATE
 
 INSERT INTO m_location_config (location_code, setting_name, setting_value, effective_start_date, effective_end_date, created_by, updated_by, creation_date, updation_date)
 SELECT v.location_code, 'GST_RCM_SELF_INVOICE', v.setting_value, CURDATE(), '9999-12-31', 'system', 'system', NOW(), NOW()
-FROM (SELECT '*' AS location_code, 'N' AS setting_value
-      UNION ALL SELECT 'MUE', 'Y'
-      UNION ALL SELECT 'MC', 'Y') v
+FROM (SELECT '*' AS location_code, 'N' AS setting_value) v
 WHERE NOT EXISTS (SELECT 1 FROM m_location_config c
                   WHERE c.setting_name = 'GST_RCM_SELF_INVOICE' AND c.location_code = v.location_code);
 
