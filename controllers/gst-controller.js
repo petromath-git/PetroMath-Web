@@ -324,7 +324,12 @@ previewReturn: async (req, res) => {
                 req.flash('error', 'Enter the GSTIN for this location first.');
                 return res.redirect('/gst/config');
             }
-            const result = await Gstr1ReturnService.buildGstr1(req.user.location_code, period, { includeFuelInHsn });
+            // Shared GSTIN: the combined return; ?unit=<location> shows one unit's own figures to check (no download).
+            const combined = await Gstr1ReturnService.buildReturn(req.user.location_code, period, { includeFuelInHsn });
+            const unitView = combined.units && req.query.unit ? combined.units.find(u => u.location_code === req.query.unit) : null;
+            const result = unitView
+                ? Object.assign({}, unitView.r, { registration: combined.registration, units: combined.units, unitView, canDownload: false })
+                : combined;
             res.render('gst/gstr1', {
                 title: 'GSTR-1',
                 mobileReady: true,
@@ -349,7 +354,7 @@ previewReturn: async (req, res) => {
         const includeFuelInHsn = req.query.fuelHsn !== '0';
         try {
             const locationCode = req.user.location_code;
-            const result = await Gstr1ReturnService.buildGstr1(locationCode, period, { includeFuelInHsn });
+            const result = await Gstr1ReturnService.buildReturn(locationCode, period, { includeFuelInHsn });
             if (!result.canDownload) {
                 req.flash('error', 'Fix the errors listed on the page before downloading.');
                 return res.redirect(`/gst/gstr1?period=${period}&fuelHsn=${includeFuelInHsn ? 1 : 0}`);
@@ -369,7 +374,8 @@ previewReturn: async (req, res) => {
                 total_taxable_value: totals.txval.toFixed(2),
                 total_cgst: totals.camt.toFixed(2),
                 total_sgst: totals.samt.toFixed(2),
-                notes: includeFuelInHsn ? 'Fuel included in HSN summary' : 'Fuel left out of HSN summary',
+                notes: (includeFuelInHsn ? 'Fuel included in HSN summary' : 'Fuel left out of HSN summary') +
+                    (result.registration.combined ? `; combined return ${result.registration.label}` : ''),
                 created_by: req.user.Person_id || req.user.username
             });
             res.setHeader('Content-Type', 'application/json');
