@@ -69,6 +69,7 @@
   .result .val { font-size: 3.6rem; font-weight: 900; line-height: 1.1; margin: 6px 0 4px; letter-spacing: -0.01em; }
   .result .val small { font-size: 1.15rem; font-weight: 700; color: #fff; }
   .result .sub { font-size: 1rem; font-weight: 600; color: #fff; }
+  .result .sub:empty { display: none; }
   .result.empty .val { color: #8c8c8c; }
 
   .note { border-radius: 10px; padding: 12px; font-size: 1rem; font-weight: 700; margin-top: 14px; display: none; text-align: left; }
@@ -76,6 +77,8 @@
 
   .foot { font-size: 0.88rem; color: var(--dim); line-height: 1.5; padding: 0 2px; }
   .foot a { color: inherit; font-weight: 700; }
+  .foot summary { font-weight: 700; color: var(--ink); text-decoration: underline; cursor: pointer; padding: 6px 0; }
+  .foot details p { margin: 6px 0 0; }
 </style>
 </head>
 <body>
@@ -121,12 +124,15 @@
     <div class="note" id="rangeNote"></div>
   </div>
 
-  <p class="foot">
-    Converted as per ASTM D1250 / IP 200 Petroleum Measurement Table 53B (refined products, glass hydrometer) —
-    the same table used in the oil company density chart. Takes readings of 700–780 kg/m³ for petrol and
-    790–880 kg/m³ for diesel (g/ml such as 0.7455 also works), at 0–55°C.
-    <br><br>Free tool by <a href="/">PetroMath</a> — fuel station management software.
-  </p>
+  <div class="foot">
+    <details>
+      <summary>About this calculator</summary>
+      <p>Converted as per ASTM D1250 / IP 200 Petroleum Measurement Table 53B (refined products, glass hydrometer) —
+      the same table used in the oil company density chart. Takes readings of 700–780 kg/m³ for petrol and
+      790–880 kg/m³ for diesel (g/ml such as 0.7455 also works), at 0–55°C.</p>
+      <p>Free tool by <a href="/">PetroMath</a> — fuel station management software.</p>
+    </details>
+  </div>
 </main>
 
 <script>
@@ -237,7 +243,7 @@
     var shown = Math.round(d15 * 10) / 10;
     card.classList.remove('empty');
     $('d15').innerHTML = shown.toFixed(1) + ' <small>kg/m³</small>';
-    $('d15Sub').textContent = obs.toFixed(1) + ' kg/m³ observed at ' + t + '°C';
+    $('d15Sub').textContent = '';
 
     var spec = PRODUCTS[product];
     if (shown < spec.min || shown > spec.max) {
