@@ -240,8 +240,19 @@ function parseHdfc(pages) {
 // accounts). Direction comes from the balance movement, starting at
 // "Opening Balance as on <date> : <amount>". Page header/footer lines only
 // appear between transactions and are ignored there.
+// Dates come as DD/MM/YYYY (internet banking) or "26 Oct 2026" (YONO export);
+// both are emitted as DD/MM/YYYY.
+const MONTHS = { JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+                 JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12' };
+
+function sbiDate(s) {
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+    const m = /^(\d{1,2}) ([A-Za-z]{3}) (\d{4})$/.exec(s);
+    const mm = m && MONTHS[m[2].toUpperCase()];
+    return mm ? `${m[1].padStart(2, '0')}/${mm}/${m[3]}` : null;
+}
+
 function parseSbi(pages) {
-    const dateRe = /^\d{2}\/\d{2}\/\d{4}$/;
     const lines = pages.flat();
 
     let opening = null;
@@ -259,8 +270,10 @@ function parseSbi(pages) {
         }
 
         if (!current) {
-            if (dateRe.test(c[0]) && dateRe.test(c[1] || '')) {
-                current = { date: c[0], valueDate: c[1], text: [] };
+            const date = sbiDate(c[0]);
+            const valueDate = sbiDate(c[1] || '');
+            if (date && valueDate) {
+                current = { date, valueDate, text: [] };
                 c.splice(0, 2);
             } else {
                 continue; // header/footer text between transactions
@@ -312,7 +325,11 @@ async function parsePdfStatementToData(buffer, bankName, password) {
         throw new Error(`PDF statements are not supported for ${bankName}. Please upload the Excel statement.`);
     }
     const pages = await loadPdfPages(buffer, password);
-    return [GRID_HEADER, ...parser(pages)];
+    const rows = parser(pages);
+    if (rows.length === 0) {
+        throw new Error(`No transactions could be read from this ${bankName} PDF. The statement layout may have changed. Please raise a support ticket with the file attached.`);
+    }
+    return [GRID_HEADER, ...rows];
 }
 
 module.exports = { isPdfFile, getPdfParser, parsePdfStatementToData, PdfPasswordError };
