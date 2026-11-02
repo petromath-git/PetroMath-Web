@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Density at 15°C Calculator | PetroMath</title>
+<meta name="description" content="Free density chart for petrol pumps: enter the hydrometer reading and temperature of the tanker sample to get density at 15°C (ASTM Table 53B).">
+<meta name="theme-color" content="#0d1b2e">
+<link rel="icon" href="/images/mc_logo.jpg">
+<link rel="manifest" href="/manifest.webmanifest">
+<!-- Self-contained on purpose (no login, no external CSS/JS): the service
+     worker keeps a copy so it still opens at the decanting bay without signal. -->
+<style>
+  /* Used outdoors at the decanting bay, often in direct sun: pure white page,
+     black text, thick dark borders, no faint greys or soft shadows. The
+     result sits on a solid black panel so it stands out from the inputs. */
+  :root {
+    --navy: #0d1b2e;
+    --amber: #ffc400;
+    --ink: #000;
+    --dim: #2b2b2b;
+    --edge: #1f1f1f;
+    --bad: #c00000;
+    --focus: #0050ff;
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #fff; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  header {
+    background: var(--navy); color: #fff;
+    padding: 12px 16px; padding-top: max(12px, env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 10px;
+  }
+  header a.back { color: #fff; text-decoration: none; display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  header img { width: 30px; height: 30px; border-radius: 7px; }
+  header h1 { font-size: 1.15rem; margin: 0 0 0 auto; font-weight: 800; color: var(--amber); }
+  main { max-width: 480px; margin: 0 auto; padding: 16px 14px 32px; }
+
+  .card { background: #fff; margin-bottom: 16px; }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+  .seg button {
+    border: 2.5px solid var(--edge); background: #fff; border-radius: 12px; padding: 12px 6px;
+    font: inherit; font-weight: 800; font-size: 1.2rem; color: var(--ink); cursor: pointer;
+  }
+  .seg button.on { background: var(--navy); border-color: var(--navy); color: #fff; }
+  .seg button small { display: block; font-weight: 700; font-size: 0.85rem; color: inherit; }
+
+  label { display: block; font-weight: 800; font-size: 1.05rem; margin: 0 0 7px; color: var(--ink); }
+  label span { font-weight: 600; color: var(--dim); }
+  .field { margin-bottom: 18px; }
+  .field:last-child { margin-bottom: 0; }
+  .input-wrap { position: relative; }
+  input {
+    width: 100%; font: inherit; font-size: 1.9rem; font-weight: 800;
+    padding: 12px 74px 12px 14px; border: 2.5px solid var(--edge); border-radius: 12px;
+    background: #fff; color: var(--ink); -moz-appearance: textfield;
+  }
+  input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  /* Example text: clearly not a value (light, thin, smaller) */
+  input::placeholder { color: #a7adb5; font-weight: 400; font-size: 1.2rem; opacity: 1; }
+  input:focus { outline: 3px solid var(--focus); outline-offset: 1px; border-color: var(--focus); }
+  input.err { border-color: var(--bad); border-width: 3px; background: #fff2f2; }
+  .unit { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--ink); font-weight: 700; font-size: 1.05rem; pointer-events: none; }
+  .hint { font-size: 1rem; font-weight: 700; color: var(--bad); margin-top: 6px; }
+  .hint:empty { display: none; }
+
+  .result { background: #000; color: #fff; border-radius: 14px; text-align: center; padding: 20px 16px 22px; }
+  .result .lbl { font-size: 1rem; color: var(--amber); font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+  .result .val { font-size: 3.6rem; font-weight: 900; line-height: 1.1; margin: 6px 0 4px; letter-spacing: -0.01em; }
+  .result .val small { font-size: 1.15rem; font-weight: 700; color: #fff; }
+  .result .sub { font-size: 1rem; font-weight: 600; color: #fff; }
+  .result .sub:empty { display: none; }
+  .result.empty .val { color: #8c8c8c; }
+
+  .note { border-radius: 10px; padding: 12px; font-size: 1rem; font-weight: 700; margin-top: 14px; display: none; text-align: left; }
+  .note.warn { display: block; background: var(--amber); color: #000; }
+
+  .foot { font-size: 0.88rem; color: var(--dim); line-height: 1.5; padding: 0 2px; }
+  .foot a { color: inherit; font-weight: 700; }
+  .foot summary { font-weight: 700; color: var(--ink); text-decoration: underline; cursor: pointer; padding: 6px 0; }
+  .foot details p { margin: 6px 0 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="back" href="/" aria-label="PetroMath home">
+    <img src="/images/mc_logo.jpg" alt="">
+    <span>PetroMath</span>
+  </a>
+  <h1>Density @ 15°C</h1>
+</header>
+
+<main>
+  <div class="card">
+    <div class="seg" role="tablist" aria-label="Product">
+      <button type="button" data-product="MS">Petrol<small>MS</small></button>
+      <button type="button" data-product="HSD">Diesel<small>HSD</small></button>
+    </div>
+
+    <div class="field">
+      <label for="obs">Hydrometer reading <span>(observed density)</span></label>
+      <div class="input-wrap">
+        <input id="obs" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 745.5">
+        <span class="unit">kg/m³</span>
+      </div>
+      <div class="hint" id="obsHint"></div>
+    </div>
+
+    <div class="field">
+      <label for="temp">Sample temperature</label>
+      <div class="input-wrap">
+        <input id="temp" type="text" inputmode="decimal" autocomplete="off" placeholder="e.g. 31.5">
+        <span class="unit">°C</span>
+      </div>
+      <div class="hint" id="tempHint"></div>
+    </div>
+  </div>
+
+  <div class="card result empty" id="resultCard">
+    <div class="lbl">Density at 15°C</div>
+    <div class="val" id="d15">—</div>
+    <div class="sub" id="d15Sub">Enter reading and temperature</div>
+    <div class="note" id="rangeNote"></div>
+  </div>
+
+  <div class="foot">
+    <details>
+      <summary>About this calculator</summary>
+      <p>Converted as per ASTM D1250 / IP 200 Petroleum Measurement Table 53B (refined products, glass hydrometer) —
+      the same table used in the oil company density chart. Takes readings of 700–780 kg/m³ for petrol and
+      790–880 kg/m³ for diesel (g/ml such as 0.7455 also works), at 0–55°C.</p>
+      <p>Free tool by <a href="/">PetroMath</a> — fuel station management software.</p>
+    </details>
+  </div>
+</main>
+
+<script>
+(function () {
+  // ---- ASTM D1250-80 Table 53B (generalized refined products) ----
+  // Thermal expansion coefficient at 15°C, picked by the 15°C density band.
+  function alpha15(r) {
+    if (r < 770)   return 346.4228 / (r * r) + 0.4388 / r;      // gasolines
+    if (r < 787.5) return -0.00336312 + 2680.3206 / (r * r);    // transition zone
+    if (r < 838.5) return 594.5418 / (r * r);                   // jet fuels / kerosene
+    return 186.9696 / (r * r) + 0.4862 / r;                     // diesel / fuel oils
+  }
+
+  // Observed density (kg/m3, glass hydrometer) at t°C -> density at 15°C.
+  // The 1980 tables include the hydrometer glass expansion correction; the
+  // corrected density is rounded to 0.01 (needed to match the printed chart
+  // cell-for-cell at the 0.05 rounding edges).
+  function densityAt15(observed, t) {
+    var dt = t - 15;
+    var corrected = Math.round(observed * (1 - 0.000023 * dt - 0.00000002 * dt * dt) * 100) / 100;
+    var r = corrected;
+    for (var i = 0; i < 50; i++) {
+      var a = alpha15(r);
+      var vcf = Math.exp(-a * dt * (1 + 0.8 * a * dt));
+      var next = corrected / vcf;
+      if (Math.abs(next - r) < 1e-7) { r = next; break; }
+      r = next;
+    }
+    return r;
+  }
+
+  // min/max: the usual density at 15°C (BIS specs: MS IS 2796, HSD IS 1460).
+  // readMin/readMax: hydrometer readings accepted. Diesel starts at 790 because a
+  // light load (816 at 15°C) reads below 800 once the sample is above ~40°C.
+  var PRODUCTS = {
+    MS:  { name: 'petrol (MS)',  label: 'Petrol', min: 720, max: 775, readMin: 700, readMax: 780 },
+    HSD: { name: 'diesel (HSD)', label: 'Diesel', min: 815, max: 845, readMin: 790, readMax: 880 }
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  var obsEl = $('obs'), tempEl = $('temp');
+  var product = 'MS';
+  try { product = localStorage.getItem('pm-density-product') === 'HSD' ? 'HSD' : 'MS'; } catch (e) {}
+
+  function readNum(el) {
+    var s = el.value.trim().replace(',', '.');
+    if (s === '') return null;
+    var n = Number(s);
+    return isFinite(n) ? n : NaN;
+  }
+
+  // Hydrometer reading for the selected product; accepts g/ml (0.7455) as
+  // well as kg/m3 (745.5)
+  function readDensity(el, hintEl) {
+    var n = readNum(el);
+    hintEl.textContent = '';
+    el.classList.remove('err');
+    if (n === null) return null;
+    if (!isNaN(n) && n > 0.5 && n < 1.2) n = n * 1000;
+    var spec = PRODUCTS[product];
+    if (isNaN(n) || n < spec.readMin || n > spec.readMax) {
+      var o = PRODUCTS[product === 'MS' ? 'HSD' : 'MS'];
+      hintEl.textContent = (!isNaN(n) && n >= o.readMin && n <= o.readMax)
+        ? 'This looks like ' + o.label.toLowerCase() + ' — tap ' + o.label + ' above.'
+        : spec.label + ' readings are ' + spec.readMin + ' to ' + spec.readMax + ' kg/m³.';
+      el.classList.add('err');
+      return NaN;
+    }
+    return n;
+  }
+
+  function setProduct(p) {
+    product = p;
+    try { localStorage.setItem('pm-density-product', p); } catch (e) {}
+    document.querySelectorAll('.seg button').forEach(function (b) {
+      var on = b.getAttribute('data-product') === p;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    obsEl.placeholder = p === 'HSD' ? 'e.g. 828.5' : 'e.g. 745.5';
+    update();
+  }
+
+  function update() {
+    var obs = readDensity(obsEl, $('obsHint'));
+    var t = readNum(tempEl);
+    var card = $('resultCard'), note = $('rangeNote');
+
+    $('tempHint').textContent = '';
+    tempEl.classList.remove('err');
+    if (t !== null && (isNaN(t) || t < 0 || t > 55)) {
+      $('tempHint').textContent = 'Enter a temperature between 0 and 55°C';
+      tempEl.classList.add('err');
+      t = NaN;
+    }
+
+    note.className = 'note';
+    note.textContent = '';
+
+    if (obs === null || t === null || isNaN(obs) || isNaN(t)) {
+      card.classList.add('empty');
+      $('d15').textContent = '—';
+      $('d15Sub').textContent = 'Enter reading and temperature';
+      return;
+    }
+
+    var d15 = densityAt15(obs, t);
+    var shown = Math.round(d15 * 10) / 10;
+    card.classList.remove('empty');
+    $('d15').innerHTML = shown.toFixed(1) + ' <small>kg/m³</small>';
+    $('d15Sub').textContent = '';
+
+    var spec = PRODUCTS[product];
+    if (shown < spec.min || shown > spec.max) {
+      var other = product === 'MS' ? 'HSD' : 'MS';
+      var o = PRODUCTS[other];
+      note.className = 'note warn';
+      note.textContent = (shown >= o.min && shown <= o.max)
+        ? 'This looks like ' + o.name + ', not ' + spec.name + '. Check the product selected above.'
+        : 'Outside the usual ' + spec.min + '–' + spec.max + ' kg/m³ for ' + spec.name + '. Check the reading, or the sample may not be ' + spec.name + '.';
+    }
+
+  }
+
+  document.querySelectorAll('.seg button').forEach(function (b) {
+    b.addEventListener('click', function () { setProduct(b.getAttribute('data-product')); });
+  });
+  [obsEl, tempEl].forEach(function (el) { el.addEventListener('input', update); });
+
+  // Enter on the phone keyboard: reading -> temperature -> close keyboard
+  obsEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); tempEl.focus(); }
+  });
+  tempEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); tempEl.blur(); }
+  });
+
+  setProduct(product);
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(function () {});
+  }
+})();
+</script>
+</body>
+</html>

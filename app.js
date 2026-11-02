@@ -250,6 +250,13 @@ app.get(['/sw.js', '/manifest.webmanifest'], function (req, res) {
     res.sendFile(path.join(__dirname, 'public', req.path));
 });
 
+// Density @ 15°C calculator — free public tool, no login (also a menu item
+// inside the app). Static page; the service worker keeps a copy for offline use.
+app.get('/density', function (req, res) {
+    res.set('Cache-Control', 'no-cache');
+    res.sendFile(path.join(__dirname, 'public', 'density.html'));
+});
+
 const distPath = path.join(__dirname, 'public/dist');
 if (require('fs').existsSync(distPath)) {
     app.use(express.static(distPath, { maxAge: '7d' }));
