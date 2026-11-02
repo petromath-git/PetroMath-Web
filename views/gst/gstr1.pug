@@ -263,6 +263,8 @@ block content
                                 tr
                                     td.m-title
                                         | #{inv.bill_no}
+                                        if inv.rental
+                                            span.badge.badge-info.ml-1 rent
                                         if inv.unit
                                             span.badge.badge-light.ml-1= inv.unit
                                     td(data-label='Date')= inv.date
@@ -291,6 +293,42 @@ block content
                                 td.num(data-label='Invoice value')= inr(r.invoices.reduce((t, inv) => t + inv.val, 0))
             else
                 .card-body.text-muted.small No credit bills with GST items to registered customers this month.
+
+        //- Rent invoices (Transactions > Rental Invoices)
+        if r.rentals && r.rentals.length
+            .card.mb-3
+                .card-header.py-2
+                    p.section-title Rent invoices (#{r.rentals.length})
+                    .table-sub
+                        | Raised under this GSTIN on the Rental Invoices page. Tenants with a GSTIN go in Table 4A; invoices with an IRN are filled into GSTR-1 by the e-invoice system, so this file leaves them out of 4A but counts them in the HSN table, Table 13 and 3.1(a). Tenants without a GSTIN go in Table 7.
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Invoice
+                                th Date
+                                th Tenant
+                                th GSTIN
+                                th.num Taxable
+                                th.num CGST
+                                th.num SGST
+                                th.num Total
+                                th Filed in
+                        tbody
+                            each rv in r.rentals
+                                tr
+                                    td.m-title
+                                        | #{rv.invoice_no}
+                                        if rv.unit
+                                            span.badge.badge-light.ml-1= rv.unit
+                                    td(data-label='Date')= rv.date
+                                    td(data-label='Tenant')= rv.tenant
+                                    td.hsn(data-label='GSTIN')= rv.gstin || '—'
+                                    td.num(data-label='Taxable')= inr(rv.txval)
+                                    td.num(data-label='CGST')= inr(rv.cgst)
+                                    td.num(data-label='SGST')= inr(rv.sgst)
+                                    td.num(data-label='Total')= inr(rv.amount)
+                                    td.small(data-label='Filed in')= !rv.gstin ? 'Table 7 (B2C)' : rv.irn ? 'e-invoice (portal fills 4A)' : 'Table 4A (this file)'
 
         //- B2C
         .card.mb-3

@@ -12,9 +12,15 @@
 //   nil       Table 8: petrol / diesel as non-GST supply, split registered / unregistered
 //   hsn       Table 12, split B2B / B2C as the portal has required since May 2025
 //   doc_issue Table 13: one day bill per product group per day (the auditor's format),
-//             B2B bill numbers, and reverse-charge self-invoices
+//             B2B bill numbers, rent invoices, and reverse-charge self-invoices
+//
+// Rent invoices (Transactions > Rental Invoices, SAC 997212) raised under the same GSTIN:
+// tenants with a GSTIN go in b2b, except invoices with an IRN, which the e-invoice system
+// puts into GSTR-1 itself; those still count in HSN, Table 13 and 3.1(a). Tenants without
+// a GSTIN go in b2cs. Rent is not in the GST Summary sales, so it stays out of the tie-out.
 const GstSummaryDao = require('../dao/report-gst-summary-dao');
 const GstFilingDao = require('../dao/gst-filing-dao');
+const RentalDao = require('../dao/rental-dao');
 const GstHsnService = require('./gst-hsn-service');
 const GstConfigDao = require('../dao/gst-config-dao');
 const GstRegistrationService = require('./gst-registration-service');
@@ -109,10 +115,12 @@ const DOC_INWARD_UNREG = 2;   // Invoices for inward supply from unregistered pe
 
 // 3.1(a) is what the portal adds up from the file: the rounded b2b item and b2cs rows
 // (0% non-fuel lines are not in them; they go in 3.1(c)).
-function outwardFromFile(b2b, b2cs) {
+// einvoiced: rent invoices with an IRN, which the portal adds to GSTR-1 from the e-invoice system.
+function outwardFromFile(b2b, b2cs, einvoiced) {
     const outward = { txval: 0, camt: 0, samt: 0 };
-    const addFiled = (d) => { outward.txval += d.txval; outward.camt += d.camt; outward.samt += d.samt; };
+    const addFiled = (d) => { outward.txval += num(d.txval); outward.camt += num(d.camt); outward.samt += num(d.samt); };
     (b2cs || []).forEach(addFiled);
+    [].concat(einvoiced || []).forEach(addFiled);
     (b2b || []).forEach(c => c.inv.forEach(inv => inv.itms.forEach(it => addFiled(it.itm_det))));
     return { outward: { txval: r2(outward.txval), camt: r2(outward.camt), samt: r2(outward.samt) } };
 }
@@ -126,7 +134,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     const stateCode = ownGstin.substring(0, 2);
     const { from_date, to_date, financial_year } = gstUtils.getPeriodDates(returnPeriod);
 
-    const [b2bLines, b2bReportRows, b2cItems, fuelRows, nonFuelConsolidated, saleDays, products, rcmEntries, hsnMaster] = await Promise.all([
+    const [b2bLines, b2bReportRows, b2cItems, fuelRows, nonFuelConsolidated, saleDays, products, rcmEntries, hsnMaster, rentals] = await Promise.all([
         GstSummaryDao.getB2BLinesForReturn(locationCode, from_date, to_date),
         GstSummaryDao.getNonFuelB2BSalesByBill(locationCode, from_date, to_date),
         GstSummaryDao.getNonFuelSalesByItem(locationCode, from_date, to_date),
@@ -135,7 +143,8 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         GstFilingDao.getSaleDays(locationCode, from_date, to_date),
         GstFilingDao.getProductsForHsn(locationCode),
         GstFilingDao.getRcmForReturn(locationCode, returnPeriod),
-        GstFilingDao.getHsnMaster()
+        GstFilingDao.getHsnMaster(),
+        RentalDao.getGstInvoices(locationCode, from_date, to_date)
     ]);
     const hsnDesc = new Map(hsnMaster.map(h => [h.hsn_code, h.description]));
     const hsnResolver = await GstHsnService.loadResolver(locationCode);
@@ -170,6 +179,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     const fuelB2B = new Map();    // product_name -> { qty, value }
     let nilB2B = 0;               // non-fuel 0% lines to registered customers
     const hsnB2B = hsnBucket();
+    const hsnB2CRent = [];        // rent to tenants without a GSTIN, added to the B2C HSN rows below
     const b2bTotals = { amount: 0, txval: 0, camt: 0, samt: 0 };
     const badCustomers = new Map();
 
@@ -217,6 +227,38 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         inv.items.set(rate, item);
     }
     badCustomers.forEach(msg => errors.push({ msg, fix: 'Credit Customers master: correct or clear the GSTIN, then come back.' }));
+
+    // Rent invoices: b2b (no IRN) / e-invoiced / b2cs, all in the HSN summary.
+    const rentalView = [];
+    const einvoiced = { count: 0, txval: 0, camt: 0, samt: 0 };
+    const rentalB2cs = new Map();   // rate -> sale value incl. GST, for tenants without a GSTIN
+    for (const rent of rentals) {
+        const rate = r2(num(rent.cgst_rate) + num(rent.sgst_rate));
+        const txval = num(rent.taxable_value), cgst = num(rent.cgst_amount), sgst = num(rent.sgst_amount);
+        const gstin = String(rent.tenant_gstin || '').trim().toUpperCase();
+        const sac = String(rent.sac_code || '').trim();
+        rentalView.push({ invoice_no: String(rent.invoice_no), date: moment(rent.invoice_date).format('DD-MMM-YYYY'), tenant: rent.tenant_name,
+            gstin, irn: rent.irn, sac, rate, txval, cgst, sgst, amount: num(rent.total_amount) });
+        if (!isValidHsn(sac)) errors.push({ msg: `Rent invoice ${rent.invoice_no}: SAC "${sac}" is not a valid code.`, fix: 'Masters > Rental Master: set the SAC (997212 for renting non-residential property).' });
+        if (gstin) {
+            if (!isValidGstin(gstin)) errors.push({ msg: `Rent invoice ${rent.invoice_no} to ${rent.tenant_name}: GSTIN "${gstin}" is not valid.`, fix: 'Masters > Rental Master: correct the tenant GSTIN.' });
+            hsnB2B.add(sac, rate, 'NA', 'RENT', 0, txval, cgst, sgst);
+            if (rent.irn) {
+                einvoiced.count += 1; einvoiced.txval += txval; einvoiced.camt += cgst; einvoiced.samt += sgst;
+                continue;
+            }
+            const key = `${gstin}|${rent.invoice_no}`;
+            invoices.set(key, {
+                bill_no: String(rent.invoice_no), gstin, customer: rent.tenant_name, rental: true,
+                bill_date: rent.invoice_date, dates: new Set([moment(rent.invoice_date).format('YYYY-MM-DD')]),
+                lines: [{ product: rent.description || 'RENT', hsn: sac, qty: 0, rate, txval, cgst, sgst, amount: num(rent.total_amount) }],
+                items: new Map([[rate, { txval, camt: cgst, samt: sgst }]]), val: num(rent.total_amount)
+            });
+        } else {
+            hsnB2CRent.push({ sac, rate, txval, cgst, sgst });
+            rentalB2cs.set(rate, (rentalB2cs.get(rate) || 0) + num(rent.total_amount));
+        }
+    }
 
     // Fuel lines on a bill that also has non-fuel items count in that invoice's value.
     for (const line of b2bLines) {
@@ -289,6 +331,8 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         if (rate === 0) { nilB2C += amount; continue; }
         b2csByRate.set(rate, (b2csByRate.get(rate) || 0) + amount);
     }
+    rentalB2cs.forEach((amount, rate) => b2csByRate.set(rate, (b2csByRate.get(rate) || 0) + amount));
+    hsnB2CRent.forEach(h => hsnB2C.add(h.sac, h.rate, 'NA', 'RENT', 0, h.txval, h.cgst, h.sgst));
     // B2C is one line per rate for the month, not real invoices: value = sales ÷ (1 + rate)
     // and tax on that, as the auditor files it. Summing the tax rounded on each bill
     // instead can be a paisa off.
@@ -373,9 +417,14 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
             from: `${pre}${g}/${mon}/01`, to: `${pre}${g}/${mon}/${dd(lastDay)}`, totnum: lastDay, cancel: lastDay - dayNos.length
         }));
     }
-    if (invoiceList.length) {
+    const creditBills = invoiceList.filter(inv => !inv.rental);
+    if (creditBills.length) {
         docView.push(Object.assign({ doc_num: DOC_OUTWARD, series: 'Credit bills to GST customers (B2B)' },
-            docRange(invoiceList.map(inv => String(inv.bill_no)))));
+            docRange(creditBills.map(inv => String(inv.bill_no)))));
+    }
+    if (rentalView.length) {
+        docView.push(Object.assign({ doc_num: DOC_OUTWARD, series: 'Rent invoices' },
+            docRange(rentalView.map(rv => rv.invoice_no))));
     }
     if (rcmEntries.length) {
         docView.push(Object.assign({ doc_num: DOC_INWARD_UNREG, series: 'Reverse charge self-invoices' },
@@ -407,7 +456,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     }));
 
     // ---------- GSTR-3B Table 3.1 (the worksheet adds credit and payment) ----------
-    const gstr3b = Object.assign(outwardFromFile(b2b, b2cs), { nil: nilB2B + nilB2C, nonGst: fuelTotal });
+    const gstr3b = Object.assign(outwardFromFile(b2b, b2cs, einvoiced), { nil: nilB2B + nilB2C, nonGst: fuelTotal });
 
     const json = { gstin: ownGstin, fp: returnPeriod, version: JSON_VERSION, hash: 'hash' };
     if (b2b.length) json.b2b = b2b;
@@ -451,6 +500,8 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         hsnSources: Array.from(hsnChecked).map(name => Object.assign({ product: name }, hsnFor.get(name) || { code: '', source: 'none' }))
             .filter(h => h.source !== 'product'),
         docs: docView,
+        rentals: rentalView,
+        einvoiced,
         rcmEnabled: await GstFilingDao.isRcmEnabled(locationCode),
         tieOut,
         gstr3b
@@ -576,9 +627,11 @@ function combineGstr1(registration, period, units) {
         hsnDesc: first.hsnDesc,
         hsnSources: all('hsnSources'),
         docs,
+        rentals: all('rentals'),
+        einvoiced: { count: sum('einvoiced', 'count'), txval: sum('einvoiced', 'txval'), camt: sum('einvoiced', 'camt'), samt: sum('einvoiced', 'samt') },
         rcmEnabled: units.some(({ r }) => r.rcmEnabled),
         tieOut: [].concat(...units.map(({ unit, r }) => r.tieOut.map(t => Object.assign({}, t, { label: `${unit.location_code} · ${t.label}` })))),
-        gstr3b: Object.assign(outwardFromFile(b2b, b2cs), { nil, nonGst })
+        gstr3b: Object.assign(outwardFromFile(b2b, b2cs, units.map(({ r }) => r.einvoiced)), { nil, nonGst })
     };
 }
 
