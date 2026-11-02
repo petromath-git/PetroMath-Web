@@ -206,7 +206,11 @@ block content
                                         td.m-hide
                                         td.small.m-wide(data-label='Use')= i.classes[e.itc_class] || e.itc_class
             else
-                .card-body.text-muted.small Nothing yet. Upload the GSTR-2B, and enter rent on the #[a(href=`/gst/rcm?period=${w.period.code}`) Reverse charge] page.
+                .card-body.text-muted.small
+                    | Nothing yet. Upload the GSTR-2B
+                    if i.rcmEnabled
+                        | , and enter rent on the #[a(href=`/gst/rcm?period=${w.period.code}`) Reverse charge] page
+                    | .
 
         //- Purchase book check
         if i.uploaded

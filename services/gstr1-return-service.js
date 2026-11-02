@@ -123,7 +123,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         GstSummaryDao.getNonFuelSalesConsolidated(locationCode, from_date, to_date),
         GstFilingDao.getSaleDays(locationCode, from_date, to_date),
         GstFilingDao.getProductsForHsn(locationCode),
-        GstFilingDao.getRcmEntries(locationCode, returnPeriod),
+        GstFilingDao.getRcmForReturn(locationCode, returnPeriod),
         GstFilingDao.getHsnMaster()
     ]);
     const hsnDesc = new Map(hsnMaster.map(h => [h.hsn_code, h.description]));
@@ -448,6 +448,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         hsnSources: Array.from(hsnChecked).map(name => Object.assign({ product: name }, hsnFor.get(name) || { code: '', source: 'none' }))
             .filter(h => h.source !== 'product'),
         docs: docView,
+        rcmEnabled: await GstFilingDao.isRcmEnabled(locationCode),
         tieOut,
         gstr3b
     };
