@@ -17,6 +17,7 @@ const GstSummaryDao = require('../dao/report-gst-summary-dao');
 const GstFilingDao = require('../dao/gst-filing-dao');
 const GstHsnService = require('./gst-hsn-service');
 const GstConfigDao = require('../dao/gst-config-dao');
+const GstRegistrationService = require('./gst-registration-service');
 const gstUtils = require('../utils/gst-utils');
 const moment = require('moment');
 
@@ -105,6 +106,16 @@ const fuelDocGroup = (product) => FUEL_DOC_SERIES[GstHsnService.fuelFamily(produ
 // Table 13 document types used here (portal numbering).
 const DOC_OUTWARD = 1;        // Invoices for outward supply
 const DOC_INWARD_UNREG = 2;   // Invoices for inward supply from unregistered person (RCM self-invoice)
+
+// 3.1(a) is what the portal adds up from the file: the rounded b2b item and b2cs rows
+// (0% non-fuel lines are not in them; they go in 3.1(c)).
+function outwardFromFile(b2b, b2cs) {
+    const outward = { txval: 0, camt: 0, samt: 0 };
+    const addFiled = (d) => { outward.txval += d.txval; outward.camt += d.camt; outward.samt += d.samt; };
+    (b2cs || []).forEach(addFiled);
+    (b2b || []).forEach(c => c.inv.forEach(inv => inv.itms.forEach(it => addFiled(it.itm_det))));
+    return { outward: { txval: r2(outward.txval), camt: r2(outward.camt), samt: r2(outward.samt) } };
+}
 
 async function buildGstr1(locationCode, returnPeriod, options = {}) {
     const includeFuelInHsn = options.includeFuelInHsn !== false;
@@ -355,9 +366,11 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
         });
         const order = ['OIL', 'MS', 'HSD', 'CNG'];
         groups.sort((x, y) => order.indexOf(x) - order.indexOf(y));
+        // Units of a shared GSTIN number their own series: U1/OIL/SEP/01, U2/OIL/SEP/01.
+        const pre = options.docPrefix ? `${options.docPrefix}/` : '';
         groups.forEach(g => docView.push({
             doc_num: DOC_OUTWARD, series: `Day bills · ${g}`,
-            from: `${g}/${mon}/01`, to: `${g}/${mon}/${dd(lastDay)}`, totnum: lastDay, cancel: lastDay - dayNos.length
+            from: `${pre}${g}/${mon}/01`, to: `${pre}${g}/${mon}/${dd(lastDay)}`, totnum: lastDay, cancel: lastDay - dayNos.length
         }));
     }
     if (invoiceList.length) {
@@ -394,17 +407,7 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     }));
 
     // ---------- GSTR-3B Table 3.1 (the worksheet adds credit and payment) ----------
-    // 3.1(a) is what the portal adds up from the file: the rounded b2b item and b2cs rows
-    // (0% non-fuel lines are not in them; they go in 3.1(c)).
-    const outward = { txval: 0, camt: 0, samt: 0 };
-    const addFiled = (d) => { outward.txval += d.txval; outward.camt += d.camt; outward.samt += d.samt; };
-    b2cs.forEach(addFiled);
-    b2b.forEach(c => c.inv.forEach(inv => inv.itms.forEach(it => addFiled(it.itm_det))));
-    const gstr3b = {
-        outward: { txval: r2(outward.txval), camt: r2(outward.camt), samt: r2(outward.samt) },
-        nil: nilB2B + nilB2C,
-        nonGst: fuelTotal
-    };
+    const gstr3b = Object.assign(outwardFromFile(b2b, b2cs), { nil: nilB2B + nilB2C, nonGst: fuelTotal });
 
     const json = { gstin: ownGstin, fp: returnPeriod, version: JSON_VERSION, hash: 'hash' };
     if (b2b.length) json.b2b = b2b;
@@ -454,4 +457,143 @@ async function buildGstr1(locationCode, returnPeriod, options = {}) {
     };
 }
 
-module.exports = { buildGstr1, isValidGstin, JSON_VERSION };
+// ---------- One return per GSTIN ----------
+// Locations sharing a GSTIN (MC + MC2) file one GSTR-1. Each unit is built as above (its
+// own tie-out to its own GST Summary, Table 13 series prefixed U1 / U2) and the files are
+// added together: b2b invoices listed, b2cs / nil / HSN rows summed on the portal's keys.
+// units[] keeps every unit's own build for the side-by-side check.
+function sumInto(map, key, row, fields, init) {
+    if (!map.has(key)) map.set(key, Object.assign({}, init, Object.fromEntries(fields.map(f => [f, 0]))));
+    const t = map.get(key);
+    fields.forEach(f => { t[f] += num(row[f]); });
+    return t;
+}
+
+function combineGstr1(registration, period, units) {
+    const tag = (u, text) => `${u.location_code}: ${text}`;
+    const errors = [], warnings = [];
+    units.forEach(({ unit, r }) => {
+        r.errors.forEach(e => errors.push(Object.assign({}, e, { msg: tag(unit, e.msg) })));
+        r.warnings.forEach(w => warnings.push(Object.assign({}, w, { msg: tag(unit, w.msg) })));
+    });
+
+    // b2b: one block per customer GSTIN; an invoice number may appear only once per GSTIN.
+    const b2bByCtin = new Map(), invoiceOwner = new Map();
+    units.forEach(({ unit, r }) => (r.json.b2b || []).forEach(c => {
+        if (!b2bByCtin.has(c.ctin)) b2bByCtin.set(c.ctin, []);
+        c.inv.forEach(inv => {
+            if (invoiceOwner.has(inv.inum)) {
+                errors.push({ msg: `Bill ${inv.inum} is used at both ${invoiceOwner.get(inv.inum)} and ${unit.location_code}. One GSTIN cannot issue the same invoice number twice in a year.`,
+                    fix: 'Give one of the units its own bill number series (e.g. a prefix), then correct the bill.' });
+            }
+            invoiceOwner.set(inv.inum, unit.location_code);
+            b2bByCtin.get(c.ctin).push(inv);
+        });
+    }));
+    const b2b = Array.from(b2bByCtin.entries()).map(([ctin, inv]) => ({ ctin, inv }));
+
+    const money = ['txval', 'iamt', 'camt', 'samt', 'csamt'];
+    const b2csMap = new Map();
+    units.forEach(({ r }) => (r.json.b2cs || []).forEach(b =>
+        sumInto(b2csMap, `${b.sply_ty}|${b.pos}|${b.typ}|${b.rt}`, b, money, { sply_ty: b.sply_ty, pos: b.pos, typ: b.typ, rt: b.rt })));
+    const b2cs = Array.from(b2csMap.values()).sort((a, b) => a.rt - b.rt).map(b => Object.assign(b, Object.fromEntries(money.map(f => [f, r2(b[f])]))));
+
+    const nilMap = new Map();
+    units.forEach(({ r }) => ((r.json.nil && r.json.nil.inv) || []).forEach(n =>
+        sumInto(nilMap, n.sply_ty, n, ['nil_amt', 'expt_amt', 'ngsup_amt'], { sply_ty: n.sply_ty })));
+    const nilInv = Array.from(nilMap.values()).map(n => Object.assign(n, { nil_amt: r2(n.nil_amt), expt_amt: r2(n.expt_amt), ngsup_amt: r2(n.ngsup_amt) }));
+
+    const hsnJson = {};
+    ['hsn_b2b', 'hsn_b2c'].forEach(part => {
+        const map = new Map();
+        units.forEach(({ r }) => ((r.json.hsn && r.json.hsn[part]) || []).forEach(h => {
+            const t = sumInto(map, `${h.hsn_sc}|${h.rt}|${h.uqc}`, h, ['qty'].concat(money),
+                { hsn_sc: h.hsn_sc, desc: h.desc, uqc: h.uqc, rt: h.rt, names: [] });
+            t.names.push(h.user_desc);
+        }));
+        const rows = Array.from(map.values()).sort((a, b) => a.hsn_sc.localeCompare(b.hsn_sc) || a.rt - b.rt)
+            .map((h, i) => ({
+                num: i + 1, hsn_sc: h.hsn_sc, desc: h.desc, user_desc: cleanDesc(h.names.join(', ').split(', ')),
+                uqc: h.uqc, qty: r2(h.qty), rt: h.rt, txval: r2(h.txval), iamt: r2(h.iamt), camt: r2(h.camt), samt: r2(h.samt), csamt: r2(h.csamt)
+            }));
+        if (rows.length) hsnJson[part] = rows;
+    });
+
+    const docs = [];
+    units.forEach(({ unit, r }) => r.docs.forEach(d => docs.push(Object.assign({}, d, { unit: unit.location_code, series: `${unit.location_code} · ${d.series}` }))));
+    const docJson = docs.filter(d => isValidDocNo(d.from) && isValidDocNo(d.to));
+
+    const json = { gstin: registration.gstin, fp: period, version: JSON_VERSION, hash: 'hash' };
+    if (b2b.length) json.b2b = b2b;
+    if (b2cs.length) json.b2cs = b2cs;
+    if (nilInv.length) json.nil = { inv: nilInv };
+    if (Object.keys(hsnJson).length) json.hsn = hsnJson;
+    if (docJson.length) {
+        json.doc_issue = {
+            doc_det: [DOC_OUTWARD, DOC_INWARD_UNREG].map(docNum => ({
+                doc_num: docNum,
+                docs: docJson.filter(d => d.doc_num === docNum)
+                    .map((d, i) => ({ num: i + 1, from: d.from, to: d.to, totnum: d.totnum, cancel: d.cancel, net_issue: d.net_issue }))
+            })).filter(d => d.docs.length)
+        };
+    }
+
+    // View rows: listed with their unit; HSN rows summed like the file.
+    const all = (key) => [].concat(...units.map(({ unit, r }) => r[key].map(x => Object.assign({}, x, { unit: unit.location_code }))));
+    const sum = (key, field) => units.reduce((t, { r }) => t + num(field ? r[key][field] : r[key]), 0);
+    const totals = (key) => ({ amount: sum(key, 'amount'), txval: sum(key, 'txval'), camt: sum(key, 'camt'), samt: sum(key, 'samt') });
+    const hsnView = (key) => {
+        const map = new Map();
+        units.forEach(({ r }) => r[key].forEach(h => {
+            const t = sumInto(map, `${h.hsn_sc}|${h.rt}|${h.uqc}`, h, ['qty', 'txval', 'camt', 'samt'], { hsn_sc: h.hsn_sc, rt: h.rt, uqc: h.uqc, products: [] });
+            h.products.forEach(p => { if (!t.products.includes(p)) t.products.push(p); });
+        }));
+        return Array.from(map.values()).sort((a, b) => a.hsn_sc.localeCompare(b.hsn_sc) || a.rt - b.rt);
+    };
+    const first = units[0].r;
+    const nonGst = sum('fuelTotals', 'total'), nil = units.reduce((t, { r }) => t + r.gstr3b.nil, 0);
+
+    return {
+        json,
+        canDownload: errors.length === 0,
+        errors,
+        warnings,
+        period: first.period,
+        gstin: registration.gstin,
+        includeFuelInHsn: first.includeFuelInHsn,
+        registration,
+        units: units.map(({ unit, r }) => Object.assign({}, unit, { r })),
+        invoices: all('invoices'),
+        b2bTotals: totals('b2bTotals'),
+        b2c: all('b2c'),
+        b2cs,
+        b2cTotals: totals('b2cTotals'),
+        fuel: all('fuel'),
+        fuelTotals: { total: nonGst, b2b: sum('fuelTotals', 'b2b'), b2c: sum('fuelTotals', 'b2c') },
+        nil: { b2b: sum('nil', 'b2b'), b2c: sum('nil', 'b2c') },
+        hsnB2B: hsnView('hsnB2B'),
+        hsnB2C: hsnView('hsnB2C'),
+        hsnDesc: first.hsnDesc,
+        hsnSources: all('hsnSources'),
+        docs,
+        rcmEnabled: units.some(({ r }) => r.rcmEnabled),
+        tieOut: [].concat(...units.map(({ unit, r }) => r.tieOut.map(t => Object.assign({}, t, { label: `${unit.location_code} · ${t.label}` })))),
+        gstr3b: Object.assign(outwardFromFile(b2b, b2cs), { nil, nonGst })
+    };
+}
+
+// The return for the GSTIN of a location: that location alone, or all units of a shared GSTIN.
+async function buildReturn(locationCode, returnPeriod, options = {}) {
+    const registration = await GstRegistrationService.getRegistration(locationCode);
+    if (!registration.combined) {
+        const r = await buildGstr1(locationCode, returnPeriod, options);
+        return Object.assign(r, { registration, units: null });
+    }
+    const units = [];
+    for (const unit of registration.units) {
+        units.push({ unit, r: await buildGstr1(unit.location_code, returnPeriod, Object.assign({}, options, { docPrefix: unit.prefix })) });
+    }
+    return combineGstr1(registration, returnPeriod, units);
+}
+
+module.exports = { buildGstr1, buildReturn, isValidGstin, JSON_VERSION };
