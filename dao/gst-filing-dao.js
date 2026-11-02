@@ -181,6 +181,40 @@ module.exports = {
              notes = VALUES(notes), updated_by = VALUES(updated_by)`,
         row),
 
+    // ---------- Credit customers' GSTIN (GSTR-1 page) ----------
+    // Credit customers billed in the month's closed shifts (digital vendors left out), with
+    // their GSTIN: with one their non-fuel bills go in B2B, without one in B2C.
+    getCreditCustomersForPeriod: (locationCode, fromDate, toDate) => select(
+        `SELECT mcl.creditlist_id, mcl.location_code, mcl.Company_Name AS customer, UPPER(TRIM(mcl.gst)) AS gstin,
+                COUNT(DISTINCT tc.bill_no) AS bills,
+                SUM(CASE WHEN f.is_fuel = 1 THEN 0 ELSE tc.amount END) AS non_fuel,
+                SUM(CASE WHEN f.is_fuel = 1 THEN tc.amount ELSE 0 END) AS fuel
+         FROM t_credits tc
+         JOIN t_closing tcl ON tc.closing_id = tcl.closing_id
+         JOIN m_credit_list mcl ON tc.creditlist_id = mcl.creditlist_id
+         JOIN (SELECT mp.product_id,
+                      CASE WHEN COALESCE(mp.is_lube_product, 0) = 0
+                            AND mp.product_name IN (SELECT DISTINCT product_code FROM m_pump WHERE location_code = :locationCode)
+                           THEN 1 ELSE 0 END AS is_fuel
+               FROM m_product mp WHERE mp.location_code = :locationCode) f ON f.product_id = tc.product_id
+         WHERE tcl.closing_status = 'CLOSED'
+           AND tcl.location_code = :locationCode
+           AND DATE(tcl.closing_date) BETWEEN :fromDate AND :toDate
+           AND COALESCE(mcl.card_flag, 'N') <> 'Y'
+         GROUP BY mcl.creditlist_id, mcl.location_code, mcl.Company_Name, mcl.gst
+         ORDER BY mcl.Company_Name`,
+        { locationCode, fromDate, toDate }),
+
+    getCreditCustomer: async (creditlistId) => (await select(
+        `SELECT creditlist_id, location_code, Company_Name AS customer, UPPER(TRIM(gst)) AS gstin
+         FROM m_credit_list WHERE creditlist_id = :creditlistId`, { creditlistId }))[0],
+
+    // gstin null clears it (the customer's bills then go in B2C).
+    setCustomerGstin: (creditlistId, locationCode, gstin, user) => run(
+        `UPDATE m_credit_list SET gst = :gstin, updated_by = :user, updation_date = NOW()
+         WHERE creditlist_id = :creditlistId AND location_code = :locationCode`,
+        { creditlistId, locationCode, gstin, user }),
+
     // ---------- Figures from the books ----------
     // Fuel bought from the oil company in the month (3B Table 5, non-GST inward).
     // line_amount = before VAT (auditor's figure since May-2026); charges = VAT etc.
