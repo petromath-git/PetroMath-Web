@@ -403,6 +403,42 @@ block content
                                     td.num(data-label='Total')= inr(rv.amount)
                                     td.small(data-label='Filed in')= !rv.gstin ? 'Table 7 (B2C)' : rv.irn ? 'e-invoice (portal fills 4A)' : 'Table 4A (this file)'
 
+        //- Tank truck freight bills (Transactions > Tank Truck Freight)
+        if r.ttBills && r.ttBills.length
+            .card.mb-3
+                .card-header.py-2
+                    p.section-title Tank truck freight bills (#{r.ttBills.length})
+                    .table-sub
+                        | Raised by the oil company in your name for carrying its product. Under reverse charge they go in Table 4B: the tax is shown, but the oil company pays it, so it is not in 3.1(a). Also in the HSN table and Table 13.
+                .table-responsive
+                    table.table.table-sm.mb-0.m-stack
+                        thead
+                            tr
+                                th Bill
+                                th Date
+                                th Billed to
+                                th GSTIN
+                                th.num Trips
+                                th.num Taxable
+                                th.num CGST
+                                th.num SGST
+                                th Filed in
+                        tbody
+                            each tv in r.ttBills
+                                tr
+                                    td.m-title
+                                        | #{tv.bill_no}
+                                        if tv.unit
+                                            span.badge.badge-light.ml-1= tv.unit
+                                    td(data-label='Date')= tv.date
+                                    td(data-label='Billed to')= tv.recipient
+                                    td.hsn(data-label='GSTIN')= tv.gstin
+                                    td.num(data-label='Trips')= tv.trips
+                                    td.num(data-label='Taxable')= inr(tv.txval)
+                                    td.num(data-label='CGST')= inr(tv.cgst)
+                                    td.num(data-label='SGST')= inr(tv.sgst)
+                                    td.small(data-label='Filed in')= tv.rchrg === 'Y' ? 'Table 4B (reverse charge)' : 'Table 4A'
+
         //- B2C
         .card.mb-3
             .card-header.py-2
@@ -551,6 +587,12 @@ block content
                             td.num(data-label='Taxable / value')= inr(g.nonGst)
                             td.num(data-label='CGST') —
                             td.num(data-label='SGST') —
+                        if g.rcmOutward && g.rcmOutward.txval
+                            tr.text-muted
+                                td.m-title Tank truck freight, reverse charge (Table 4B; the oil company pays the tax)
+                                td.num(data-label='Taxable / value')= inr(g.rcmOutward.txval)
+                                td.num(data-label='CGST')= inr(g.rcmOutward.camt)
+                                td.num(data-label='SGST')= inr(g.rcmOutward.samt)
                         tr.font-weight-bold
                             td.m-title Tax to pay before ITC
                             td.m-hide
