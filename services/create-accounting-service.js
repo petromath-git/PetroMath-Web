@@ -36,6 +36,13 @@
 //                                                         raises a DELETE event (rental-dao cancelInvoice).
 //                                                         Rent received posts from the rent bank's BANK_TXN
 //                                                         (Static label "RENT - <tenant>" → tenant ledger).
+//   TT_INVOICE          (source_id = t_tt_invoice.invoice_id) — tank truck freight bill raised by the oil company
+//                                                         in the dealer's name: Oil-co TT debtor DR (taxable - TDS)
+//                                                         + TDS Receivable DR / TT freight income CR (taxable).
+//                                                         No GST lines: reverse charge, the oil company pays it.
+//                                                         Deleting a posted bill raises a DELETE event. The bank
+//                                                         part of the payment posts from BANK_TXN (Static label
+//                                                         "TT FREIGHT - <oil company>" → debtor).
 //
 // Raised automatically by DB triggers on source tables.
 // UPDATE events reverse existing vouchers and regenerate fresh ones.
@@ -613,6 +620,22 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
           )
     `);
 
+    await run('TT_INVOICE', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT ti.location_code, fy.fy_id, 'TT_INVOICE', ti.invoice_id, 'CREATE',
+               ti.bill_date, 'UNPROCESSED', :createdBy
+        FROM t_tt_invoice ti
+        JOIN gl_financial_years fy ON fy.location_code = ti.location_code
+            AND ti.bill_date BETWEEN fy.start_date AND fy.end_date
+        WHERE ti.location_code = :locationCode
+          AND ti.bill_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'TT_INVOICE' AND e.source_id = ti.invoice_id
+          )
+    `);
+
     log.info(`Generate Events done — total inserted=${total}` +
         (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
@@ -645,6 +668,7 @@ async function processEvent(event, processedBy) {
         case 'ADJUSTMENT':          return await processAdjustmentEvent(event, processedBy);
         case 'CREDIT_RECEIPT':      return await processCreditReceiptEvent(event, processedBy);
         case 'RENTAL_INVOICE':      return await processRentalInvoiceEvent(event, processedBy);
+        case 'TT_INVOICE':          return await processTtInvoiceEvent(event, processedBy);
         default:
             throw new Error(`Unhandled source_type: ${event.source_type}`);
     }
@@ -1794,6 +1818,56 @@ async function processRentalInvoiceEvent(event, processedBy) {
         voucherType:  'SALES',
         voucherDate:  event_date,
         sourceType:   'RENTAL_INVOICE',
+        sourceId:     invoiceId,
+        narration,
+        lines,
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+// ─── TT_INVOICE Handler ───────────────────────────────────────────────────────
+// Oil-co TT debtor DR (taxable - TDS) + TDS Receivable DR (TDS) → TT freight income CR (taxable).
+// GST is under reverse charge (the oil company pays it), so it is not in the dealer's books.
+
+async function processTtInvoiceEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: invoiceId, event_date } = event;
+
+    const rows = await query(`
+        SELECT ti.bill_no, ti.taxable_value, ti.tds_amount, ti.net_receivable, ti.trip_count, ti.total_kl,
+               ti.vehicles, ti.period_from, ti.period_to,
+               v.oil_company, v.debtor_ledger_id, v.income_ledger_id, v.tds_ledger_id
+        FROM t_tt_invoice ti
+        JOIN m_tt_vendor v ON v.vendor_id = ti.vendor_id
+        WHERE ti.invoice_id = :invoiceId
+    `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Tank truck freight bill not found: invoice_id=${invoiceId}`);
+    const row = rows[0];
+    if (!row.debtor_ledger_id) throw new Error(`Debtor ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+    if (!row.income_ledger_id) throw new Error(`Freight income ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+
+    const taxable = Math.round(parseFloat(row.taxable_value) * 100) / 100;
+    const tds = Math.round(parseFloat(row.tds_amount || 0) * 100) / 100;
+    const fmt = (d) => d ? String(d instanceof Date ? d.toISOString() : d).substring(0, 10) : '';
+    const narration = `TT freight bill ${row.bill_no} | ${row.oil_company} | ${row.vehicles || ''} | ` +
+        `${row.trip_count} trips ${fmt(row.period_from)} to ${fmt(row.period_to)} | ₹${taxable.toFixed(2)}`;
+
+    const lines = [{ ledger_id: row.debtor_ledger_id, dr_amount: Math.round((taxable - tds) * 100) / 100, cr_amount: 0, narration }];
+    if (tds > 0) {
+        if (!row.tds_ledger_id) throw new Error(`TDS Receivable ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+        lines.push({ ledger_id: row.tds_ledger_id, dr_amount: tds, cr_amount: 0, narration });
+    }
+    lines.push({ ledger_id: row.income_ledger_id, dr_amount: 0, cr_amount: taxable, narration });
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType:  'SALES',
+        voucherDate:  event_date,
+        sourceType:   'TT_INVOICE',
         sourceId:     invoiceId,
         narration,
         lines,

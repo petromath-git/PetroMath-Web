@@ -4,6 +4,7 @@ const moment = require('moment');
 var locationdao = require("../dao/report-dao");
 var personDao = require("../dao/person-dao");
 const RentalDao = require("../dao/rental-dao");
+const TtDao = require("../dao/tt-dao");
 
 // Fuel at the pump price (meter + off-meter): GstSummaryDao.getFuelSales, shared
 // with the GSTR-1 file so both show the same fuel figure.
@@ -60,16 +61,18 @@ module.exports = {
       const nonFuelSalesByItemPromise = GstSummaryDao.getNonFuelSalesByItem(locationCode, fromDate, toDate);
       const nonFuelPurchaseInvoicesPromise = GstSummaryDao.getNonFuelPurchaseInvoicesByGST(locationCode, fromDate, toDate);
       const rentalInvoicesPromise = RentalDao.getGstInvoices(locationCode, fromDate, toDate);
+      const ttInvoicesPromise = TtDao.getGstInvoices(locationCode, fromDate, toDate);
 
       const [purchaseData, salesData, nonFuelSalesData,
-            nonFuelB2BSalesByBill, nonFuelSalesByItem, nonFuelPurchaseInvoices, rentalInvoices] = await Promise.all([
+            nonFuelB2BSalesByBill, nonFuelSalesByItem, nonFuelPurchaseInvoices, rentalInvoices, ttInvoices] = await Promise.all([
         purchaseDataPromise,
         salesDataPromise,
         nonFuelSalesDataPromise,
         nonFuelB2BSalesByBillPromise,
         nonFuelSalesByItemPromise,
         nonFuelPurchaseInvoicesPromise,
-        rentalInvoicesPromise
+        rentalInvoicesPromise,
+        ttInvoicesPromise
       ]);
         
 
@@ -151,6 +154,10 @@ module.exports = {
         rentalInvoices: rentalInvoices.map(r => ({
           ...r,
           invoice_date: moment(r.invoice_date).format('DD-MMM-YYYY')
+        })),
+        ttInvoices: ttInvoices.map(b => ({
+          ...b,
+          bill_date: moment(b.bill_date).format('DD-MMM-YYYY')
         }))
       }
           
@@ -535,6 +542,32 @@ module.exports = {
             rentalSheet.columns = [{ width: 12 }, { width: 14 }, { width: 40 }, { width: 18 }, { width: 10 },
                 { width: 14 }, { width: 12 }, { width: 12 }, { width: 14 }];
             [6, 7, 8, 9].forEach(c => { rentalSheet.getColumn(c).numFmt = '#,##0.00'; });
+        }
+
+        // SHEET 4: TANK TRUCK FREIGHT (bills the oil company raises in this GSTIN's name, reverse charge)
+        const ttInvoices = await TtDao.getGstInvoices(locationCode, fromDate, toDate);
+        if (ttInvoices.length) {
+            const ttSheet = workbook.addWorksheet('TT Freight');
+            ttSheet.getCell('A1').value = 'TANK TRUCK FREIGHT BILLS - B2B, REVERSE CHARGE (GST paid by the oil company)';
+            ttSheet.getCell('A1').font = { bold: true, size: 14 };
+            const header = ttSheet.getRow(3);
+            header.values = ['Bill No', 'Date', 'Billed to', 'GSTIN', 'SAC', 'Trips', 'Taxable', 'CGST', 'SGST', 'Total'];
+            header.font = { bold: true };
+            let r = 4;
+            for (const b of ttInvoices) {
+                ttSheet.getRow(r++).values = [
+                    b.bill_no, moment(b.bill_date).format('DD-MMM-YYYY'), b.recipient_name, b.recipient_gstin, b.sac_code,
+                    toNumber(b.trip_count), toNumber(b.taxable_value), toNumber(b.cgst_amount), toNumber(b.sgst_amount),
+                    toNumber(b.invoice_value)
+                ];
+            }
+            const sum = (k) => ttInvoices.reduce((s, i) => s + toNumber(i[k]), 0);
+            const totalRow = ttSheet.getRow(r);
+            totalRow.values = ['Total', '', '', '', '', sum('trip_count'), sum('taxable_value'), sum('cgst_amount'), sum('sgst_amount'), sum('invoice_value')];
+            totalRow.font = { bold: true };
+            ttSheet.columns = [{ width: 18 }, { width: 14 }, { width: 30 }, { width: 18 }, { width: 10 }, { width: 8 },
+                { width: 14 }, { width: 12 }, { width: 12 }, { width: 14 }];
+            [7, 8, 9, 10].forEach(c => { ttSheet.getColumn(c).numFmt = '#,##0.00'; });
         }
 
         // Generate Excel file

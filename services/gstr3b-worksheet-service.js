@@ -5,6 +5,8 @@
 //   3.1(a)/(c)/(e)  sales, from the GSTR-1 build (same figures as the GST Summary)
 //   3.1(d), 4A(3)   reverse charge: /gst/rcm self-invoices + 2B lines marked reverse charge
 //   4A(5), 4B(1)    GSTR-2B credit and the Rule 42 / 17(5) reversal (/gst/itc)
+//   rcmOutward      tank truck freight billed under reverse charge (the oil company pays the tax):
+//                   not in 3.1(a); counts as exempt turnover for Rule 42 (Section 17(3))
 //   5               petrol / diesel bought (non-GST inward), before VAT as the auditor has filed
 //                   since May-2026 (FY25-26 returns used the invoice value with VAT; both shown)
 // One worksheet per GSTIN: where locations share one (MC + MC2), every figure covers all
@@ -65,7 +67,7 @@ async function buildWorksheet(locationCode, returnPeriod, overrides) {
     const g = gstr1.gstr3b;
     const { from_date, to_date } = gstUtils.getPeriodDates(returnPeriod);
     const [itc, fuelByUnit, opening] = await Promise.all([
-        GstItcService.buildItc(registration, returnPeriod, { taxable: g.outward.txval, exempt: g.nil + g.nonGst }),
+        GstItcService.buildItc(registration, returnPeriod, { taxable: g.outward.txval, exempt: g.nil + g.nonGst + num(g.rcmOutward && g.rcmOutward.txval) }),
         Promise.all(registration.units.map(u => GstFilingDao.getFuelPurchases(u.location_code, from_date, to_date))),
         openingBalance(registration.primary, returnPeriod)
     ]);
@@ -109,6 +111,7 @@ async function buildWorksheet(locationCode, returnPeriod, overrides) {
         t31c: r2(g.nil),
         t31d: itc.rcmLiability,
         t31e: r2(g.nonGst),
+        rcmOutward: g.rcmOutward || { txval: 0, camt: 0, samt: 0 },
         t5: { nonGst: r2(fuelLine), nonGstWithVat: r2(fuelWithVat), invoices: fuelPurchases },
         inputs,
         openingSource: opening.source,
