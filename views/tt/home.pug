@@ -169,6 +169,148 @@ block content
                     p.small.text-muted
                         | Net due = taxable − TDS (#{vendor.tds_percent}%). GST is under reverse charge: the oil company pays it, so it is not owed to you and not payable by you. Each bill posts on the next Create Accounting run: #{vendor.debtor_ledger || 'debtor'} Dr, #{vendor.tds_ledger || 'TDS'} Dr / #{vendor.income_ledger || 'income'} Cr. In GSTR-1 the bills go in Table 4B.
 
+            //- ───────────────────────── Fleet card (XTRAPOWER) ─────────────────────────
+            if tab === 'card'
+                .card.mb-3
+                    .card-body.py-2
+                        .font-weight-bold.mb-1
+                            i.bi.bi-credit-card.mr-1
+                            | Upload XTRAPOWER monthly statement PDF
+                        .small.text-muted.mb-2
+                            | From the XTRAPOWER portal, one file per card per month. It books the card part of #{vendor.oil_company}'s payment (Recharge), the diesel bought on the card (Sale) and the loyalty points (100 points = ₹1) with the TDS #{vendor.oil_company} posts on them.
+                        .d-flex.flex-wrap.align-items-center
+                            input.form-control-file.mr-2.mb-1#cardFile(type="file" accept=".pdf,application/pdf" style="max-width:340px")
+                            button.btn.btn-outline-primary.btn-sm.mb-1#cardPreviewBtn(type="button")
+                                i.bi.bi-eye.mr-1
+                                | Read file
+                        #cardPreviewArea.mt-2
+
+                form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="card")
+                    .mr-2.mb-2
+                        label.small.mb-1 From
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+
+                if !statements.length
+                    .text-muted.small No XTRAPOWER statements between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    .table-responsive
+                        table.table.table-sm.table-hover
+                            thead.thead-light
+                                tr
+                                    th Month
+                                    th.tt-hide-sm Card
+                                    th.num Opening
+                                    th.num Recharge
+                                    th.num Diesel
+                                    th.num Closing
+                                    th.num.tt-hide-sm(title="Points awarded this month, in rupees") Loyalty ₹
+                                    th.num.tt-hide-sm(title="TDS IOCL posted on the loyalty, in rupees") Loyalty TDS ₹
+                                    th GL
+                                    th
+                            tbody
+                                each st in statements
+                                    tr
+                                        td.text-nowrap= fmtDate(st.period_from).substring(3)
+                                        td.tt-hide-sm= st.customer_id
+                                        td.num= fmtAmt(st.ccms_opening)
+                                        td.num= fmtAmt(st.ccms_recharge)
+                                        td.num= fmtAmt(st.ccms_sale)
+                                        td.num= fmtAmt(st.ccms_closing)
+                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_rs)
+                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_tds_rs)
+                                        td
+                                            +glBadge(st)
+                                        td.text-nowrap
+                                            button.btn.btn-outline-dark.btn-sm.mr-1.card-txns-btn(type="button" title="Transactions" data-id=st.statement_id)
+                                                i.bi.bi-list-ul
+                                            button.btn.btn-outline-danger.btn-sm.delete-card-btn(type="button" title="Delete statement" data-id=st.statement_id data-month=fmtDate(st.period_from).substring(3))
+                                                i.bi.bi-trash
+                    p.small.text-muted
+                        | Posts on the next Create Accounting run: Recharge → card Dr / #{vendor.debtor_ledger || 'debtor'} Cr · Diesel → TANK TRUCK DIESEL Dr / card Cr · Loyalty → XTRAPOWER LOYALTY POINTS Dr / XTRAPOWER LOYALTY INCOME Cr, and its TDS → TDS RECEIVABLE Dr / points Cr.
+
+            //- ───────────────────────── Reconciliation ─────────────────────────
+            if tab === 'recon'
+                form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="recon")
+                    if vendors.length > 1
+                        .mr-2.mb-2
+                            label.small.mb-1 Vendor
+                            select.form-control.form-control-sm(name="vendor")
+                                each v in vendors
+                                    option(value=v.vendor_id selected=(v.vendor_id === vendor.vendor_id)) #{v.oil_company} #{v.vendor_code}
+                    .mr-2.mb-2
+                        label.small.mb-1 Bills from
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+                p.small.text-muted.mb-2
+                    | One row per month of bills. #{vendor.oil_company} pays both half-month bills together about the 5th of the next month, so what came in the next month (bank credits tagged #[strong= receiptLabel] + XTRAPOWER card recharges) is set against them.
+                if !recon.rows.length
+                    .text-muted.small Nothing to reconcile between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    .table-responsive
+                        table.table.table-sm.table-bordered
+                            thead.thead-light
+                                tr
+                                    th Bills of
+                                    th.num Taxable
+                                    th.num.tt-hide-sm GST (RCM)
+                                    th.num TDS
+                                    th.num Due
+                                    th Paid in
+                                    th.num Bank
+                                    th.num Card
+                                    th.num Received
+                                    th.num Difference
+                            tbody
+                                each r in recon.rows
+                                    tr(class=(Math.abs(r.difference) > 1 ? 'table-warning' : ''))
+                                        td.text-nowrap
+                                            | #{monthLabel(r.month)}
+                                            .small.text-muted= r.bills.length ? r.bills.length + ' bill' + (r.bills.length > 1 ? 's' : '') : 'no bills'
+                                        td.num= fmtAmt(r.taxable)
+                                        td.num.tt-hide-sm= fmtAmt(r.gst)
+                                        td.num= fmtAmt(r.tds)
+                                        td.num.font-weight-bold= fmtAmt(r.due)
+                                        td.text-nowrap.small= monthLabel(r.paidIn)
+                                        td.num
+                                            = fmtAmt(r.bankTotal)
+                                            each x in r.bank
+                                                .small.text-muted #{fmtDate(x.txn_date)}
+                                        td.num
+                                            = fmtAmt(r.cardTotal)
+                                            each x in r.card
+                                                .small.text-muted #{fmtDate(x.txn_date)}
+                                        td.num.font-weight-bold
+                                            = fmtAmt(r.received)
+                                            if r.cardShare !== null
+                                                .small.text-muted bank #{(100 - r.cardShare).toFixed(0)}% / card #{r.cardShare.toFixed(0)}%
+                                        td.num.font-weight-bold(class=(Math.abs(r.difference) > 1 ? 'text-danger' : 'text-success'))= fmtAmt(r.difference)
+                                tr.font-weight-bold
+                                    td Total
+                                    td.num= fmtAmt(recon.totals.taxable)
+                                    td.num.tt-hide-sm= fmtAmt(recon.totals.gst)
+                                    td.num= fmtAmt(recon.totals.tds)
+                                    td.num= fmtAmt(recon.totals.due)
+                                    td
+                                    td.num= fmtAmt(recon.totals.bankTotal)
+                                    td.num= fmtAmt(recon.totals.cardTotal)
+                                    td.num= fmtAmt(recon.totals.received)
+                                    td.num= fmtAmt(recon.totals.difference)
+                    p.small.text-muted
+                        | Difference = due − received. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
+                        if !cards.length
+                            |  No fleet card is set up, so the card column is empty.
+
             //- ───────────────────────── Statement ─────────────────────────
             if tab === 'statement'
                 form.d-flex.flex-wrap.align-items-end.mb-3(method="get" action="/tt")
@@ -189,7 +331,7 @@ block content
                         button.btn.btn-sm.btn-secondary(type="submit") Show
 
                 .row.no-gutters.mb-3
-                    each tile in [['Opening', statement.opening], ['Bills (net of TDS)', statement.totalDebit], ['Received in bank', statement.totalCredit], ['TDS deducted', statement.totalTds], ['Closing (still due)', statement.closing]]
+                    each tile in [['Opening', statement.opening], ['Bills (net of TDS)', statement.totalDebit], ['Received (bank + card)', statement.totalCredit], ['TDS deducted', statement.totalTds], ['Closing (still due)', statement.closing]]
                         .col-6.col-md.p-1
                             .stat-tile
                                 .lbl= tile[0]
@@ -224,8 +366,8 @@ block content
                                 td.num= fmtAmt(statement.totalCredit)
                                 td.num= fmtAmt(statement.closing)
                 p.small.text-muted
-                    | Received = bank credits tagged #[strong= receiptLabel] on the bank statement (#{vendor.receipt_bank || 'no receipt bank set'}).
-                    | The part #{vendor.oil_company} pays to the truck's fleet card is not here yet, so the closing balance includes it until the XtraPower statement upload (next phase).
+                    | Received = bank credits tagged #[strong= receiptLabel] on the bank statement (#{vendor.receipt_bank || 'no receipt bank set'})
+                    | and card recharges from the uploaded XTRAPOWER statements (Fleet Card tab).
 
             //- ───────────────────────── Deleted ─────────────────────────
             if tab === 'deleted'
@@ -415,6 +557,76 @@ block content
                             .modal-footer
                                 button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
                                 button.btn.btn-primary.btn-sm(type="submit") Save
+
+            //- ───────────────────────── Master: fleet cards ─────────────────────────
+            if tab === 'cards'
+                if !cards.length
+                    .text-muted.small No XTRAPOWER fleet card is set up for #{user.location_code}.
+                each c in cards
+                    - var assets = ledgers.filter(function (x) { return x.kind === 'asset'; })
+                    form.card.mb-3.card-form(data-id=c.card_id)
+                        .card-header.py-2.font-weight-bold XTRAPOWER customer #{c.customer_id}
+                            if c.active_flag !== 'Y'
+                                span.badge.badge-secondary.ml-2 Inactive
+                        .card-body
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Name on the statement
+                                    input.form-control.form-control-sm(name="customer_name" value=c.customer_name || '')
+                                .form-group.col-md-3
+                                    label.small Freight paid onto it by
+                                    select.form-control.form-control-sm(name="vendor_id")
+                                        option(value="") —
+                                        each v in vendors
+                                            option(value=v.vendor_id selected=(v.vendor_id === c.vendor_id)) #{v.oil_company} #{v.vendor_code}
+                                .form-group.col-md-3
+                                    label.small Truck
+                                    select.form-control.form-control-sm(name="vehicle_id")
+                                        option(value="") —
+                                        each h in vehicles
+                                            option(value=h.vehicle_id selected=(h.vehicle_id === c.vehicle_id))= h.vehicle_no
+                                .form-group.col-md-2
+                                    label.small Statements from
+                                    input.form-control.form-control-sm(name="start_date" type="date" value=c.start_date_iso required)
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Card ledger (money on the card)
+                                    select.form-control.form-control-sm(name="wallet_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.wallet_ledger_id))= l.ledger_name
+                                .form-group.col-md-4
+                                    label.small Loyalty points ledger
+                                    select.form-control.form-control-sm(name="points_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.points_ledger_id))= l.ledger_name
+                                .form-group.col-md-4
+                                    label.small TDS ledger (TDS on loyalty)
+                                    select.form-control.form-control-sm(name="tds_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.tds_ledger_id))= l.ledger_name
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Diesel ledger
+                                    select.form-control.form-control-sm(name="diesel_ledger_id")
+                                        option(value="") —
+                                        each l in expenseLedgers
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.diesel_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-4
+                                    label.small Loyalty income ledger
+                                    select.form-control.form-control-sm(name="loyalty_income_ledger_id")
+                                        option(value="") —
+                                        each l in ledgers.filter(function (x) { return x.kind === 'income'; })
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.loyalty_income_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-4
+                                    label.small Status
+                                    select.form-control.form-control-sm(name="active_flag")
+                                        option(value="Y" selected=(c.active_flag === 'Y')) Active
+                                        option(value="N" selected=(c.active_flag !== 'Y')) Inactive
+                            .small.text-muted.mb-2 #{c.statement_count} statement(s) uploaded. Loyalty: #{c.points_per_rupee} points = ₹1.
+                            button.btn.btn-primary.btn-sm(type="submit") Save
 
             //- Trips of one bill
             .modal.fade#tripsModal(tabindex="-1")
@@ -607,6 +819,96 @@ block content
                         sessionStorage.setItem('ttMessage', 'Bill deleted.');
                         window.location.reload();
                     } catch (e) { showMessage(e.message, false); }
+                });
+
+                // ── Fleet card statement: read, show, save ──
+                var KIND = { RECHARGE: 'Recharge (freight)', SALE: 'Diesel', SALE_COMPLETE: 'Diesel', REVERSAL: 'Reversal',
+                    POINTS_TO_CARD: 'Points → card', LOYALTY_AWARD: 'Loyalty award', LOYALTY_TDS: 'Loyalty TDS',
+                    LOYALTY_REDEEM: 'Points redeemed', LOYALTY_EXPIRY: 'Points expired', LOYALTY_OTHER: 'Loyalty (other)', OTHER: 'Other' };
+                function cardRows(txns) {
+                    var html = '<div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead class="thead-light"><tr>' +
+                        '<th>#</th><th>Date</th><th>Type</th><th>Merchant</th><th>Vehicle</th><th>Product</th>' +
+                        '<th class="num">Amount</th><th class="num">₹</th><th class="num">Card balance</th></tr></thead><tbody>';
+                    txns.forEach(function (t) {
+                        var pts = /^LOYALTY/.test(t.kind);
+                        html += '<tr' + (pts ? ' class="text-muted"' : '') + '><td>' + t.sno + '</td><td class="text-nowrap">' + esc(t.date) + '</td>' +
+                            '<td>' + esc(KIND[t.kind] || t.kind) + '</td><td>' + esc(t.merchant) + '</td><td>' + esc(t.vehicle_no || '') + '</td>' +
+                            '<td>' + esc(t.product || '') + '</td><td class="num">' + (pts ? Number(t.amount).toLocaleString('en-IN') + ' pts' : fmt(t.amount)) + '</td>' +
+                            '<td class="num">' + fmt(t.rupees) + '</td><td class="num">' + (pts ? '' : fmt(t.balance)) + '</td></tr>';
+                    });
+                    return html + '</tbody></table></div>';
+                }
+                var cardFile = document.getElementById('cardFile');
+                var cardArea = document.getElementById('cardPreviewArea');
+                function cardForm() { var fd = new FormData(); fd.append('file', cardFile.files[0]); return fd; }
+                var cardPreviewBtn = document.getElementById('cardPreviewBtn');
+                if (cardPreviewBtn) cardPreviewBtn.addEventListener('click', async function () {
+                    if (!cardFile.files.length) return showMessage('Choose the XTRAPOWER statement PDF first.', false);
+                    cardPreviewBtn.disabled = true;
+                    cardArea.innerHTML = '<span class="text-muted small">Reading…</span>';
+                    try {
+                        var d = await call('POST', '/tt/api/card/preview', cardForm(), true);
+                        var s = d.summary, c = s.ccms, L = s.loyalty, b = d.booked, html = '';
+                        html += '<div class="small mb-2"><strong>XTRAPOWER ' + esc(s.customer_id) + '</strong> ' + esc(s.customer_name || '') + ' · ' + esc(s.period) + '</div>';
+                        d.errors.forEach(function (e) { html += '<div class="alert alert-danger small py-1 mb-1">' + esc(e) + '</div>'; });
+                        d.warnings.forEach(function (w) { html += '<div class="alert alert-warning small py-1 mb-1">' + esc(w) + '</div>'; });
+                        html += '<div class="table-responsive"><table class="table table-sm table-bordered bg-white mb-2"><tbody>' +
+                            '<tr><td>Card: opening ' + fmt(c.opening) + ' + recharge ' + fmt(c.recharge) + ' − sales ' + fmt(c.sale + c.sale_complete) + ' = closing <strong>' + fmt(c.closing) + '</strong></td></tr>' +
+                            (L ? '<tr><td>Loyalty points: opening ' + L.opening + ' + award ' + L.award + ' − redeemed ' + L.redemption + ' − TDS ' + L.tds + ' − expired ' + L.expiry + ' = closing <strong>' + L.closing + '</strong></td></tr>' : '') +
+                            '<tr><td>Will book: freight recharge <strong>₹' + fmt(b.recharge) + '</strong> · diesel <strong>₹' + fmt(b.diesel) + '</strong>' +
+                            (b.pointsToCard ? ' · points to card ₹' + fmt(b.pointsToCard) : '') + ' · loyalty ₹' + fmt(b.loyalty) + ' · its TDS ₹' + fmt(b.loyaltyTds) + '</td></tr>' +
+                            '</tbody></table></div>';
+                        html += '<details class="mb-2"><summary class="small">' + d.txns.length + ' transactions</summary>' + cardRows(d.txns) + '</details>';
+                        if (d.status === 'EXISTS') html += '<div class="small text-muted">This statement is already uploaded.</div>';
+                        else if (d.status === 'BEFORE_START') html += '<div class="small text-muted">This month is before the card\'s start date; not taken.</div>';
+                        else if (!d.errors.length) html += '<button type="button" class="btn btn-success btn-sm" id="saveCardBtn"><i class="bi bi-check2 mr-1"></i>Save statement</button>';
+                        cardArea.innerHTML = html;
+                        var saveCardBtn = document.getElementById('saveCardBtn');
+                        if (saveCardBtn) saveCardBtn.addEventListener('click', async function () {
+                            saveCardBtn.disabled = true;
+                            try {
+                                await call('POST', '/tt/api/card', cardForm(), true);
+                                sessionStorage.setItem('ttMessage', 'XTRAPOWER statement for ' + s.period + ' saved.');
+                                window.location.reload();
+                            } catch (e) { saveCardBtn.disabled = false; showMessage(e.message, false); }
+                        });
+                    } catch (e) {
+                        cardArea.innerHTML = '';
+                        showMessage(e.message, false);
+                    } finally {
+                        cardPreviewBtn.disabled = false;
+                    }
+                });
+                document.querySelectorAll('.card-txns-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        try {
+                            var d = await call('GET', '/tt/api/card/' + btn.dataset.id);
+                            var s = d.statement;
+                            document.getElementById('tripsTitle').textContent = 'XTRAPOWER ' + s.customer_id + ' · ' + s.period;
+                            document.getElementById('tripsBody').innerHTML = cardRows(s.txns);
+                            $('#tripsModal').modal('show');
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+                document.querySelectorAll('.delete-card-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete the XTRAPOWER statement for ' + btn.dataset.month + '? If it was posted, Create Accounting reverses it.')) return;
+                        try {
+                            await call('DELETE', '/tt/api/card/' + btn.dataset.id);
+                            sessionStorage.setItem('ttMessage', 'Statement deleted.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+                document.querySelectorAll('.card-form').forEach(function (f) {
+                    f.addEventListener('submit', async function (ev) {
+                        ev.preventDefault();
+                        try {
+                            await call('PUT', '/tt/api/cards/' + f.dataset.id, formData(f));
+                            sessionStorage.setItem('ttMessage', 'Fleet card saved.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
                 });
 
                 // ── Master: vendor settings ──

@@ -20,8 +20,8 @@ const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDi
 const fmtDate = (d) => d ? dateFormat(d instanceof Date ? d : `${String(d).substring(0, 10)}T00:00:00`, 'dd-mmm-yyyy') : '';
 
 const PAGES = {
-    bills:  { title: 'Tank Truck Freight', basePath: '/tt', tabs: [['bills', 'Freight Bills'], ['statement', 'Statement'], ['deleted', 'Deleted']] },
-    master: { title: 'Tank Truck Master', basePath: '/tt/master', tabs: [['vendors', 'Oil Company Vendor'], ['trucks', 'Trucks']] },
+    bills:  { title: 'Tank Truck Freight', basePath: '/tt', tabs: [['bills', 'Freight Bills'], ['card', 'Fleet Card'], ['recon', 'Reconciliation'], ['statement', 'Statement'], ['deleted', 'Deleted']] },
+    master: { title: 'Tank Truck Master', basePath: '/tt/master', tabs: [['vendors', 'Oil Company Vendor'], ['trucks', 'Trucks'], ['cards', 'Fleet Cards']] },
 };
 
 // Financial year (Apr-Mar) of a date, as from / to
@@ -94,10 +94,25 @@ async function renderPage(req, res, next, pageKey) {
         const data = { ...common, tab, vendors, vendor, fromDate, toDate };
 
         if (pageKey === 'master') {
-            const [vehicles, ledgers, banks] = await Promise.all([
+            const [vehicles, ledgers, banks, cards, expenseLedgers] = await Promise.all([
                 TtDao.getVehicles(locationCode), TtDao.getLedgerChoices(locationCode), TtDao.getBanks(locationCode),
+                TtDao.getCards(locationCode), TtDao.getExpenseLedgers(locationCode),
             ]);
-            return res.render('tt/home', { ...data, vehicles, ledgers, banks });
+            return res.render('tt/home', { ...data, vehicles, ledgers, banks, cards, expenseLedgers });
+        }
+
+        if (tab === 'card') {
+            const [cards, statements] = await Promise.all([
+                TtDao.getCards(locationCode), TtDao.getCardStatements(locationCode, fromDate, toDate),
+            ]);
+            return res.render('tt/home', { ...data, cards, statements });
+        }
+
+        if (tab === 'recon') {
+            const recon = await TtService.buildReconciliation(locationCode, vendor.vendor_id, fromDate, toDate);
+            const cards = await TtDao.getCards(locationCode);
+            return res.render('tt/home', { ...data, recon, cards, receiptLabel: TtDao.receiptLabel(vendor.oil_company),
+                monthLabel: (ym) => dateFormat(`${ym}-01T00:00:00`, 'mmm yyyy') });
         }
 
         if (tab === 'bills') {
@@ -222,6 +237,101 @@ module.exports = {
         } catch (e) {
             console.error('TT deleteInvoice:', e);
             res.status(500).json({ success: false, error: 'Could not delete the bill.' });
+        }
+    },
+
+    // POST /tt/api/card/preview (multipart file) -> what the XTRAPOWER statement holds
+    previewCard: async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the XTRAPOWER statement PDF.' });
+            const r = await TtService.buildCardFromPdf(req.user.location_code, req.file.buffer);
+            const s = r.summary;
+            const sum = (k) => round2(r.txns.filter(t => t.kind === k).reduce((a, t) => a + t.rupees, 0));
+            // loyalty: points added up first, then converted once (as Create Accounting books it)
+            const ppr = (r.card && Number(r.card.points_per_rupee)) || 100;
+            const pts = (k) => round2(r.txns.filter(t => t.kind === k).reduce((a, t) => a + t.amount, 0) / ppr);
+            res.json({
+                success: true, status: r.status, errors: r.errors, warnings: r.warnings,
+                summary: { customer_id: s.customer_id, customer_name: s.customer_name, period: `${fmtDate(s.period_from)} to ${fmtDate(s.period_to)}`,
+                    ccms: s.ccms, loyalty: s.loyalty },
+                booked: { recharge: sum('RECHARGE'), diesel: round2(sum('SALE') + sum('SALE_COMPLETE') - sum('REVERSAL')),
+                    pointsToCard: sum('POINTS_TO_CARD'), loyalty: pts('LOYALTY_AWARD'), loyaltyTds: pts('LOYALTY_TDS') },
+                txns: r.txns.map(t => ({ sno: t.sno, kind: t.kind, date: fmtDate(t.txn_date), merchant: t.merchant, vehicle_no: t.vehicle_no,
+                    product: t.product, currency: t.currency, amount: t.amount, rupees: t.rupees, balance: t.balance, ref: t.txn_ref })),
+            });
+        } catch (e) {
+            console.error('TT previewCard:', e);
+            res.status(400).json({ success: false, error: e.message || 'Could not read the file.' });
+        }
+    },
+
+    // POST /tt/api/card (multipart file) -> saves the statement
+    saveCard: async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the XTRAPOWER statement PDF.' });
+            const r = await TtService.saveCardFromPdf(req.user.location_code, req.file.buffer, req.file.originalname, req.user.User_Name);
+            res.json({ success: true, ...r });
+        } catch (e) {
+            console.error('TT saveCard:', e);
+            const dup = e.parent && e.parent.code === 'ER_DUP_ENTRY';
+            res.status(400).json({ success: false, error: dup ? 'This statement was saved a moment ago. Reload the page.' : (e.message || 'Could not save the statement.') });
+        }
+    },
+
+    // GET /tt/api/card/:id -> statement with its transactions
+    getCardStatement: async (req, res) => {
+        try {
+            const s = await TtDao.getCardStatement(req.user.location_code, Number(req.params.id));
+            if (!s) return res.status(404).json({ success: false, error: 'Statement not found.' });
+            s.period = `${fmtDate(s.period_from)} to ${fmtDate(s.period_to)}`;
+            s.txns.forEach(t => { t.date = fmtDate(t.txn_date); });
+            res.json({ success: true, statement: s });
+        } catch (e) {
+            console.error('TT getCardStatement:', e);
+            res.status(500).json({ success: false, error: 'Could not load the statement.' });
+        }
+    },
+
+    // DELETE /tt/api/card/:id
+    deleteCardStatement: async (req, res) => {
+        try {
+            const ok = await TtDao.deleteCardStatement(req.user.location_code, Number(req.params.id), req.user.User_Name);
+            if (!ok) return res.status(404).json({ success: false, error: 'Statement not found.' });
+            res.json({ success: true });
+        } catch (e) {
+            console.error('TT deleteCardStatement:', e);
+            res.status(500).json({ success: false, error: 'Could not delete the statement.' });
+        }
+    },
+
+    // PUT /tt/api/cards/:id — fleet card settings
+    saveCardSettings: async (req, res) => {
+        try {
+            const locationCode = req.user.location_code;
+            const cardId = Number(req.params.id);
+            if (!(await TtDao.getCard(locationCode, cardId))) return res.status(404).json({ success: false, error: 'Card not found.' });
+            const b = req.body;
+            const id = (v) => (v ? Number(v) : null);
+            const d = {
+                customer_name: clean(b.customer_name), vendor_id: id(b.vendor_id), vehicle_id: id(b.vehicle_id),
+                wallet_ledger_id: id(b.wallet_ledger_id), points_ledger_id: id(b.points_ledger_id), diesel_ledger_id: id(b.diesel_ledger_id),
+                loyalty_income_ledger_id: id(b.loyalty_income_ledger_id), tds_ledger_id: id(b.tds_ledger_id),
+                start_date: clean(b.start_date), active_flag: b.active_flag === 'N' ? 'N' : 'Y',
+            };
+            if (!isIsoDate(d.start_date)) return res.status(400).json({ success: false, error: 'Start date is required.' });
+            if (!d.vendor_id) return res.status(400).json({ success: false, error: 'Link the card to the oil company vendor whose freight is paid onto it.' });
+            const [ledgers, expenses] = await Promise.all([TtDao.getLedgerChoices(locationCode), TtDao.getExpenseLedgers(locationCode)]);
+            const kindOf = (lid) => (ledgers.find(l => l.ledger_id === lid) || {}).kind;
+            if (kindOf(d.wallet_ledger_id) !== 'asset' || kindOf(d.points_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'Card and loyalty points ledgers must be asset ledgers.' });
+            if (kindOf(d.loyalty_income_ledger_id) !== 'income') return res.status(400).json({ success: false, error: 'Loyalty income ledger must be an income ledger.' });
+            if (d.tds_ledger_id && kindOf(d.tds_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'TDS ledger must be an asset ledger (e.g. TDS RECEIVABLE).' });
+            if (!expenses.some(l => l.ledger_id === d.diesel_ledger_id)) return res.status(400).json({ success: false, error: 'Diesel ledger must be an expense ledger of this location.' });
+            if (d.vendor_id && !(await TtDao.getVendor(locationCode, d.vendor_id))) return res.status(400).json({ success: false, error: 'Vendor not found.' });
+            await TtDao.updateCard(locationCode, cardId, d, req.user.User_Name);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('TT saveCardSettings:', e);
+            res.status(500).json({ success: false, error: 'Could not save the card.' });
         }
     },
 

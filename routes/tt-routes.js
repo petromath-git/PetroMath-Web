@@ -21,7 +21,13 @@ router.post('/api/upload', canBills, upload.single('file'), ctrl.saveUpload);
 router.get('/api/invoices/:id(\\d+)', canBills, ctrl.getInvoice);
 router.post('/api/invoices/:id(\\d+)/delete', canBills, ctrl.deleteInvoice);
 
+router.post('/api/card/preview', canBills, upload.single('file'), ctrl.previewCard);
+router.post('/api/card', canBills, upload.single('file'), ctrl.saveCard);
+router.get('/api/card/:id(\\d+)', canBills, ctrl.getCardStatement);
+router.delete('/api/card/:id(\\d+)', canBills, ctrl.deleteCardStatement);
+
 router.put('/api/vendors/:id(\\d+)', canMaster, ctrl.saveVendor);
+router.put('/api/cards/:id(\\d+)', canMaster, ctrl.saveCardSettings);
 router.post('/api/vehicles', canMaster, ctrl.saveVehicle);
 router.put('/api/vehicles/:id(\\d+)', canMaster, ctrl.saveVehicle);
 router.delete('/api/vehicles/:id(\\d+)', canMaster, ctrl.deleteVehicle);
