@@ -83,6 +83,14 @@ const TtDao = {
         ORDER BY l.ledger_name
     `, { locationCode }),
 
+    getExpenseLedgers: (locationCode) => select(`
+        SELECT l.ledger_id, l.ledger_name, g.group_name
+        FROM gl_ledgers l JOIN gl_ledger_groups g ON g.group_id = l.group_id
+        WHERE l.location_code = :locationCode AND l.active_flag = 'Y' AND g.group_nature = 'EXPENSES'
+          AND l.source_type IN ('SYSTEM', 'STATIC')
+        ORDER BY l.ledger_name
+    `, { locationCode }),
+
     getBanks: (locationCode) => select(`
         SELECT bank_id, bank_name, account_number
         FROM m_bank
@@ -289,8 +297,18 @@ const TtDao = {
             WHERE mb.location_code = :locationCode
               AND s.ledger_name = CONCAT('TT FREIGHT - ', v.oil_company)
               AND DATE(b.trans_date) BETWEEN :fromDate AND :toDate
+
+            UNION ALL
+
+            SELECT x.txn_date, 'Card', CONCAT('XTRAPOWER ', c.customer_id, ' recharge ', COALESCE(x.txn_ref, '')),
+                   0, x.amount, 0, 0, x.txn_id
+            FROM t_tt_card_txn x
+            JOIN t_tt_card_statement st ON st.statement_id = x.statement_id
+            JOIN m_tt_fleet_card c ON c.card_id = st.card_id
+            WHERE st.location_code = :locationCode AND c.vendor_id = :vendorId AND x.kind = 'RECHARGE'
+              AND x.txn_date BETWEEN :fromDate AND :toDate
         ) x
-        ORDER BY txn_date, txn_type = 'Bank', ref_id
+        ORDER BY txn_date, txn_type <> 'Bill', ref_id
     `, { locationCode, vendorId, fromDate, toDate }),
 
     getOpeningBalance: async (locationCode, vendorId, beforeDate) => {
@@ -309,6 +327,11 @@ const TtDao = {
                JOIN m_tt_vendor v ON v.vendor_id = :vendorId
                WHERE mb.location_code = :locationCode
                  AND s.ledger_name = CONCAT('TT FREIGHT - ', v.oil_company) AND DATE(b.trans_date) < :beforeDate)
+            - (SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x
+               JOIN t_tt_card_statement st ON st.statement_id = x.statement_id
+               JOIN m_tt_fleet_card c ON c.card_id = st.card_id
+               WHERE st.location_code = :locationCode AND c.vendor_id = :vendorId AND x.kind = 'RECHARGE'
+                 AND x.txn_date < :beforeDate)
             AS opening
         `, { locationCode, vendorId, beforeDate });
         return Number(row.opening || 0);
@@ -342,6 +365,162 @@ const TtDao = {
         ) x
         ORDER BY trans_date
     `, { locationCode, vendorId }),
+
+    // ── XTRAPOWER fleet cards ───────────────────────────────────────────────
+    getCards: (locationCode) => select(`
+        SELECT c.*, DATE_FORMAT(c.start_date, '%Y-%m-%d') AS start_date_iso, h.vehicle_no,
+               wl.ledger_name AS wallet_ledger, pl.ledger_name AS points_ledger, dl.ledger_name AS diesel_ledger,
+               il.ledger_name AS loyalty_income_ledger, tl.ledger_name AS tds_ledger,
+               (SELECT COUNT(*) FROM t_tt_card_statement s WHERE s.card_id = c.card_id) AS statement_count
+        FROM m_tt_fleet_card c
+        LEFT JOIN m_tt_vehicle h ON h.vehicle_id = c.vehicle_id
+        LEFT JOIN gl_ledgers wl ON wl.ledger_id = c.wallet_ledger_id
+        LEFT JOIN gl_ledgers pl ON pl.ledger_id = c.points_ledger_id
+        LEFT JOIN gl_ledgers dl ON dl.ledger_id = c.diesel_ledger_id
+        LEFT JOIN gl_ledgers il ON il.ledger_id = c.loyalty_income_ledger_id
+        LEFT JOIN gl_ledgers tl ON tl.ledger_id = c.tds_ledger_id
+        WHERE c.location_code = :locationCode
+        ORDER BY c.active_flag DESC, c.customer_id
+    `, { locationCode }),
+
+    getCard: async (locationCode, cardId) => {
+        const [c] = await select(`SELECT * FROM m_tt_fleet_card WHERE location_code = :locationCode AND card_id = :cardId`, { locationCode, cardId });
+        return c || null;
+    },
+
+    getCardByCustomerId: async (locationCode, customerId) => {
+        const [c] = await select(`
+            SELECT * FROM m_tt_fleet_card WHERE location_code = :locationCode AND customer_id = :customerId AND active_flag = 'Y'
+        `, { locationCode, customerId });
+        return c || null;
+    },
+
+    updateCard: (locationCode, cardId, d, by) => db.sequelize.query(`
+        UPDATE m_tt_fleet_card
+        SET customer_name = :customer_name, vendor_id = :vendor_id, vehicle_id = :vehicle_id,
+            wallet_ledger_id = :wallet_ledger_id, points_ledger_id = :points_ledger_id, diesel_ledger_id = :diesel_ledger_id,
+            loyalty_income_ledger_id = :loyalty_income_ledger_id, tds_ledger_id = :tds_ledger_id,
+            start_date = :start_date, active_flag = :active_flag, updated_by = :by
+        WHERE location_code = :locationCode AND card_id = :cardId
+    `, { replacements: { ...d, locationCode, cardId, by }, type: QueryTypes.UPDATE }),
+
+    getCardStatementByPeriod: async (cardId, periodFrom) => {
+        const [s] = await select(`SELECT statement_id FROM t_tt_card_statement WHERE card_id = :cardId AND period_from = :periodFrom`,
+            { cardId, periodFrom });
+        return s || null;
+    },
+
+    // The statement just before a period (for the opening-balance check)
+    getPreviousCardStatement: async (cardId, periodFrom) => {
+        const [s] = await select(`
+            SELECT * FROM t_tt_card_statement WHERE card_id = :cardId AND period_from < :periodFrom
+            ORDER BY period_from DESC LIMIT 1
+        `, { cardId, periodFrom });
+        return s || null;
+    },
+
+    createCardStatement: (locationCode, st, txns, by) => db.sequelize.transaction(async (t) => {
+        const [statementId] = await db.sequelize.query(`
+            INSERT INTO t_tt_card_statement
+                (location_code, card_id, period_from, period_to, ccms_opening, ccms_recharge, ccms_sale, ccms_closing,
+                 pts_opening, pts_award, pts_redemption, pts_withheld, pts_tds, pts_expiry, pts_closing, file_name, created_by, updated_by)
+            VALUES (:locationCode, :card_id, :period_from, :period_to, :ccms_opening, :ccms_recharge, :ccms_sale, :ccms_closing,
+                    :pts_opening, :pts_award, :pts_redemption, :pts_withheld, :pts_tds, :pts_expiry, :pts_closing, :file_name, :by, :by)
+        `, { replacements: { ...st, locationCode, by }, type: QueryTypes.INSERT, transaction: t });
+        for (const x of txns) {
+            await db.sequelize.query(`
+                INSERT INTO t_tt_card_txn
+                    (statement_id, sno, kind, txn_type, txn_ref, txn_date, txn_time, settle_date, merchant, merchant_pan, location,
+                     card_no, vehicle_no, product, currency, amount, balance, rupees, status)
+                VALUES (:statementId, :sno, :kind, :txn_type, :txn_ref, :txn_date, :txn_time, :settle_date, :merchant, :merchant_pan,
+                        :location, :card_no, :vehicle_no, :product, :currency, :amount, :balance, :rupees, :status)
+            `, { replacements: { ...x, statementId }, type: QueryTypes.INSERT, transaction: t });
+        }
+        return statementId;
+    }),
+
+    getCardStatements: (locationCode, fromDate, toDate) => select(`
+        SELECT s.*, c.customer_id, DATE_FORMAT(s.period_from, '%Y-%m-%d') AS period_from_iso,
+               ROUND((SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'LOYALTY_AWARD') / c.points_per_rupee, 2) AS loyalty_rs,
+               ROUND((SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'LOYALTY_TDS') / c.points_per_rupee, 2) AS loyalty_tds_rs,
+               (SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'POINTS_TO_CARD') AS points_to_card,
+               e.event_status AS gl_status, e.error_message AS gl_error
+        FROM t_tt_card_statement s
+        JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+        LEFT JOIN gl_accounting_events e ON e.event_id = (
+            SELECT MAX(e2.event_id) FROM gl_accounting_events e2
+            WHERE e2.source_type = 'TT_CARD_STATEMENT' AND e2.source_id = s.statement_id)
+        WHERE s.location_code = :locationCode AND s.period_from BETWEEN :fromDate AND :toDate
+        ORDER BY s.period_from, c.customer_id
+    `, { locationCode, fromDate, toDate }),
+
+    getCardStatement: async (locationCode, statementId) => {
+        const [s] = await select(`
+            SELECT s.*, c.customer_id, c.customer_name FROM t_tt_card_statement s JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+            WHERE s.location_code = :locationCode AND s.statement_id = :statementId
+        `, { locationCode, statementId });
+        if (!s) return null;
+        s.txns = await select(`SELECT * FROM t_tt_card_txn WHERE statement_id = :statementId ORDER BY sno`, { statementId });
+        return s;
+    },
+
+    // Same GL handling as a deleted bill: pending events dropped, a posted voucher reversed.
+    deleteCardStatement: (locationCode, statementId, by) => db.sequelize.transaction(async (t) => {
+        const [s] = await select(`SELECT statement_id FROM t_tt_card_statement WHERE location_code = :locationCode AND statement_id = :statementId FOR UPDATE`,
+            { locationCode, statementId }, t);
+        if (!s) return false;
+        await db.sequelize.query(`
+            DELETE FROM gl_accounting_events
+            WHERE source_type = 'TT_CARD_STATEMENT' AND source_id = :statementId AND event_status <> 'PROCESSED'
+        `, { replacements: { statementId }, type: QueryTypes.DELETE, transaction: t });
+        const [last] = await select(`
+            SELECT location_code, fy_id, event_type, event_date FROM gl_accounting_events
+            WHERE source_type = 'TT_CARD_STATEMENT' AND source_id = :statementId ORDER BY event_id DESC LIMIT 1
+        `, { statementId }, t);
+        if (last && last.event_type !== 'DELETE') {
+            await db.sequelize.query(`
+                INSERT INTO gl_accounting_events
+                    (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+                VALUES (:location_code, :fy_id, 'TT_CARD_STATEMENT', :statementId, 'DELETE', :event_date, 'UNPROCESSED', :by)
+            `, { replacements: { ...last, statementId, by }, type: QueryTypes.INSERT, transaction: t });
+        }
+        await db.sequelize.query(`DELETE FROM t_tt_card_statement WHERE statement_id = :statementId`,
+            { replacements: { statementId }, type: QueryTypes.DELETE, transaction: t });
+        return true;
+    }),
+
+    // Card recharges from the oil company (the card part of the freight payment) for a vendor
+    getCardRecharges: (locationCode, vendorId, fromDate, toDate) => select(`
+        SELECT x.txn_date, x.amount, x.txn_ref, x.merchant, c.customer_id, s.statement_id
+        FROM t_tt_card_txn x
+        JOIN t_tt_card_statement s ON s.statement_id = x.statement_id
+        JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+        WHERE s.location_code = :locationCode AND c.vendor_id = :vendorId AND x.kind = 'RECHARGE'
+          AND x.txn_date BETWEEN :fromDate AND :toDate
+        ORDER BY x.txn_date
+    `, { locationCode, vendorId, fromDate, toDate }),
+
+    // Bank credits tagged "TT FREIGHT - <oil company>" in a period (whole or split)
+    getBankReceipts: (locationCode, vendorId, fromDate, toDate) => select(`
+        SELECT * FROM (
+            SELECT DATE(b.trans_date) AS txn_date, b.credit_amount AS amount, mb.bank_name, b.remarks
+            FROM t_bank_transaction b
+            JOIN m_bank mb ON mb.bank_id = b.bank_id
+            JOIN m_tt_vendor v ON v.vendor_id = :vendorId
+            WHERE mb.location_code = :locationCode AND COALESCE(b.is_split, 'N') <> 'Y'
+              AND b.ledger_name = CONCAT('TT FREIGHT - ', v.oil_company)
+              AND DATE(b.trans_date) BETWEEN :fromDate AND :toDate
+            UNION ALL
+            SELECT DATE(b.trans_date), s.amount, mb.bank_name, COALESCE(s.remarks, b.remarks)
+            FROM t_bank_transaction_splits s
+            JOIN t_bank_transaction b ON b.t_bank_id = s.t_bank_id
+            JOIN m_bank mb ON mb.bank_id = b.bank_id
+            JOIN m_tt_vendor v ON v.vendor_id = :vendorId
+            WHERE mb.location_code = :locationCode
+              AND s.ledger_name = CONCAT('TT FREIGHT - ', v.oil_company)
+              AND DATE(b.trans_date) BETWEEN :fromDate AND :toDate
+        ) x ORDER BY txn_date
+    `, { locationCode, vendorId, fromDate, toDate }),
 
     // ── GST: freight bills of a period (GSTR-1 b2b, reverse charge) ─────────
     getGstInvoices: (locationCode, fromDate, toDate) => select(`
