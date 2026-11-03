@@ -2963,6 +2963,29 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermissio
                     ]
                 };
             }
+        } else if (event.source_type === 'TT_CARD_STATEMENT') {
+            const rows = await db.sequelize.query(`
+                SELECT c.customer_id, DATE_FORMAT(s.period_from, '%Y-%m-%d') AS period_from, DATE_FORMAT(s.period_to, '%Y-%m-%d') AS period_to,
+                       s.ccms_opening, s.ccms_recharge, s.ccms_sale, s.ccms_closing, s.pts_award, s.pts_tds,
+                       (SELECT COUNT(*) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id) AS txn_count
+                FROM t_tt_card_statement s JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+                WHERE s.statement_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            const r = rows[0];
+            detail = {
+                title: 'XTRAPOWER Card Statement',
+                fields: r ? [
+                    { label: 'Customer ID',  value: r.customer_id },
+                    { label: 'Period',       value: `${r.period_from} to ${r.period_to}` },
+                    { label: 'Opening',      value: r.ccms_opening },
+                    { label: 'Recharge',     value: r.ccms_recharge },
+                    { label: 'Sales',        value: r.ccms_sale },
+                    { label: 'Closing',      value: r.ccms_closing },
+                    { label: 'Loyalty pts',  value: `${r.pts_award} awarded, ${r.pts_tds} TDS` },
+                    { label: 'Transactions', value: r.txn_count },
+                ] : [{ label: 'Status', value: 'Deleted from Tank Truck Freight' }]
+            };
         }
 
         res.json({
