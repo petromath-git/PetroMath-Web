@@ -292,6 +292,48 @@ block content
                                         td.text-right= rentFmt(rentSum('sgst_amount'))
                                         td.text-right= rentFmt(rentSum('total_amount'))
 
+            //- 2d. Tank truck freight bills (Tank Truck Freight screen) — only shown when there are any
+            if ttInvoices && ttInvoices.length
+                - var ttSum = function (k) { return ttInvoices.reduce(function (s, i) { return s + Number(i[k] || 0); }, 0); }
+                - var ttFmt = function (n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+                div.col-md-12
+                    div.row &nbsp;
+                    h5.text-center Tank Truck Freight Bills (reverse charge)
+                    p.text-center.text-muted(style='font-size:0.85em') Raised by the oil company in this GSTIN's name. GST is paid by the oil company (GSTR-1 Table 4B), not by you.
+                    div.card(style='margin-bottom: 10px;')
+                        div.card-body.col-sm-12.mx-auto(style='padding-bottom: 10px;')
+                            table.table.table-bordered.table-sm(style='width: 100%; border: 1px solid #000;')
+                                thead.thead-light.text-center
+                                    tr
+                                        th Bill No
+                                        th Date
+                                        th Billed to
+                                        th GSTIN
+                                        th Trips
+                                        th Taxable
+                                        th CGST
+                                        th SGST
+                                        th Total
+                                tbody
+                                    each b in ttInvoices
+                                        tr
+                                            td.text-center= b.bill_no
+                                            td.text-center= b.bill_date
+                                            td= b.recipient_name
+                                            td= b.recipient_gstin
+                                            td.text-right= b.trip_count
+                                            td.text-right= ttFmt(b.taxable_value)
+                                            td.text-right= ttFmt(b.cgst_amount)
+                                            td.text-right= ttFmt(b.sgst_amount)
+                                            td.text-right= ttFmt(b.invoice_value)
+                                    tr.font-weight-bold
+                                        td(colspan=4) Total
+                                        td.text-right= ttSum('trip_count')
+                                        td.text-right= ttFmt(ttSum('taxable_value'))
+                                        td.text-right= ttFmt(ttSum('cgst_amount'))
+                                        td.text-right= ttFmt(ttSum('sgst_amount'))
+                                        td.text-right= ttFmt(ttSum('invoice_value'))
+
             //- 3. Purchase Invoice Details - Fuel (grouped by product)
             div.col-md-12
                 h4.text-center Fuel Purchase Invoice Details

@@ -110,6 +110,10 @@ function addGstr3bSheet(wb, w) {
     s.line(['(c) Other outward supplies (nil rated, exempted)', w.t31c]);
     s.line(['(d) Inward supplies (liable to reverse charge)', w.t31d.txval, w.t31d.igst, w.t31d.cgst, w.t31d.sgst], { type: true });
     s.line(['(e) Non-GST outward supplies', w.t31e]);
+    if (w.rcmOutward && w.rcmOutward.txval) {
+        s.line(['Tank truck freight under reverse charge (GSTR-1 4B; tax paid by the oil company, not in 3.1(a))',
+            w.rcmOutward.txval, 0, w.rcmOutward.camt, w.rcmOutward.samt]);
+    }
     s.line(['3.1.1 and 3.2: all zero (no e-commerce sales, no inter-state sales)']);
 
     s.section('4 Eligible ITC');
