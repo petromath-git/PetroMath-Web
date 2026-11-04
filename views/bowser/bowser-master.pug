@@ -17,6 +17,7 @@ block content
                             th Bowser Name
                             th Product
                             th Capacity (L)
+                            th Opening Balance (L)
                             th Status
                             th
                     tbody
@@ -25,6 +26,7 @@ block content
                                 td= b.bowser_name
                                 td= b.product_name
                                 td= b.capacity_litres
+                                td= b.opening_stock_date ? `${b.opening_stock} on ${b.opening_stock_date_fmt}` : '—'
                                 td
                                     if b.is_active === 'Y'
                                         span.badge.badge-success Active
@@ -33,7 +35,7 @@ block content
                                 td
                                     button.btn.btn-sm.btn-outline-secondary.mr-1(
                                         type='button'
-                                        onclick=`openEditBowser(${b.bowser_id}, '${b.bowser_name}', ${b.capacity_litres}, ${b.product_id})`
+                                        onclick=`openEditBowser(${b.bowser_id}, '${b.bowser_name}', ${b.capacity_litres}, ${b.product_id}, '${b.opening_stock_date ? b.opening_stock : ''}', '${b.opening_stock_date || ''}')`
                                     ) Edit
                                     if b.is_active === 'Y'
                                         button.btn.btn-sm.btn-outline-danger(
@@ -70,6 +72,14 @@ block content
                     .form-group
                         label Capacity (Litres)
                         input#bowser_capacity.form-control(type='number' min='0' step='0.001' placeholder='e.g., 6000')
+                    .form-row
+                        .form-group.col-6
+                            label Opening Balance (Litres)
+                            input#bowser_opening_stock.form-control(type='number' min='0' step='0.001' placeholder='e.g., 2500')
+                        .form-group.col-6
+                            label On Date
+                            input#bowser_opening_stock_date.form-control(type='date' max=currentDate)
+                    small.form-text.text-muted Fuel in the bowser at the start of this date. The Stock Statement starts from here and ignores entries before this date. Leave both empty if not needed.
                 .modal-footer
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-dark(type='button' onclick='saveBowser()') Save
@@ -81,14 +91,18 @@ block content
             document.getElementById('bowser_name').value = '';
             document.getElementById('bowser_product_id').value = '';
             document.getElementById('bowser_capacity').value = '';
+            document.getElementById('bowser_opening_stock').value = '';
+            document.getElementById('bowser_opening_stock_date').value = '';
         }
 
-        function openEditBowser(id, name, capacity, productId) {
+        function openEditBowser(id, name, capacity, productId, openingStock, openingStockDate) {
             document.getElementById('bowserModalTitle').innerText = 'Edit Bowser';
             document.getElementById('edit_bowser_id').value = id;
             document.getElementById('bowser_name').value = name;
             document.getElementById('bowser_product_id').value = productId;
             document.getElementById('bowser_capacity').value = capacity;
+            document.getElementById('bowser_opening_stock').value = openingStock;
+            document.getElementById('bowser_opening_stock_date').value = openingStockDate;
             $('#bowserModal').modal('show');
         }
 
@@ -109,7 +123,11 @@ block content
             fetch(url, {
                 method,
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bowser_name: name, product_id: product, capacity_litres: capacity })
+                body: JSON.stringify({
+                    bowser_name: name, product_id: product, capacity_litres: capacity,
+                    opening_stock: document.getElementById('bowser_opening_stock').value,
+                    opening_stock_date: document.getElementById('bowser_opening_stock_date').value
+                })
             })
             .then(r => r.json())
             .then(data => {

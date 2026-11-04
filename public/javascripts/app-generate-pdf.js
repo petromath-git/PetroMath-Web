@@ -71,6 +71,12 @@ function generatePDF(currentPage,isPrint = 'N') {
         requestBody.fromDate = document.getElementById('fromDate').value;
         requestBody.toDate = document.getElementById('toDate').value;
         requestBody.bowserId = document.getElementById('bowserId').value;
+    }else if (currentPage.includes('bowser/stock-statement')) {
+        requestBody.reportType = 'BowserStockStatement';
+        requestBody.fromDate = document.getElementById('fromDate').value;
+        requestBody.toDate = document.getElementById('toDate').value;
+        requestBody.bowserId = document.getElementById('bowserId').value;
+        requestBody.selectedRange = document.getElementById('bowserStockRange').value;
     }else if (currentPage.includes('reports/stock/ledger')) {
         requestBody.reportType = 'StockLedger';
         requestBody.fromDate = document.getElementById('fromDate').value;

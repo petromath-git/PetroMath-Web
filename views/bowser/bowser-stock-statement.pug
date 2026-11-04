@@ -1,0 +1,192 @@
+extends ../layout
+include ../mixins/report-filters-mobile
+include ../mixins/card-toggle-mobile
+
+block content
+    script.
+        function updateBowserStockRange() {
+            const range = document.getElementById('bowserStockRange').value;
+            const fromInput = document.getElementById('fromDate');
+            const toInput = document.getElementById('toDate');
+            const today = new Date();
+
+            function fmt(d) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                return y + '-' + m + '-' + day;
+            }
+
+            const yr = today.getFullYear();
+            const mo = today.getMonth(); // 0-based; March=2, April=3
+
+            showRangeMonthYear(range === 'month_year');
+            if (range === 'month_year') {
+                setRangeMonthYear('fromDate', 'toDate');
+            } else if (range === 'this_month') {
+                fromInput.value = fmt(new Date(yr, mo, 1));
+                toInput.value = fmt(today);
+            } else if (range === 'last_month') {
+                fromInput.value = fmt(new Date(yr, mo - 1, 1));
+                toInput.value = fmt(new Date(yr, mo, 0));
+            } else if (range === 'this_financial_year') {
+                fromInput.value = fmt(mo >= 3 ? new Date(yr, 3, 1) : new Date(yr - 1, 3, 1));
+                toInput.value = fmt(today);
+            } else if (range === 'last_financial_year') {
+                const fyStartYr = mo >= 3 ? yr - 1 : yr - 2;
+                fromInput.value = fmt(new Date(fyStartYr, 3, 1));
+                toInput.value = fmt(new Date(fyStartYr + 1, 2, 31));
+            }
+        }
+
+        function exportBowserStockExcel() {
+            const params = new URLSearchParams({
+                fromDate: document.getElementById('fromDate').value,
+                toDate: document.getElementById('toDate').value,
+                bowserId: document.getElementById('bowserId').value
+            });
+            window.location.href = '/bowser/stock-statement/excel?' + params.toString();
+        }
+
+    form.report-filters(method='GET' action='/bowser/stock-statement')
+        +reportFiltersMobile({ hasRange: true, hasResults: !!bowser, rangeId: 'bowserStockRange', fromId: 'fromDate', toId: 'toDate', companyId: 'bowserId' })
+        table.center
+            tr
+                td.rf-label.rf-range Period:
+                td.rf-field.rf-range
+                    select#bowserStockRange.form-control(name='selectedRange' onchange='updateBowserStockRange()')
+                        option(value='month_year'          selected=selectedRange==='month_year')          Month / Year
+                        option(value='this_month'          selected=selectedRange==='this_month')          This Month
+                        option(value='last_month'          selected=selectedRange==='last_month')          Last Month
+                        option(value='this_financial_year' selected=selectedRange==='this_financial_year') This Financial Year
+                        option(value='last_financial_year' selected=selectedRange==='last_financial_year') Last Financial Year
+                        option(value='custom'              selected=selectedRange==='custom')              Custom Date
+                +rangeMonthYearCells({ onchange: 'updateBowserStockRange()', date: selectedRange === 'month_year' ? fromDate : null })
+                td.rf-gap &nbsp;
+                td.rf-label.rf-from From Date:
+                td.rf-field.rf-from
+                    input#fromDate.form-control(type='date' name='fromDate' value=fromDate max=currentDate required)
+                td.rf-gap &nbsp;
+                td.rf-label.rf-to To Date:
+                td.rf-field.rf-to
+                    input#toDate.form-control(type='date' name='toDate' value=toDate max=currentDate required)
+                td.rf-gap &nbsp;
+                td.rf-label Bowser:
+                td.rf-field
+                    select#bowserId.form-control(name='bowserId' required)
+                        each b in bowsers
+                            option(value=b.bowser_id selected=(bowser && bowser.bowser_id === b.bowser_id))= `${b.bowser_name} - ${b.product_name}`
+                td.rf-gap &nbsp;
+                include ../report-print-download.pug
+                td.rf-btn
+                    button.btn.btn-outline-success.ml-2(type='button' onclick='exportBowserStockExcel()' title='Export Excel')
+                        i.fas.fa-file-excel
+                        |  Excel
+        .text-center.mt-2
+            a(href='/bowser/closing') &larr; Bowser Closings
+
+    div &nbsp;
+    if !bowser
+        .alert.alert-info.text-center No bowser is set up for this location.
+    else
+        - const fmtQty = n => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
+        - const fmtMove = n => (Number(n) ? fmtQty(n) : '—')
+        - const fmtDate = d => { const p = d.split('-'); return p[2] + '-' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(p[1], 10) - 1] + '-' + p[0]; }
+        - const s = statement
+
+        h6.font-weight-bold.text-center Bowser Stock Statement
+        h5.font-weight-bold.text-center.text-uppercase= `${bowser.bowser_name} - ${bowser.product_name}`
+        h6.text-center.text-muted= `${formattedFromDate}   to   ${formattedToDate}`
+
+        .container
+            .row.justify-content-center
+                .col-12
+                    .alert.mb-4.period-summary(style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; padding: 20px;")
+                        .row
+                            .col-md-3.col-6
+                                div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                    div(style="color: #6c757d; font-size: 0.9em;") Opening
+                                    div(style="font-size: 1.3em; font-weight: bold; color: #007bff;")= fmtQty(s.opening) + ' L'
+                            .col-md-3.col-6
+                                div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                    div(style="color: #6c757d; font-size: 0.9em;") Fill In
+                                    div(style="font-size: 1.3em; font-weight: bold; color: #28a745;")= fmtQty(s.totals.fill) + ' L'
+                            .col-md-3.col-6
+                                div(style="padding: 10px; background: white; border-radius: 4px; margin-bottom: 10px;")
+                                    div(style="color: #6c757d; font-size: 0.9em;") Out
+                                    div(style="font-size: 1.3em; font-weight: bold; color: #dc3545;")= fmtQty(s.totals.out) + ' L'
+                            .col-md-3.col-6
+                                div(style="padding: 10px; background: #e7f3ff; border-radius: 4px; margin-bottom: 10px;")
+                                    div(style="color: #6c757d; font-size: 0.9em;") Remaining
+                                    div(style="font-size: 1.3em; font-weight: bold; color: #007bff;")= fmtQty(s.closing) + ' L'
+
+                    if s.negativeDays > 0 || s.overCapacityDays > 0 || s.draftDays > 0
+                        .alert.alert-warning
+                            if s.negativeDays > 0
+                                div= `Remaining is below zero on ${s.negativeDays} day(s), which is not possible. A fill may not be entered in shift closing, or a delivery may be entered twice.`
+                            if s.overCapacityDays > 0
+                                div= `Remaining is above the bowser capacity of ${fmtQty(bowser.capacity_litres)} L on ${s.overCapacityDays} day(s), which is not possible. Deliveries may not be entered in Bowser Closing.`
+                            if s.draftDays > 0
+                                div= `${s.draftDays} draft closing(s) are included, so these figures can still change.`
+
+                    if s.days.length > 0
+                        .table-responsive
+                            table.table.table-bordered.table-hover.table-sm.m-stack.m-collapse.bowser-stock-table
+                                thead.thead-light
+                                    tr
+                                        th Date
+                                        th.text-right Opening
+                                        th.text-right Fill In
+                                        th.text-right Credit
+                                        th.text-right Cash
+                                        th.text-right Digital
+                                        th.text-right Total Out
+                                        th.text-right Remaining
+                                        th.text-center Closing
+                                tbody
+                                    each d in s.days
+                                        - const badBalance = d.is_negative || d.is_over_capacity
+                                        tr(class=d.has_movement ? '' : 'text-muted')
+                                            td.m-title(style='white-space:nowrap')= fmtDate(d.date)
+                                            //- phones only: the collapsed card's one-line summary
+                                            td.m-only.m-summary(class=badBalance ? 'text-danger' : '')= fmtQty(d.closing) + ' L'
+                                            td.text-right(data-label='Opening')= fmtQty(d.opening)
+                                            td.text-right(data-label='Fill In')= fmtMove(d.fill)
+                                            td.text-right(data-label='Credit')= fmtMove(d.credit)
+                                            td.text-right(data-label='Cash')= fmtMove(d.cash)
+                                            td.text-right(data-label='Digital')= fmtMove(d.digital)
+                                            td.text-right(data-label='Total Out')= fmtMove(d.out)
+                                            td.text-right.font-weight-bold(data-label='Remaining' class=badBalance ? 'text-danger' : '')= fmtQty(d.closing)
+                                            td.text-center(data-label='Closing')
+                                                if d.bowser_closing_id
+                                                    a(href=`/bowser/closing/${d.bowser_closing_id}`)
+                                                        if d.status === 'CLOSED'
+                                                            span.badge.badge-success Closed
+                                                        else
+                                                            span.badge.badge-warning Draft
+                                                else
+                                                    | —
+                                tfoot.bg-light
+                                    tr.font-weight-bold
+                                        td.m-title Total
+                                        td.text-right(data-label='Opening')= fmtQty(s.opening)
+                                        td.text-right(data-label='Fill In')= fmtQty(s.totals.fill)
+                                        td.text-right(data-label='Credit')= fmtQty(s.totals.credit)
+                                        td.text-right(data-label='Cash')= fmtQty(s.totals.cash)
+                                        td.text-right(data-label='Digital')= fmtQty(s.totals.digital)
+                                        td.text-right(data-label='Total Out')= fmtQty(s.totals.out)
+                                        td.text-right(data-label='Remaining')= fmtQty(s.closing)
+                                        td.m-hide
+                        p.text-muted.small
+                            | All quantities are in litres. Fill In is from the Intercompany tab of shift closing. Out is from Bowser Closing deliveries; cash and digital litres are the amount divided by that day's rate. Meter readings are not used.
+                            if bowser.opening_stock_date
+                                = `Starts from the opening balance of ${fmtQty(bowser.opening_stock)} L on ${bowser.opening_stock_date_fmt} in Bowser Master; earlier entries are not counted.`
+                            else
+                                | No opening balance is set in Bowser Master, so the balance starts from zero at the first entry.
+                    else if s.beforeOpeningDate
+                        .alert.alert-info.text-center= `This bowser's opening balance starts on ${bowser.opening_stock_date_fmt}. Choose a period up to or after that date.`
+                    else
+                        .alert.alert-info.text-center No fills or deliveries for this bowser up to the selected date.
+
+    include ../overlay.pug
+    +cardToggleMobile('table.bowser-stock-table > tbody > tr:not(.m-static)')
