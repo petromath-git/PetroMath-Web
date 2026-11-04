@@ -10,6 +10,7 @@ const digitalReconreportsController = require("../controllers/reports-digital-re
 const tallyDaybookReportsController = require("../controllers/reports-tally-daybook-controller");
 const stockReportsController = require("../controllers/stock-reports-controller");
 const cashflowDetailedController = require("../controllers/reports-cashflow-detailed-controller");
+const bowserController = require("../controllers/bowser-controller");
 var locationdao = require("../dao/location-dao");
 var reportdao = require("../dao/report-dao");
 require('dotenv').config();
@@ -106,6 +107,9 @@ module.exports = {
         }
         else if (req.body.reportType == 'IntercompanyLedger') {
             htmlContent = await stockReportsController.getIntercompanyLedgerReport(req, res, next);
+        }
+        else if (req.body.reportType == 'BowserStockStatement') {
+            htmlContent = await bowserController.getStockStatementPage(req, res);
         }
         else if (req.body.reportType == 'TankVariance') {
             htmlContent = await stockReportsController.getTankVarianceReport(req, res, next);

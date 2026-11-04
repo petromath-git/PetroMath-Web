@@ -4,6 +4,52 @@ const utils          = require('../utils/app-utils');
 const locationConfig = require('../utils/location-config');
 const security       = require('../utils/app-security');
 const moment         = require('moment');
+const rolePermissionsDao = require('../dao/role-permissions-dao');
+const { buildStockStatement } = require('../utils/bowser-stock-statement');
+
+const canViewStockStatement = (user) =>
+    rolePermissionsDao.hasPermission(user.Role, user.location_code, 'VIEW_BOWSER_STOCK_STATEMENT');
+
+// Opening balance is a quantity plus the date it applies from: both or neither
+function parseOpeningBalance(body) {
+    const qty  = body.opening_stock === undefined ? '' : String(body.opening_stock).trim();
+    const date = body.opening_stock_date ? String(body.opening_stock_date).trim() : '';
+    if (qty === '' && date === '') return { openingStock: null, openingStockDate: null };
+    if (qty === '' || date === '') return { error: 'Enter both the opening balance and its date, or leave both empty.' };
+
+    const openingStock = Number(qty);
+    if (!Number.isFinite(openingStock) || openingStock < 0) return { error: 'Opening balance must be 0 or more.' };
+    if (!moment(date, 'YYYY-MM-DD', true).isValid()) return { error: 'Opening balance date is not valid.' };
+    if (date > utils.currentDate()) return { error: 'Opening balance date cannot be in the future.' };
+
+    const capacity = Number(body.capacity_litres) || 0;
+    if (capacity > 0 && openingStock > capacity) return { error: 'Opening balance cannot be more than the bowser capacity.' };
+    return { openingStock, openingStockDate: date };
+}
+
+async function loadStockStatement(locationCode, params) {
+    const today = utils.currentDate();
+    const isDate = v => moment(v, 'YYYY-MM-DD', true).isValid();
+
+    let toDate = isDate(params.toDate) ? params.toDate : today;
+    if (toDate > today) toDate = today;
+    let fromDate = isDate(params.fromDate) ? params.fromDate : moment(today).startOf('month').format('YYYY-MM-DD');
+    if (fromDate > toDate) fromDate = toDate;
+
+    const bowsers = await BowserDao.getBowsersByLocation(locationCode);
+    const bowser = bowsers.find(b => String(b.bowser_id) === String(params.bowserId))
+        || bowsers.find(b => b.is_active === 'Y')
+        || bowsers[0]
+        || null;
+
+    let statement = null;
+    if (bowser) {
+        const movements = await BowserDao.getStockMovements(bowser.bowser_id, locationCode, toDate);
+        statement = buildStockStatement(movements, fromDate, toDate, Number(bowser.capacity_litres) || 0,
+            { qty: bowser.opening_stock, date: bowser.opening_stock_date });
+    }
+    return { today, fromDate, toDate, bowsers, bowser, statement };
+}
 
 function buildTransactions(fills, deliveries) {
     const txns = [
@@ -63,7 +109,8 @@ module.exports = {
                 title: 'Bowser Master',
                 user: req.user,
                 bowsers,
-                products
+                products,
+                currentDate: utils.currentDate()
             });
         } catch (err) {
             console.error('getBowserMasterPage error:', err);
@@ -77,10 +124,14 @@ module.exports = {
             if (!bowser_name || !product_id) {
                 return res.status(400).json({ success: false, error: 'Bowser name and product are required.' });
             }
+            const opening = parseOpeningBalance(req.body);
+            if (opening.error) return res.status(400).json({ success: false, error: opening.error });
             await BowserDao.createBowser({
                 locationCode: req.user.location_code,
                 bowserName: bowser_name.trim().toUpperCase(),
                 capacityLitres: capacity_litres || 0,
+                openingStock: opening.openingStock,
+                openingStockDate: opening.openingStockDate,
                 productId: product_id,
                 createdBy: String(req.user.Person_id)
             });
@@ -94,9 +145,14 @@ module.exports = {
     updateBowser: async (req, res) => {
         try {
             const { bowser_name, capacity_litres, product_id } = req.body;
+            const opening = parseOpeningBalance(req.body);
+            if (opening.error) return res.status(400).json({ success: false, error: opening.error });
             await BowserDao.updateBowser(req.params.id, {
+                locationCode: req.user.location_code,
                 bowserName: bowser_name.trim().toUpperCase(),
                 capacityLitres: capacity_litres || 0,
+                openingStock: opening.openingStock,
+                openingStockDate: opening.openingStockDate,
                 productId: product_id,
                 updatedBy: String(req.user.Person_id)
             });
@@ -157,10 +213,11 @@ module.exports = {
             const locationCode = req.user.location_code;
             const toDate   = req.query.toDate   || utils.currentDate();
             const fromDate = req.query.fromDate  || utils.currentDate();
-            const [closings, bowsers, allowBowserReopen] = await Promise.all([
+            const [closings, bowsers, allowBowserReopen, showStockStatement] = await Promise.all([
                 BowserDao.getBowserClosings(locationCode, fromDate, toDate),
                 BowserDao.getActiveBowsersByLocation(locationCode),
-                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N')
+                locationConfig.getLocationConfigValue(locationCode, 'ALLOW_BOWSER_REOPEN', 'N'),
+                canViewStockStatement(req.user)
             ]);
             res.render('bowser/bowser-closing-list', {
                 title: 'Bowser Closings',
@@ -169,7 +226,8 @@ module.exports = {
                 bowsers,
                 fromDate,
                 toDate,
-                allowBowserReopen
+                allowBowserReopen,
+                showStockStatement
             });
         } catch (err) {
             console.error('getClosingList error:', err);
@@ -411,9 +469,111 @@ module.exports = {
         }
     },
 
+    // ── Bowser Stock Statement ────────────────────────────────
+
+    // Called by the route (filters in the query string) and by the PDF generator
+    // (filters in the body, returns the html)
+    getStockStatementPage: async (req, res) => {
+        const isPdf = req.body && req.body.caller === 'PDF';
+        const params = isPdf ? req.body : req.query;
+        try {
+            // /generate-pdf doesn't pass through this page's route permission
+            if (isPdf && !(await canViewStockStatement(req.user))) {
+                throw new Error('No permission for the bowser stock statement');
+            }
+            const { today, fromDate, toDate, bowsers, bowser, statement } =
+                await loadStockStatement(req.user.location_code, params);
+
+            const renderData = {
+                title: 'Bowser Stock Statement',
+                user: req.user,
+                mobileReady: true,
+                bowsers,
+                bowser,
+                statement,
+                fromDate,
+                toDate,
+                formattedFromDate: moment(fromDate).format('DD-MMM-YYYY'),
+                formattedToDate:   moment(toDate).format('DD-MMM-YYYY'),
+                currentDate:       today,
+                selectedRange:     params.selectedRange || 'this_month'
+            };
+
+            if (!isPdf) return res.render('bowser/bowser-stock-statement', renderData);
+
+            return new Promise((resolve, reject) => {
+                res.render('bowser/bowser-stock-statement', renderData, (err, html) => {
+                    if (err) reject(err);
+                    else resolve(html);
+                });
+            });
+        } catch (err) {
+            console.error('getStockStatementPage error:', err);
+            if (isPdf) throw err;
+            res.status(500).send('Error loading bowser stock statement');
+        }
+    },
+
+    exportStockStatementExcel: async (req, res) => {
+        try {
+            const ExcelJS = require('exceljs');
+            const locationCode = req.user.location_code;
+            const { fromDate, toDate, bowser, statement } = await loadStockStatement(locationCode, req.query);
+            if (!bowser) return res.status(400).send('No bowser found for this location');
+
+            const wb = new ExcelJS.Workbook();
+            const ws = wb.addWorksheet('Bowser Stock Statement');
+
+            ws.getRow(1).getCell(1).value = req.user.station_name || locationCode;
+            ws.getRow(1).getCell(1).font  = { bold: true, size: 13 };
+            ws.getRow(2).getCell(1).value = `Bowser Stock Statement - ${bowser.bowser_name} (${bowser.product_name})`;
+            ws.getRow(3).getCell(1).value = `${moment(fromDate).format('DD-MMM-YYYY')} to ${moment(toDate).format('DD-MMM-YYYY')}`;
+
+            const headers = ['Date', 'Opening (L)', 'Fill In (L)', 'Credit (L)', 'Cash (L)', 'Digital (L)', 'Total Out (L)', 'Remaining (L)', 'Closing Status'];
+            const hRow = ws.getRow(5);
+            headers.forEach((h, i) => {
+                const c = hRow.getCell(i + 1);
+                c.value     = h;
+                c.font      = { bold: true };
+                c.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } };
+                c.alignment = { horizontal: 'center' };
+                c.border    = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+            });
+
+            statement.days.forEach((d, idx) => {
+                ws.getRow(6 + idx).values = [
+                    moment(d.date).format('DD-MMM-YYYY'),
+                    d.opening, d.fill, d.credit, d.cash, d.digital, d.out, d.closing,
+                    d.status === 'CLOSED' ? 'Closed' : d.status === 'DRAFT' ? 'Draft' : ''
+                ];
+            });
+
+            const t = statement.totals;
+            const tRow = ws.getRow(6 + statement.days.length);
+            tRow.values = ['Total', statement.opening, t.fill, t.credit, t.cash, t.digital, t.out, statement.closing];
+            tRow.font = { bold: true };
+
+            ws.getColumn(1).width = 14;
+            for (let c = 2; c <= 8; c++) {
+                ws.getColumn(c).width = 14;
+                ws.getColumn(c).numFmt = '#,##0.000';
+            }
+            ws.getColumn(9).width = 15;
+
+            const fileName = `BowserStockStatement_${locationCode}_${moment(fromDate).format('DDMMYYYY')}_${moment(toDate).format('DDMMYYYY')}.xlsx`;
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            await wb.xlsx.write(res);
+            res.end();
+        } catch (err) {
+            console.error('exportStockStatementExcel error:', err);
+            res.status(500).send('Failed to generate Excel export');
+        }
+    },
+
     // ── Bowser Transactions Report ────────────────────────────
 
-    getReportPage: async (req, res) => {
+    getReportPage:async (req, res) => {
         try {
             const locationCode  = req.user.location_code;
             const selectedRange = req.query.selectedRange || 'this_month';
