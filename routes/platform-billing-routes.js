@@ -76,6 +76,11 @@ router.get('/ledger', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_B
 // POST /platform-billing/:invoiceId/adjustment
 router.post('/:invoiceId/adjustment', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.addAdjustment);
 
+// ── Send over WhatsApp (tkt #460) ──
+router.post('/contacts/:locationCode', manageBilling, controller.saveInvoiceContact);
+router.post('/:invoiceId/mark-sent', manageBilling, controller.markInvoiceSent);
+router.post('/:invoiceId/reset-link', manageBilling, controller.resetInvoiceLink);
+
 // GET /platform-billing/:invoiceId/pdf
 router.get('/:invoiceId/pdf', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.printInvoicePDF);
 

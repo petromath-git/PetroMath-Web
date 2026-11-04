@@ -1,0 +1,67 @@
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        meta(name='viewport' content='width=device-width, initial-scale=1')
+        meta(name='robots' content='noindex, nofollow')
+        if invoice
+            title Invoice #{invoice.invoice_number} - PetroMath
+            //- Read by WhatsApp to draw the preview card under the link
+            meta(property='og:site_name' content='PetroMath')
+            meta(property='og:type' content='website')
+            meta(property='og:title' content=`PetroMath invoice for ${invoice.location_name}`)
+            meta(property='og:description' content=`${invoice.service_label} · ${invoice.amount_label} · Invoice ${invoice.invoice_number}`)
+            meta(property='og:image' content=`${baseUrl}/images/mc_logo.jpg`)
+            meta(property='og:url' content=shareUrl)
+        else
+            title Invoice link - PetroMath
+        style.
+            * { box-sizing: border-box; }
+            body { margin: 0; background: #f1f3f5; color: #212529; font-family: Arial, Helvetica, sans-serif; }
+            .wrap { max-width: 460px; margin: 0 auto; padding: 20px 16px; }
+            .card { background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+            .head { display: flex; align-items: center; background: #212529; color: #fff; padding: 16px 18px; }
+            .logo { width: 44px; height: 44px; border-radius: 10px; background: #f4d03f; object-fit: contain; padding: 4px; margin-right: 12px; }
+            .brand { font-size: 20px; font-weight: 700; }
+            .tag { font-size: 12px; color: #f7dc6f; }
+            .body { padding: 18px; }
+            .station { font-size: 18px; font-weight: 700; margin-bottom: 14px; overflow-wrap: anywhere; }
+            .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-top: 1px solid #e9ecef; font-size: 15px; }
+            .row span:first-child { color: #6c757d; }
+            .row span:last-child { font-weight: 600; text-align: right; }
+            .paid { color: #198754; }
+            .btn { display: block; margin-top: 16px; padding: 14px; border-radius: 8px; background: #212529; color: #fff; font-size: 16px; font-weight: 700; text-align: center; text-decoration: none; }
+            .foot { margin-top: 14px; font-size: 12px; color: #6c757d; text-align: center; }
+    body
+        .wrap
+            .card
+                .head
+                    img.logo(src='/images/mc_logo.jpg' alt='')
+                    div
+                        .brand PetroMath
+                        .tag Invoice
+                .body
+                    if invoice
+                        .station= invoice.location_name
+                        .row
+                            span Invoice no.
+                            span= invoice.invoice_number
+                        .row
+                            span Service month
+                            span= invoice.service_label
+                        .row
+                            span Amount
+                            span= invoice.amount_label
+                        if invoice.status === 'PAID'
+                            .row
+                                span Status
+                                span.paid Paid
+                        else
+                            .row
+                                span Due date
+                                span= invoice.due_label
+                        a.btn(href=`${shareUrl}/pdf` download=`${invoice.invoice_number}.pdf`) Download PDF
+                    else
+                        .station This link is no longer active
+                        p Please ask PetroMath to send the invoice again.
+            .foot PetroMath · petromath.co.in

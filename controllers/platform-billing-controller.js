@@ -1,4 +1,5 @@
 // controllers/platform-billing-controller.js
+const crypto = require('crypto');
 const dateFormat = require('dateformat');
 const pug = require('pug');
 const path = require('path');
@@ -40,6 +41,108 @@ function serviceLabel(startDate, endDate) {
     return dateFormat(start, 'dd-mmm-yyyy') + ' – ' + dateFormat(end, 'dd-mmm-yyyy');
 }
 
+const rupees = (amount) => '₹' + Number(amount).toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+// Stored with the country code, as wa.me needs it. Indian mobiles only.
+function normalizeWhatsappNumber(value) {
+    let digits = (value || '').replace(/\D/g, '');
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length === 10) digits = '91' + digits;
+    return /^91[6-9]\d{9}$/.test(digits) ? digits : null;
+}
+
+// Links shown to dealers are always https; the servers sit behind a proxy.
+function publicBaseUrl(req) {
+    const host = req.get('host');
+    return (/^(localhost|127\.)/.test(host) ? req.protocol : 'https') + '://' + host;
+}
+
+// The name only makes the link readable; the token is what's checked.
+function invoiceShareUrl(baseUrl, locationName, token) {
+    const name = (locationName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'invoice';
+    return `${baseUrl}/invoice/${name}/${token}`;
+}
+
+function invoiceWhatsappMessage(inv, shareUrl) {
+    return [
+        inv.contact_name ? `Hi ${inv.contact_name},` : 'Hi,',
+        '',
+        `PetroMath invoice for ${inv.location_name}, ${inv.service_label}`,
+        `Invoice ${inv.invoice_number}, amount ${rupees(inv.net_amount)}, due ${dateFormat(inv.due_date, 'dd-mmm-yyyy')}`,
+        '',
+        `View invoice: ${shareUrl}`
+    ].join('\n');
+}
+
+// Adds the WhatsApp link and sent/opened labels to each invoice on the list,
+// issuing a link token the first time an invoice is listed.
+async function addSendDetails(invoices, baseUrl) {
+    for (const inv of invoices) {
+        if (inv.status === 'CANCELLED') continue;
+        if (!inv.share_token) {
+            inv.share_token = crypto.randomBytes(8).toString('hex');
+            await PlatformBillingDao.setShareToken(inv.invoice_id, inv.share_token);
+        }
+        if (inv.whatsapp_number) {
+            const shareUrl = invoiceShareUrl(baseUrl, inv.location_name, inv.share_token);
+            inv.whatsapp_url = `https://wa.me/${inv.whatsapp_number}?text=` + encodeURIComponent(invoiceWhatsappMessage(inv, shareUrl));
+        }
+        inv.sent_label = inv.sent_date ? dateFormat(inv.sent_date, 'dd-mmm-yyyy') : null;
+        inv.opened_label = inv.first_opened_date ? dateFormat(inv.first_opened_date, 'dd-mmm-yyyy') : null;
+    }
+}
+
+async function renderInvoicePdf(invoice, res) {
+    let page = null;
+    try {
+        const templatePath = path.join(__dirname, '..', 'views', 'platform-billing', 'invoice-print.pug');
+        const htmlContent = pug.renderFile(templatePath, {
+            invoice,
+            logoDataUri: getImageBase64('mc_logo.jpg'),
+            signatureDataUri: getImageBase64('petromath-signature.jpg')
+        });
+
+        const { getBrowser } = require('../utils/browserHelper');
+        const browser = await getBrowser();
+        page = await browser.newPage();
+        await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 15000 });
+
+        const pdfBuffer = await page.pdf({
+            format: 'A4',
+            printBackground: true,
+            margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' }
+        });
+
+        await page.close();
+        page = null;
+
+        res.writeHead(200, {
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="${invoice.invoice_number}.pdf"`,
+            'Content-Length': pdfBuffer.length,
+            'Cache-Control': 'no-cache'
+        });
+        res.end(pdfBuffer, 'binary');
+    } catch (err) {
+        console.error('PlatformBillingController.renderInvoicePdf:', err);
+        if (page) { try { await page.close(); } catch (e) {} }
+        res.status(500).send('Failed to generate invoice PDF');
+    }
+}
+
+// The invoice behind a public link, or null if the link is dead. Cancelled
+// invoices count as dead.
+async function findSharedInvoice(token) {
+    if (!/^[a-f0-9]{16}$/.test(token)) return null;
+    const invoiceId = await PlatformBillingDao.findInvoiceIdByShareToken(token);
+    if (!invoiceId) return null;
+    const invoice = await PlatformBillingDao.findInvoiceForPrint(invoiceId);
+    return invoice && invoice.status !== 'CANCELLED' ? invoice : null;
+}
+
+// WhatsApp fetches the link to draw its preview card; that isn't the dealer opening it.
+const LINK_PREVIEW_AGENT = /whatsapp|facebookexternalhit|facebot|telegram|slack|bot|crawl|spider|preview/i;
+
 const PlatformBillingController = {
 
     // ─── GET /platform-billing (master) ────────────────────────────────────
@@ -68,6 +171,7 @@ const PlatformBillingController = {
             }
 
             invoices.forEach(inv => { inv.service_label = serviceLabel(inv.period_start_date, inv.period_end_date); });
+            await addSendDetails(invoices, publicBaseUrl(req));
             if (lastRun) lastRun.started_label = dateFormat(lastRun.started_at, 'dd-mmm-yyyy HH:MM');
 
             const now = new Date();
@@ -335,45 +439,105 @@ const PlatformBillingController = {
 
     // ─── GET /platform-billing/:invoiceId/pdf (master) ──────────────────────
     printInvoicePDF: async (req, res) => {
-        let page = null;
         try {
             const invoice = await PlatformBillingDao.findInvoiceForPrint(req.params.invoiceId);
             if (!invoice) {
                 return res.status(404).send('Invoice not found');
             }
-
-            const templatePath = path.join(__dirname, '..', 'views', 'platform-billing', 'invoice-print.pug');
-            const htmlContent = pug.renderFile(templatePath, {
-                invoice,
-                logoDataUri: getImageBase64('mc_logo.jpg'),
-                signatureDataUri: getImageBase64('petromath-signature.jpg')
-            });
-
-            const { getBrowser } = require('../utils/browserHelper');
-            const browser = await getBrowser();
-            page = await browser.newPage();
-            await page.setContent(htmlContent, { waitUntil: 'networkidle0', timeout: 15000 });
-
-            const pdfBuffer = await page.pdf({
-                format: 'A4',
-                printBackground: true,
-                margin: { top: '15mm', right: '12mm', bottom: '15mm', left: '12mm' }
-            });
-
-            await page.close();
-            page = null;
-
-            res.writeHead(200, {
-                'Content-Type': 'application/pdf',
-                'Content-Disposition': `attachment; filename="${invoice.invoice_number}.pdf"`,
-                'Content-Length': pdfBuffer.length,
-                'Cache-Control': 'no-cache'
-            });
-            res.end(pdfBuffer, 'binary');
+            await renderInvoicePdf(invoice, res);
         } catch (err) {
             console.error('PlatformBillingController.printInvoicePDF:', err);
-            if (page) { try { await page.close(); } catch (e) {} }
             res.status(500).send('Failed to generate invoice PDF');
+        }
+    },
+
+    // ─── POST /platform-billing/contacts/:locationCode (master) ────────────
+    saveInvoiceContact: async (req, res) => {
+        try {
+            const whatsappNumber = normalizeWhatsappNumber(req.body.whatsapp_number);
+            if (!whatsappNumber) {
+                return res.status(400).json({ error: 'Enter a 10-digit mobile number' });
+            }
+            const contactName = (req.body.contact_name || '').trim().slice(0, 100) || null;
+            await PlatformBillingDao.saveInvoiceContact(
+                req.params.locationCode, contactName, whatsappNumber, req.user.User_Name || req.user.Person_Name
+            );
+            res.json({ success: true });
+        } catch (err) {
+            console.error('PlatformBillingController.saveInvoiceContact:', err);
+            res.status(500).json({ error: 'Failed to save contact' });
+        }
+    },
+
+    // ─── POST /platform-billing/:invoiceId/mark-sent (master) ──────────────
+    // Records that the WhatsApp button was tapped, not that the message went.
+    markInvoiceSent: async (req, res) => {
+        try {
+            const sentDate = await PlatformBillingDao.markInvoiceSent(
+                req.params.invoiceId, req.user.User_Name || req.user.Person_Name
+            );
+            if (!sentDate) return res.status(404).json({ error: 'Invoice or contact not found' });
+            res.json({ success: true, sent_label: dateFormat(sentDate, 'dd-mmm-yyyy') });
+        } catch (err) {
+            console.error('PlatformBillingController.markInvoiceSent:', err);
+            res.status(500).json({ error: 'Failed to mark as sent' });
+        }
+    },
+
+    // ─── POST /platform-billing/:invoiceId/reset-link (master) ─────────────
+    resetInvoiceLink: async (req, res) => {
+        try {
+            await PlatformBillingDao.resetShareLink(req.params.invoiceId);
+            res.json({ success: true });
+        } catch (err) {
+            console.error('PlatformBillingController.resetInvoiceLink:', err);
+            res.status(500).json({ error: 'Failed to reset link' });
+        }
+    },
+
+    // ─── GET /invoice/:name/:token (public, no login) ──────────────────────
+    getSharedInvoice: async (req, res, next) => {
+        try {
+            const invoice = await findSharedInvoice(req.params.token);
+            res.set('Cache-Control', 'no-store');
+            res.set('X-Robots-Tag', 'noindex, nofollow');
+            if (!invoice) {
+                return res.status(404).render('platform-billing/invoice-public', { invoice: null });
+            }
+
+            // Don't count our own check of the link, or WhatsApp's preview fetch
+            if (req.method === 'GET' && !req.user && !LINK_PREVIEW_AGENT.test(req.get('user-agent') || '')) {
+                PlatformBillingDao.markInvoiceOpened(invoice.invoice_id).catch(err => {
+                    console.error('PlatformBillingController.markInvoiceOpened:', err);
+                });
+            }
+
+            invoice.service_label = serviceLabel(invoice.period_start_date, invoice.period_end_date);
+            invoice.amount_label = rupees(invoice.net_amount);
+            invoice.due_label = dateFormat(invoice.due_date, 'dd-mmm-yyyy');
+
+            const baseUrl = publicBaseUrl(req);
+            res.render('platform-billing/invoice-public', {
+                invoice,
+                baseUrl,
+                shareUrl: invoiceShareUrl(baseUrl, invoice.location_name, req.params.token)
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    // ─── GET /invoice/:name/:token/pdf (public, no login) ──────────────────
+    getSharedInvoicePdf: async (req, res, next) => {
+        try {
+            const invoice = await findSharedInvoice(req.params.token);
+            if (!invoice) {
+                return res.status(404).render('platform-billing/invoice-public', { invoice: null });
+            }
+            res.set('X-Robots-Tag', 'noindex, nofollow');
+            await renderInvoicePdf(invoice, res);
+        } catch (err) {
+            next(err);
         }
     }
 };

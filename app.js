@@ -647,6 +647,7 @@ app.use('/dsm-entry', require('./routes/dsm-entry-routes'));
 app.use('/dealer-leads', require('./routes/dealer-lead-routes'));
 app.use('/day-bill', dayBillRoutes);
 app.use('/platform-billing', platformBillingRoutes);
+app.use('/invoice', require('./routes/platform-invoice-public-routes'));
 app.use('/distributors', distributorRoutes);
 app.use('/tank-receipts', tankReceiptRoutes);
 app.use('/purchases',    purchasesRoutes);
