@@ -1,0 +1,280 @@
+extends ../layout
+
+block content
+    - const money = n => '₹' + Number(n).toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2})
+    style.
+        .pbr-narration { max-width: 420px; word-break: break-word; font-size: 0.85rem; }
+        .pbr-pay-row { display: block; padding: 4px 0; font-weight: normal; margin: 0; }
+
+    .card.mb-3
+        .card-header(style='background-color: #f8f9fa;')
+            .d-flex.justify-content-between.align-items-center
+                h6.mb-0
+                    i.bi.bi-bank.me-2
+                    | Bank Receipts — PetroMath IOB Account
+                a.btn.btn-outline-secondary.btn-sm(href='/platform-billing/payments')
+                    i.bi.bi-arrow-left.me-1
+                    | Back to Payments
+        .card-body
+            .row
+                .col-md-5.mb-2
+                    label.form-label Upload IOB statement (Excel):
+                    .d-flex
+                        input#statementFile.form-control.mr-2(type='file' accept='.xls,.xlsx')
+                        button#btnUpload.btn.btn-primary(type='button') Upload
+                    small.text-muted Only credits are kept. Re-uploading an overlapping statement is safe. No payment is created until a line is tagged.
+                .col-md-2.col-6.mb-2
+                    label.form-label Show:
+                    select#filterStatus.form-control(onchange='applyFilter()')
+                        each s in [['UNTAGGED', 'Untagged'], ['TAGGED', 'Tagged'], ['IGNORED', 'Ignored'], ['ALL', 'All']]
+                            option(value=s[0] selected=(status === s[0]))= s[1]
+                .col-md-3.col-6.mb-2
+                    label.form-label Location:
+                    select#filterLocation.form-control(onchange='applyFilter()')
+                        option(value='') All Locations
+                        each loc in locations
+                            option(value=loc.location_code selected=(locationCode === loc.location_code))= loc.location_name + ' (' + loc.location_code + ')'
+            .small.mt-2
+                | Untagged: #[strong= summary.UNTAGGED.n] (#{money(summary.UNTAGGED.amount)})
+                |  · Tagged: #[strong= summary.TAGGED.n] (#{money(summary.TAGGED.amount)})
+                |  · Ignored: #[strong= summary.IGNORED.n]
+                |  · Payments not yet on the statement: #[strong= unlinkedCount]
+
+    div.container-fluid
+        if rows.some(r => r.suggestion)
+            .mb-2
+                button#btnApply.btn.btn-success.btn-sm(type='button')
+                    i.bi.bi-check2-all.me-1
+                    | Apply ticked suggestions
+        if rows.length
+            .table-responsive
+                table.table.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th
+                            th Date
+                            th Narration
+                            th.text-right Amount
+                            th Location
+                            th
+                    tbody
+                        each r in rows
+                            tr
+                                td
+                                    if r.suggestion
+                                        input.pbr-tick(type='checkbox' value=r.bank_txn_id checked)
+                                td(style='white-space:nowrap;')= r.date_label
+                                td.pbr-narration= r.description
+                                td.text-right(style='white-space:nowrap;')= money(r.credit_amount)
+                                td
+                                    if r.status === 'TAGGED'
+                                        div= (r.location_name || r.location_code) + ' (' + r.location_code + ')'
+                                        small.text-muted= (r.has_created_payment ? 'New payment ' : 'Linked to ') + (r.payment_refs || '')
+                                    else if r.status === 'IGNORED'
+                                        span.text-muted Ignored
+                                    else if r.suggestion
+                                        div= r.suggestion.location_name + ' (' + r.suggestion.location_code + ')'
+                                        small.text-muted= r.suggestion.payment_id ? 'Link to payment ' + r.suggestion.payment_label : 'New payment'
+                                    else
+                                        span.text-muted -
+                                td(style='white-space:nowrap;')
+                                    if r.status === 'UNTAGGED'
+                                        button.btn.btn-outline-primary.btn-sm.mr-1.pbr-tag(
+                                            type='button'
+                                            data-id=r.bank_txn_id
+                                            data-amount=r.credit_amount
+                                            data-narration=r.description
+                                            data-payer=r.payer_name
+                                            data-location=(r.suggestion ? r.suggestion.location_code : '')
+                                            data-payment=(r.suggestion ? r.suggestion.payment_id : '')) Tag
+                                        button.btn.btn-outline-secondary.btn-sm.pbr-action(type='button' data-action='ignore' data-id=r.bank_txn_id title='Not a subscription receipt') Ignore
+                                    else
+                                        button.btn.btn-outline-secondary.btn-sm.pbr-action(type='button' data-action='undo' data-id=r.bank_txn_id
+                                            data-confirm=(r.has_created_payment ? 'Undo this tag? The payment it created is removed and its invoices go back to unpaid.' : '')) Undo
+        else
+            .alert.alert-info No statement lines to show.
+
+        if uploads.length
+            h6.mt-4 Recent uploads
+            .table-responsive
+                table.table.table-sm.table-desktop(style='width:100% !important;')
+                    thead.thead-light
+                        tr
+                            th File
+                            th Period
+                            th.text-right New
+                            th.text-right Already uploaded
+                            th By
+                            th
+                    tbody
+                        each u in uploads
+                            tr
+                                td= u.file_name
+                                td= u.range_label
+                                td.text-right= u.lines_added
+                                td.text-right= u.lines_skipped
+                                td= u.created_by
+                                td
+                                    if u.untagged_count > 0
+                                        button.btn.btn-link.btn-sm.p-0.pbr-remove-upload(type='button' data-id=u.upload_id data-count=u.untagged_count) Remove #{u.untagged_count} untagged
+
+    #tagModal.modal.fade(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title Tag receipt
+                    button.close(type='button' data-dismiss='modal') &times;
+                .modal-body
+                    p.mb-1
+                        strong#tagAmount
+                    p.small.text-muted#tagNarration(style='word-break:break-word;')
+                    .form-group
+                        label Location that paid
+                        select#tagLocation.form-control
+                            option(value='') Select...
+                            each loc in locations
+                                option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
+                    #tagPaymentsWrap.form-group(style='display:none')
+                        label Already entered? Connect to:
+                        #tagPayments
+                    p.small#tagOutcome
+                    .form-group.mb-0
+                        label.mb-1(for='tagRemember') Remember this payer for this location (blank = don't):
+                        input#tagRemember.form-control(type='text' maxlength='150')
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button#btnTagSave.btn.btn-primary(type='button') Save
+
+    script.
+        const UNLINKED_PAYMENTS = !{JSON.stringify(unlinkedPayments).replace(/</g, '\\u003c')};
+        let tagLineId = null;
+        let tagLineAmount = 0;
+
+        function applyFilter() {
+            window.location.href = '/platform-billing/bank-receipts?status=' + $('#filterStatus').val()
+                + '&locationCode=' + encodeURIComponent($('#filterLocation').val());
+        }
+
+        function inr(n) {
+            return '₹' + Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function postJson(url, body) {
+            return $.ajax({ url: url, method: 'POST', contentType: 'application/json', data: JSON.stringify(body || {}) });
+        }
+
+        function showError(xhr) {
+            alert((xhr.responseJSON && xhr.responseJSON.error) || 'Something went wrong');
+        }
+
+        function updateOutcome() {
+            let left = tagLineAmount;
+            const parts = [];
+            $('.pbr-pay:checked').each(function () {
+                const used = Math.min(left, Number($(this).data('remaining')));
+                left = Math.round((left - used) * 100) / 100;
+                parts.push('#' + $(this).val());
+            });
+            const text = [];
+            if (parts.length) text.push('Connects to payment ' + parts.join(', ') + '.');
+            if (left > 0) text.push('Creates a new payment of ' + inr(left) + ', applied to the oldest unpaid invoices.');
+            $('#tagOutcome').text(text.join(' '));
+        }
+
+        function renderPayments(preselectId) {
+            const location = $('#tagLocation').val();
+            const list = UNLINKED_PAYMENTS.filter(function (p) { return p.location_code === location; });
+            const box = $('#tagPayments').empty();
+            list.forEach(function (p) {
+                const label = $('<label class="pbr-pay-row"></label>');
+                $('<input type="checkbox" class="pbr-pay mr-2">')
+                    .val(p.payment_id)
+                    .attr('data-remaining', p.remaining)
+                    .prop('checked', p.payment_id === preselectId)
+                    .appendTo(label);
+                let text = '#' + p.payment_id + ' · ' + p.date_label + ' · ' + inr(p.amount);
+                if (p.remaining !== p.amount) text += ' (' + inr(p.remaining) + ' left)';
+                text += ' · ' + p.mode + (p.reference ? ' · ' + p.reference : '');
+                label.append(document.createTextNode(text));
+                box.append(label);
+            });
+            $('#tagPaymentsWrap').toggle(list.length > 0);
+            updateOutcome();
+        }
+
+        $(function () {
+            $('#btnUpload').on('click', function () {
+                const file = document.getElementById('statementFile').files[0];
+                if (!file) { alert('Please choose the statement file.'); return; }
+                const form = new FormData();
+                form.append('statementFile', file);
+                const btn = $(this).prop('disabled', true).text('Uploading...');
+                $.ajax({ url: '/platform-billing/bank-receipts/upload', method: 'POST', data: form, processData: false, contentType: false })
+                    .done(function (r) {
+                        alert(r.added + ' new credit line(s) added, ' + r.skipped + ' already uploaded.');
+                        window.location.href = '/platform-billing/bank-receipts';
+                    })
+                    .fail(function (xhr) { showError(xhr); btn.prop('disabled', false).text('Upload'); });
+            });
+
+            $('#btnApply').on('click', function () {
+                const ids = $('.pbr-tick:checked').map(function () { return Number(this.value); }).get();
+                if (!ids.length) { alert('No lines ticked.'); return; }
+                if (!confirm('Apply the suggestion on ' + ids.length + ' line(s)?')) return;
+                const btn = $(this).prop('disabled', true);
+                postJson('/platform-billing/bank-receipts/apply-suggestions', { ids: ids })
+                    .done(function (r) {
+                        let msg = r.linked + ' linked to existing payments, ' + r.created + ' new payment(s) created.';
+                        if (r.failed.length) msg += '\n\nNot applied:\n' + r.failed.join('\n');
+                        alert(msg);
+                        window.location.reload();
+                    })
+                    .fail(function (xhr) { showError(xhr); btn.prop('disabled', false); });
+            });
+
+            $('.pbr-tag').on('click', function () {
+                const b = $(this);
+                tagLineId = b.data('id');
+                tagLineAmount = Number(b.attr('data-amount'));
+                $('#tagAmount').text(inr(tagLineAmount));
+                $('#tagNarration').text(b.attr('data-narration') || '');
+                $('#tagLocation').val(b.attr('data-location') || '');
+                $('#tagRemember').val(b.attr('data-payer') || '');
+                renderPayments(Number(b.attr('data-payment')) || null);
+                $('#tagModal').modal('show');
+            });
+
+            $('#tagLocation').on('change', function () { renderPayments(null); });
+            $('#tagPayments').on('change', '.pbr-pay', updateOutcome);
+
+            $('#btnTagSave').on('click', function () {
+                const locationCode = $('#tagLocation').val();
+                if (!locationCode) { alert('Please choose the location that paid.'); return; }
+                const paymentIds = $('.pbr-pay:checked').map(function () { return Number(this.value); }).get();
+                const btn = $(this).prop('disabled', true);
+                postJson('/platform-billing/bank-receipts/' + tagLineId + '/tag', {
+                    locationCode: locationCode,
+                    paymentIds: paymentIds,
+                    rememberText: $('#tagRemember').val()
+                })
+                    .done(function () { window.location.reload(); })
+                    .fail(function (xhr) { showError(xhr); btn.prop('disabled', false); });
+            });
+
+            $('.pbr-action').on('click', function () {
+                const b = $(this);
+                const message = b.attr('data-confirm');
+                if (message && !confirm(message)) return;
+                postJson('/platform-billing/bank-receipts/' + b.data('id') + '/' + b.data('action'))
+                    .done(function () { window.location.reload(); })
+                    .fail(showError);
+            });
+
+            $('.pbr-remove-upload').on('click', function () {
+                const b = $(this);
+                if (!confirm('Remove the ' + b.data('count') + ' untagged line(s) from this upload? Tagged lines stay.')) return;
+                postJson('/platform-billing/bank-receipts/uploads/' + b.data('id') + '/remove')
+                    .done(function () { window.location.reload(); })
+                    .fail(showError);
+            });
+        });
