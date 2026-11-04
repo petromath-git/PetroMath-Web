@@ -498,7 +498,29 @@ module.exports = {
         `, { replacements: { bowserId, locationCode, toDate }, type: db.Sequelize.QueryTypes.SELECT });
     },
 
-    getFillsReport:(locationCode, fromDate, toDate, bowserId) => {
+    getStockFillDetails: (bowserId, locationCode, date) => {
+        return db.sequelize.query(`
+            SELECT ic.closing_id, p.Person_Name AS cashier_name, ic.quantity
+            FROM t_closing_intercompany ic
+            LEFT JOIN t_closing c ON c.closing_id = ic.closing_id
+            LEFT JOIN m_persons p ON p.Person_id = c.cashier_id
+            WHERE ic.bowser_id = :bowserId
+              AND ic.location_code = :locationCode
+              AND ic.closing_date = :date
+            ORDER BY ic.closing_id, ic.id
+        `, { replacements: { bowserId, locationCode, date }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
+    getBowserClosingForDate: (bowserId, locationCode, date) => {
+        return db.sequelize.query(`
+            SELECT bowser_closing_id, rate
+            FROM t_bowser_closing
+            WHERE bowser_id = :bowserId AND location_code = :locationCode AND closing_date = :date
+        `, { replacements: { bowserId, locationCode, date }, type: db.Sequelize.QueryTypes.SELECT })
+        .then(rows => rows[0] || null);
+    },
+
+    getFillsReport: (locationCode, fromDate, toDate, bowserId) => {
         const bowserFilter = bowserId ? 'AND ic.bowser_id = :bowserId' : '';
         return db.sequelize.query(`
             SELECT ic.closing_date, b.bowser_name, p.product_name, ic.quantity
