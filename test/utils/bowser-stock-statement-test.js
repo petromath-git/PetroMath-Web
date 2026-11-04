@@ -1,4 +1,4 @@
-const { buildStockStatement } = require("../../utils/bowser-stock-statement");
+const { buildStockStatement, buildOutBreakup } = require("../../utils/bowser-stock-statement");
 const { expect } = require("chai");
 
 const move = (movement_date, fill_qty, credit_qty = 0, cash_qty = 0, digital_qty = 0, status = null, bowser_closing_id = null) =>
@@ -66,6 +66,27 @@ describe("Bowser stock statement", function () {
         expect(s.days).to.eql([]);
         expect(s.opening).to.equal(0);
         expect(s.closing).to.equal(0);
+    });
+
+    it("breaks a day's out into credit, cash and digital, in litres", function () {
+        const b = buildOutBreakup(
+            [{ customer_name: 'ABC', vehicle_number: 'TN01', bill_no: '7', quantity: '100.000', amount: '10000.00' }],
+            [{ amount: '5000.00' }],
+            [{ digital_vendor_name: 'UPI', digital_ref: 'R1', amount: '2500.00' }],
+            100
+        );
+        expect(b.groups.map(g => g.label)).to.eql(['Credit', 'Cash', 'Digital']);
+        expect(b.groups.map(g => g.litres)).to.eql([100, 50, 25]);
+        expect(b.groups[0].lines[0].party).to.equal('ABC');
+        expect(b.total_litres).to.equal(175);
+        expect(b.total_amount).to.equal(17500);
+    });
+
+    it("leaves out types with no entries, and handles a closing with none", function () {
+        const b = buildOutBreakup([], [{ amount: '55220.00' }], [], 100.16);
+        expect(b.groups.map(g => g.label)).to.eql(['Cash']);
+        expect(b.total_litres).to.equal(551.318);
+        expect(buildOutBreakup([], [], [], 100).groups).to.eql([]);
     });
 
     it("flags balances that cannot be real", function () {
