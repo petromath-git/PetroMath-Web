@@ -119,6 +119,15 @@ block content
                             td.num(data-label='IGST')= dash
                             td.num(data-label='CGST')= dash
                             td.num(data-label='SGST')= dash
+                        if w.rcmOutward && w.rcmOutward.txval
+                            tr.text-muted
+                                td.m-title
+                                    | Tank truck freight, reverse charge (the oil company pays the tax)
+                                    .small Filed in GSTR-1 Table 4B. Not in 3.1(a) and not payable by you. Ask your auditor whether to also show the value in 3.1(c).
+                                td.num(data-label='Taxable value')= inr(w.rcmOutward.txval)
+                                td.num(data-label='IGST')= dash
+                                td.num(data-label='CGST')= inr(w.rcmOutward.camt)
+                                td.num(data-label='SGST')= inr(w.rcmOutward.samt)
             .card-body.py-2.table-sub 3.1.1 and 3.2: all zero (no e-commerce sales, no sales to other states).
 
         //- 4

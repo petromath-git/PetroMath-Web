@@ -36,6 +36,19 @@
 //                                                         raises a DELETE event (rental-dao cancelInvoice).
 //                                                         Rent received posts from the rent bank's BANK_TXN
 //                                                         (Static label "RENT - <tenant>" → tenant ledger).
+//   TT_INVOICE          (source_id = t_tt_invoice.invoice_id) — tank truck freight bill raised by the oil company
+//                                                         in the dealer's name: Oil-co TT debtor DR (taxable - TDS)
+//                                                         + TDS Receivable DR / TT freight income CR (taxable).
+//                                                         No GST lines: reverse charge, the oil company pays it.
+//                                                         Deleting a posted bill raises a DELETE event. The bank
+//                                                         part of the payment posts from BANK_TXN (Static label
+//                                                         "TT FREIGHT - <oil company>" → debtor).
+//   TT_CARD_STATEMENT   (source_id = t_tt_card_statement.statement_id) — XTRAPOWER fleet card month, one
+//                                                         voucher per card recharge (card DR / oil-co TT debtor
+//                                                         CR), per diesel sale (TANK TRUCK DIESEL DR / card CR)
+//                                                         and per points-to-card credit (card DR / points CR),
+//                                                         plus one for the month's loyalty (points DR / loyalty
+//                                                         income CR, TDS Receivable DR / points CR).
 //
 // Raised automatically by DB triggers on source tables.
 // UPDATE events reverse existing vouchers and regenerate fresh ones.
@@ -613,6 +626,38 @@ async function generateMissingEvents(locationCode, fromDate, toDate, createdBy, 
           )
     `);
 
+    await run('TT_INVOICE', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT ti.location_code, fy.fy_id, 'TT_INVOICE', ti.invoice_id, 'CREATE',
+               ti.bill_date, 'UNPROCESSED', :createdBy
+        FROM t_tt_invoice ti
+        JOIN gl_financial_years fy ON fy.location_code = ti.location_code
+            AND ti.bill_date BETWEEN fy.start_date AND fy.end_date
+        WHERE ti.location_code = :locationCode
+          AND ti.bill_date BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'TT_INVOICE' AND e.source_id = ti.invoice_id
+          )
+    `);
+
+    await run('TT_CARD_STATEMENT', `
+        INSERT INTO gl_accounting_events
+            (location_code, fy_id, source_type, source_id, event_type, event_date, event_status, created_by)
+        SELECT cs.location_code, fy.fy_id, 'TT_CARD_STATEMENT', cs.statement_id, 'CREATE',
+               cs.period_to, 'UNPROCESSED', :createdBy
+        FROM t_tt_card_statement cs
+        JOIN gl_financial_years fy ON fy.location_code = cs.location_code
+            AND cs.period_to BETWEEN fy.start_date AND fy.end_date
+        WHERE cs.location_code = :locationCode
+          AND cs.period_to BETWEEN :fromDate AND :toDate
+          AND NOT EXISTS (
+              SELECT 1 FROM gl_accounting_events e
+              WHERE e.source_type = 'TT_CARD_STATEMENT' AND e.source_id = cs.statement_id
+          )
+    `);
+
     log.info(`Generate Events done — total inserted=${total}` +
         (total > 0 ? (' (' + Object.entries(counts).filter(([,v])=>v>0).map(([k,v])=>`${k}:${v}`).join(' ') + ')') : ''));
 
@@ -645,6 +690,8 @@ async function processEvent(event, processedBy) {
         case 'ADJUSTMENT':          return await processAdjustmentEvent(event, processedBy);
         case 'CREDIT_RECEIPT':      return await processCreditReceiptEvent(event, processedBy);
         case 'RENTAL_INVOICE':      return await processRentalInvoiceEvent(event, processedBy);
+        case 'TT_INVOICE':          return await processTtInvoiceEvent(event, processedBy);
+        case 'TT_CARD_STATEMENT':   return await processTtCardStatementEvent(event, processedBy);
         default:
             throw new Error(`Unhandled source_type: ${event.source_type}`);
     }
@@ -1802,6 +1849,148 @@ async function processRentalInvoiceEvent(event, processedBy) {
 
     await markEventProcessed(event.event_id, vid, processedBy);
     return { voucherCount: 1 };
+}
+
+// ─── TT_INVOICE Handler ───────────────────────────────────────────────────────
+// Oil-co TT debtor DR (taxable - TDS) + TDS Receivable DR (TDS) → TT freight income CR (taxable).
+// GST is under reverse charge (the oil company pays it), so it is not in the dealer's books.
+
+async function processTtInvoiceEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: invoiceId, event_date } = event;
+
+    const rows = await query(`
+        SELECT ti.bill_no, ti.taxable_value, ti.tds_amount, ti.net_receivable, ti.trip_count, ti.total_kl,
+               ti.vehicles, ti.period_from, ti.period_to,
+               v.oil_company, v.debtor_ledger_id, v.income_ledger_id, v.tds_ledger_id
+        FROM t_tt_invoice ti
+        JOIN m_tt_vendor v ON v.vendor_id = ti.vendor_id
+        WHERE ti.invoice_id = :invoiceId
+    `, { replacements: { invoiceId }, type: QueryTypes.SELECT });
+
+    if (!rows.length) throw new Error(`Tank truck freight bill not found: invoice_id=${invoiceId}`);
+    const row = rows[0];
+    if (!row.debtor_ledger_id) throw new Error(`Debtor ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+    if (!row.income_ledger_id) throw new Error(`Freight income ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+
+    const taxable = Math.round(parseFloat(row.taxable_value) * 100) / 100;
+    const tds = Math.round(parseFloat(row.tds_amount || 0) * 100) / 100;
+    const fmt = (d) => d ? String(d instanceof Date ? d.toISOString() : d).substring(0, 10) : '';
+    const narration = `TT freight bill ${row.bill_no} | ${row.oil_company} | ${row.vehicles || ''} | ` +
+        `${row.trip_count} trips ${fmt(row.period_from)} to ${fmt(row.period_to)} | ₹${taxable.toFixed(2)}`;
+
+    const lines = [{ ledger_id: row.debtor_ledger_id, dr_amount: Math.round((taxable - tds) * 100) / 100, cr_amount: 0, narration }];
+    if (tds > 0) {
+        if (!row.tds_ledger_id) throw new Error(`TDS Receivable ledger not set for the ${row.oil_company} transporter at ${location_code} (Tank Truck Master)`);
+        lines.push({ ledger_id: row.tds_ledger_id, dr_amount: tds, cr_amount: 0, narration });
+    }
+    lines.push({ ledger_id: row.income_ledger_id, dr_amount: 0, cr_amount: taxable, narration });
+
+    const vid = await createVoucher({
+        locationCode: location_code,
+        fyId:         fy_id,
+        voucherType:  'SALES',
+        voucherDate:  event_date,
+        sourceType:   'TT_INVOICE',
+        sourceId:     invoiceId,
+        narration,
+        lines,
+        postedBy:     processedBy
+    });
+
+    await markEventProcessed(event.event_id, vid, processedBy);
+    return { voucherCount: 1 };
+}
+
+// ─── TT_CARD_STATEMENT Handler ────────────────────────────────────────────────
+// One XTRAPOWER monthly statement. Loyalty is in points (points_per_rupee, 100 = Rs 1); the
+// LOYALTY_REDEEM rows are the points side of a points-to-card credit and are not booked again.
+
+async function processTtCardStatementEvent(event, processedBy) {
+    const { location_code, fy_id, source_id: statementId } = event;
+
+    const heads = await query(`
+        SELECT cs.statement_id, cs.period_from, cs.period_to, c.customer_id, c.points_per_rupee,
+               c.wallet_ledger_id, c.points_ledger_id, c.diesel_ledger_id, c.loyalty_income_ledger_id, c.tds_ledger_id,
+               v.oil_company, v.debtor_ledger_id
+        FROM t_tt_card_statement cs
+        JOIN m_tt_fleet_card c ON c.card_id = cs.card_id
+        LEFT JOIN m_tt_vendor v ON v.vendor_id = c.vendor_id
+        WHERE cs.statement_id = :statementId
+    `, { replacements: { statementId }, type: QueryTypes.SELECT });
+    if (!heads.length) throw new Error(`XTRAPOWER statement not found: statement_id=${statementId}`);
+    const h = heads[0];
+    const txns = await query(`
+        SELECT kind, txn_date, txn_ref, merchant, vehicle_no, product, amount, rupees
+        FROM t_tt_card_txn WHERE statement_id = :statementId ORDER BY sno
+    `, { replacements: { statementId }, type: QueryTypes.SELECT });
+
+    const need = (id, what) => { if (!id) throw new Error(`${what} ledger not set for XTRAPOWER card ${h.customer_id} at ${location_code} (Tank Truck Master > Fleet Cards)`); return id; };
+    const r2v = (n) => Math.round(parseFloat(n || 0) * 100) / 100;
+    const ymd = (d) => String(d instanceof Date ? d.toISOString() : d).substring(0, 10);
+    const card = `XTRAPOWER ${h.customer_id}`;
+    let count = 0, lastVid = null;
+    const post = async (date, narration, lines) => {
+        lastVid = await createVoucher({
+            locationCode: location_code, fyId: fy_id, voucherType: 'JOURNAL', voucherDate: ymd(date),
+            sourceType: 'TT_CARD_STATEMENT', sourceId: statementId, narration, lines, postedBy: processedBy
+        });
+        count++;
+    };
+
+    for (const t of txns) {
+        const amt = r2v(t.amount);
+        if (!amt) continue;
+        if (t.kind === 'RECHARGE') {
+            if (!h.debtor_ledger_id) throw new Error(`XTRAPOWER card ${h.customer_id} is not linked to an oil company vendor with a debtor ledger (Tank Truck Master > Fleet Cards)`);
+            const n = `${card} recharge ${t.txn_ref || ''} by ${t.merchant || h.oil_company} | TT freight paid onto card | ₹${amt.toFixed(2)}`;
+            await post(t.txn_date, n, [
+                { ledger_id: need(h.wallet_ledger_id, 'Card'), dr_amount: amt, cr_amount: 0, narration: n },
+                { ledger_id: h.debtor_ledger_id, dr_amount: 0, cr_amount: amt, narration: n }
+            ]);
+        } else if (t.kind === 'SALE' || t.kind === 'SALE_COMPLETE' || t.kind === 'REVERSAL') {
+            const n = `${card} ${t.kind === 'REVERSAL' ? 'reversal' : 'diesel'} ${t.vehicle_no || ''} at ${t.merchant || ''} | ${t.product || ''} | ₹${amt.toFixed(2)}`;
+            const diesel = need(h.diesel_ledger_id, 'Diesel'), wallet = need(h.wallet_ledger_id, 'Card');
+            const [dr, cr] = t.kind === 'REVERSAL' ? [wallet, diesel] : [diesel, wallet];
+            await post(t.txn_date, n, [
+                { ledger_id: dr, dr_amount: amt, cr_amount: 0, narration: n },
+                { ledger_id: cr, dr_amount: 0, cr_amount: amt, narration: n }
+            ]);
+        } else if (t.kind === 'POINTS_TO_CARD') {
+            const n = `${card} loyalty points turned into card money | ₹${amt.toFixed(2)}`;
+            await post(t.txn_date, n, [
+                { ledger_id: need(h.wallet_ledger_id, 'Card'), dr_amount: amt, cr_amount: 0, narration: n },
+                { ledger_id: need(h.points_ledger_id, 'Loyalty points'), dr_amount: 0, cr_amount: amt, narration: n }
+            ]);
+        }
+    }
+
+    // Loyalty for the month: awards as income, IOCL's TDS on them to TDS Receivable. Points are
+    // added up first and converted once, so the rupees match the statement's summary line.
+    const ppr = parseFloat(h.points_per_rupee) || 100;
+    const pts = (kind) => r2v(txns.filter(t => t.kind === kind).reduce((s, t) => s + parseFloat(t.amount || 0), 0) / ppr);
+    const award = pts('LOYALTY_AWARD'), tds = pts('LOYALTY_TDS'), expiry = pts('LOYALTY_EXPIRY');
+    if (award || tds || expiry) {
+        const points = need(h.points_ledger_id, 'Loyalty points');
+        const n = `${card} loyalty ${ymd(h.period_from)} to ${ymd(h.period_to)} | award ₹${award.toFixed(2)} | TDS ₹${tds.toFixed(2)}` +
+            (expiry ? ` | expired ₹${expiry.toFixed(2)}` : '');
+        const lines = [];
+        if (award) {
+            lines.push({ ledger_id: points, dr_amount: award, cr_amount: 0, narration: n });
+            lines.push({ ledger_id: need(h.loyalty_income_ledger_id, 'Loyalty income'), dr_amount: 0, cr_amount: award, narration: n });
+        }
+        if (tds) {
+            lines.push({ ledger_id: need(h.tds_ledger_id, 'TDS'), dr_amount: tds, cr_amount: 0, narration: n });
+            lines.push({ ledger_id: points, dr_amount: 0, cr_amount: tds, narration: n });
+        }
+        if (expiry) {
+            lines.push({ ledger_id: need(h.loyalty_income_ledger_id, 'Loyalty income'), dr_amount: expiry, cr_amount: 0, narration: n });
+            lines.push({ ledger_id: points, dr_amount: 0, cr_amount: expiry, narration: n });
+        }
+        await post(h.period_to, n, lines);
+    }
+
+    await markEventProcessed(event.event_id, lastVid, processedBy);
+    return { voucherCount: count };
 }
 
 async function resolveAdjustmentCounterpartLedger(row, locationCode) {

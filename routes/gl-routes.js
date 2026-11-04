@@ -2923,6 +2923,69 @@ router.get('/api/events/:eventId/source', [isLoginEnsured, security.hasPermissio
                     ]
                 };
             }
+        } else if (event.source_type === 'TT_INVOICE') {
+            const rows = await db.sequelize.query(`
+                SELECT ti.bill_no, ti.bill_date, ti.vehicles, ti.trip_count, ti.taxable_value, ti.tds_amount,
+                       ti.net_receivable, ti.recipient_name, 'Active' AS status
+                FROM t_tt_invoice ti
+                WHERE ti.invoice_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            if (!rows[0]) {
+                // Deleted from Tank Truck Freight: show it from the archive
+                const deleted = await db.sequelize.query(`
+                    SELECT bill_no, DATE_FORMAT(bill_date, '%Y-%m-%d') AS bill_date,
+                           JSON_UNQUOTE(JSON_EXTRACT(invoice_data, '$.vehicles')) AS vehicles,
+                           JSON_EXTRACT(invoice_data, '$.trip_count') AS trip_count,
+                           taxable_value, tds_amount, net_receivable,
+                           JSON_UNQUOTE(JSON_EXTRACT(invoice_data, '$.recipient_name')) AS recipient_name,
+                           CONCAT('DELETED (', COALESCE(delete_reason, ''), ')') AS status
+                    FROM t_tt_invoice_deleted WHERE invoice_id = :sid
+                    ORDER BY deleted_id DESC LIMIT 1`,
+                    { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+                );
+                rows.push(...deleted);
+            }
+            if (rows[0]) {
+                const r = rows[0];
+                detail = {
+                    title: 'Tank Truck Freight Bill',
+                    fields: [
+                        { label: 'Bill No',        value: r.bill_no },
+                        { label: 'Date',           value: r.bill_date ? String(r.bill_date).substring(0,10) : '' },
+                        { label: 'Billed to',      value: r.recipient_name },
+                        { label: 'Truck',          value: r.vehicles },
+                        { label: 'Trips',          value: r.trip_count },
+                        { label: 'Taxable',        value: r.taxable_value },
+                        { label: 'TDS',            value: r.tds_amount },
+                        { label: 'Net receivable', value: r.net_receivable },
+                        { label: 'Status',         value: r.status },
+                    ]
+                };
+            }
+        } else if (event.source_type === 'TT_CARD_STATEMENT') {
+            const rows = await db.sequelize.query(`
+                SELECT c.customer_id, DATE_FORMAT(s.period_from, '%Y-%m-%d') AS period_from, DATE_FORMAT(s.period_to, '%Y-%m-%d') AS period_to,
+                       s.ccms_opening, s.ccms_recharge, s.ccms_sale, s.ccms_closing, s.pts_award, s.pts_tds,
+                       (SELECT COUNT(*) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id) AS txn_count
+                FROM t_tt_card_statement s JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+                WHERE s.statement_id = :sid`,
+                { replacements: { sid: event.source_id }, type: db.Sequelize.QueryTypes.SELECT }
+            );
+            const r = rows[0];
+            detail = {
+                title: 'XTRAPOWER Card Statement',
+                fields: r ? [
+                    { label: 'Customer ID',  value: r.customer_id },
+                    { label: 'Period',       value: `${r.period_from} to ${r.period_to}` },
+                    { label: 'Opening',      value: r.ccms_opening },
+                    { label: 'Recharge',     value: r.ccms_recharge },
+                    { label: 'Sales',        value: r.ccms_sale },
+                    { label: 'Closing',      value: r.ccms_closing },
+                    { label: 'Loyalty pts',  value: `${r.pts_award} awarded, ${r.pts_tds} TDS` },
+                    { label: 'Transactions', value: r.txn_count },
+                ] : [{ label: 'Status', value: 'Deleted from Tank Truck Freight' }]
+            };
         }
 
         res.json({

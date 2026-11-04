@@ -1,0 +1,970 @@
+extends ../layout
+
+//- Tank Truck Freight (Transport module, phase 1). Two pages share this view:
+//- /tt (Transactions: freight bills, statement, deleted) and /tt/master (Masters: vendor, trucks).
+//- Row data for the edit modals lives in data-* attributes, so names are always HTML-escaped.
+
+mixin glBadge(b)
+    if b.gl_status === 'PROCESSED'
+        span.badge.badge-light.border(title="Posted by Create Accounting") Posted
+    else if b.gl_status === 'ERROR'
+        span.badge.badge-danger(title=b.gl_error || 'Create Accounting failed — see GL Control') Error
+    else
+        span.badge.badge-light.border.text-muted(title="Posts on the next Create Accounting run") Pending
+
+block content
+    style.
+        .tt-tabs .nav-link { font-weight: 600; }
+        .stat-tile { border: 1px solid #dee2e6; border-radius: 0.5rem; padding: 8px 12px; background: #fff; }
+        .stat-tile .lbl { font-size: 11px; color: #6c757d; text-transform: uppercase; }
+        .stat-tile .val { font-size: 18px; font-weight: 700; }
+        .tt-month td { background: #f1f4f8; font-weight: 600; }
+        .num { text-align: right; white-space: nowrap; }
+        @media (max-width: 575px) {
+            .stat-tile { padding: 6px 8px; }
+            .stat-tile .val { font-size: 13px; white-space: nowrap; }
+            .stat-tile .lbl { font-size: 10px; }
+            .tt-hide-sm { display: none; }
+        }
+
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .container-fluid.py-3
+        .d-flex.align-items-center.flex-wrap.mb-2
+            div.mr-auto
+                h4.mb-0.text-primary= page.title
+                if !notSetUp && vendor
+                    small.text-muted #{vendor.oil_company} vendor #{vendor.vendor_code} · #{vendor.vendor_name}
+            if !notSetUp
+                if page.basePath === '/tt' && canMaster
+                    a.btn.btn-outline-secondary.btn-sm.mt-1(href="/tt/master")
+                        i.bi.bi-truck-front.mr-1
+                        | Vendor &amp; Trucks
+                else if page.basePath !== '/tt' && canBills
+                    a.btn.btn-outline-secondary.btn-sm.mt-1(href="/tt")
+                        i.bi.bi-receipt.mr-1
+                        | Freight Bills
+
+        if notSetUp
+            .alert.alert-info Tank truck freight is not set up for #{user.location_code}.
+        else
+            ul.nav.nav-tabs.tt-tabs.mb-3
+                each t in page.tabs
+                    li.nav-item
+                        a.nav-link(class=(tab === t[0] ? 'active' : '') href=`${page.basePath}?tab=${t[0]}`)= t[1]
+
+            //- Bank credits still tagged the old way (straight to freight income)
+            if oldLabelReceipts && oldLabelReceipts.length
+                - var oldTotal = oldLabelReceipts.reduce(function (s, r) { return s + Number(r.amount); }, 0)
+                .alert.alert-warning.small
+                    strong #{oldLabelReceipts.length} bank credit(s), ₹#{fmtAmt(oldTotal)}, from #{fmtDate(vendor.start_date)} are tagged to a label that books freight income directly.
+                    |  Now that the bills post the income, these would count it twice. Retag each to
+                    strong  #{receiptLabel}
+                    |  in Bank Reconciliation (it clears the #{vendor.debtor_ledger || 'debtor'} instead). Payments for bills dated before #{fmtDate(vendor.start_date)} can stay as they are.
+                    details.mt-1
+                        summary Show them
+                        table.table.table-sm.table-bordered.bg-white.mt-1.mb-0
+                            thead
+                                tr
+                                    th Date
+                                    th Bank
+                                    th Label
+                                    th.num Amount
+                                    th.tt-hide-sm Remarks
+                            tbody
+                                each r in oldLabelReceipts
+                                    tr
+                                        td= fmtDate(r.trans_date)
+                                        td #{r.bank_name} #{r.account_number}
+                                        td= r.label
+                                        td.num= fmtAmt(r.amount)
+                                        td.tt-hide-sm.small= r.remarks
+
+            //- ───────────────────────── Freight bills ─────────────────────────
+            if tab === 'bills'
+                .card.mb-3
+                    .card-body.py-2
+                        .font-weight-bold.mb-1
+                            i.bi.bi-upload.mr-1
+                            | Upload freight bill PDF
+                        .small.text-muted.mb-2
+                            | The #{vendor.oil_company} "Transportation Bill" PDF as downloaded. One file can hold several bills (e.g. both halves of a month). Bills already uploaded are skipped.
+                        .d-flex.flex-wrap.align-items-center
+                            input.form-control-file.mr-2.mb-1#billFile(type="file" accept=".pdf,application/pdf" style="max-width:340px")
+                            button.btn.btn-outline-primary.btn-sm.mb-1#previewBtn(type="button")
+                                i.bi.bi-eye.mr-1
+                                | Read file
+                        #previewArea.mt-2
+
+                form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="bills")
+                    .mr-2.mb-2
+                        label.small.mb-1 From
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+
+                .row.no-gutters.mb-3
+                    each tile in [['Bills', billCount, true], ['Trips', totals.trips, true], ['KL carried', totals.kl.toFixed(0), true], ['Freight (taxable)', totals.taxable], ['TDS', totals.tds], ['Due from ' + vendor.oil_company, totals.net]]
+                        .col-6.col-md-2.p-1
+                            .stat-tile
+                                .lbl= tile[0]
+                                .val= tile[2] ? tile[1] : '₹' + fmtAmt(tile[1])
+
+                if !months.length
+                    .text-muted.small No freight bills between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    .table-responsive
+                        table.table.table-sm.table-hover.mb-2
+                            thead.thead-light
+                                tr
+                                    th Bill No
+                                    th Date
+                                    th.tt-hide-sm Period
+                                    th.tt-hide-sm Truck
+                                    th.num Trips
+                                    th.num.tt-hide-sm KL
+                                    th.num Taxable
+                                    th.num.tt-hide-sm(title="Under reverse charge: paid by the oil company") GST (RCM)
+                                    th.num TDS
+                                    th.num Net due
+                                    th GL
+                                    th
+                            tbody
+                                each m in months
+                                    tr.tt-month
+                                        td(colspan=4)= m.label
+                                        td.num= m.trips
+                                        td.num.tt-hide-sm= m.kl.toFixed(0)
+                                        td.num= fmtAmt(m.taxable)
+                                        td.num.tt-hide-sm= fmtAmt(m.gst)
+                                        td.num= fmtAmt(m.tds)
+                                        td.num= fmtAmt(m.net)
+                                        td(colspan=2)
+                                    each b in m.bills
+                                        tr
+                                            td.text-nowrap= b.bill_no
+                                            td.text-nowrap= fmtDate(b.bill_date)
+                                            td.tt-hide-sm.small.text-nowrap #{fmtDate(b.period_from)} – #{fmtDate(b.period_to)}
+                                            td.tt-hide-sm= b.vehicles
+                                            td.num= b.trip_count
+                                            td.num.tt-hide-sm= Number(b.total_kl).toFixed(0)
+                                            td.num= fmtAmt(b.taxable_value)
+                                            td.num.tt-hide-sm= fmtAmt(Number(b.cgst_amount) + Number(b.sgst_amount) + Number(b.igst_amount))
+                                            td.num= fmtAmt(b.tds_amount)
+                                            td.num= fmtAmt(b.net_receivable)
+                                            td
+                                                +glBadge(b)
+                                            td.text-nowrap
+                                                button.btn.btn-outline-dark.btn-sm.mr-1.trips-btn(type="button" title="Trips" data-id=b.invoice_id)
+                                                    i.bi.bi-list-ul
+                                                button.btn.btn-outline-danger.btn-sm.delete-bill-btn(type="button" title="Delete bill" data-id=b.invoice_id data-no=b.bill_no)
+                                                    i.bi.bi-trash
+                    p.small.text-muted
+                        | Net due = taxable − TDS (#{vendor.tds_percent}%). GST is under reverse charge: the oil company pays it, so it is not owed to you and not payable by you. Each bill posts on the next Create Accounting run: #{vendor.debtor_ledger || 'debtor'} Dr, #{vendor.tds_ledger || 'TDS'} Dr / #{vendor.income_ledger || 'income'} Cr. In GSTR-1 the bills go in Table 4B.
+
+            //- ───────────────────────── Fleet card (XTRAPOWER) ─────────────────────────
+            if tab === 'card'
+                .card.mb-3
+                    .card-body.py-2
+                        .font-weight-bold.mb-1
+                            i.bi.bi-credit-card.mr-1
+                            | Upload XTRAPOWER monthly statement PDF
+                        .small.text-muted.mb-2
+                            | From the XTRAPOWER portal, one file per card per month. It books the card part of #{vendor.oil_company}'s payment (Recharge), the diesel bought on the card (Sale) and the loyalty points (100 points = ₹1) with the TDS #{vendor.oil_company} posts on them.
+                        .d-flex.flex-wrap.align-items-center
+                            input.form-control-file.mr-2.mb-1#cardFile(type="file" accept=".pdf,application/pdf" style="max-width:340px")
+                            button.btn.btn-outline-primary.btn-sm.mb-1#cardPreviewBtn(type="button")
+                                i.bi.bi-eye.mr-1
+                                | Read file
+                        #cardPreviewArea.mt-2
+
+                form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="card")
+                    .mr-2.mb-2
+                        label.small.mb-1 From
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+
+                if !statements.length
+                    .text-muted.small No XTRAPOWER statements between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    .table-responsive
+                        table.table.table-sm.table-hover
+                            thead.thead-light
+                                tr
+                                    th Month
+                                    th.tt-hide-sm Card
+                                    th.num Opening
+                                    th.num Recharge
+                                    th.num Diesel
+                                    th.num Closing
+                                    th.num.tt-hide-sm(title="Points awarded this month, in rupees") Loyalty ₹
+                                    th.num.tt-hide-sm(title="TDS IOCL posted on the loyalty, in rupees") Loyalty TDS ₹
+                                    th GL
+                                    th
+                            tbody
+                                each st in statements
+                                    tr
+                                        td.text-nowrap= fmtDate(st.period_from).substring(3)
+                                        td.tt-hide-sm= st.customer_id
+                                        td.num= fmtAmt(st.ccms_opening)
+                                        td.num= fmtAmt(st.ccms_recharge)
+                                        td.num= fmtAmt(st.ccms_sale)
+                                        td.num= fmtAmt(st.ccms_closing)
+                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_rs)
+                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_tds_rs)
+                                        td
+                                            +glBadge(st)
+                                        td.text-nowrap
+                                            button.btn.btn-outline-dark.btn-sm.mr-1.card-txns-btn(type="button" title="Transactions" data-id=st.statement_id)
+                                                i.bi.bi-list-ul
+                                            button.btn.btn-outline-danger.btn-sm.delete-card-btn(type="button" title="Delete statement" data-id=st.statement_id data-month=fmtDate(st.period_from).substring(3))
+                                                i.bi.bi-trash
+                    p.small.text-muted
+                        | Posts on the next Create Accounting run: Recharge → card Dr / #{vendor.debtor_ledger || 'debtor'} Cr · Diesel → TANK TRUCK DIESEL Dr / card Cr · Loyalty → XTRAPOWER LOYALTY POINTS Dr / XTRAPOWER LOYALTY INCOME Cr, and its TDS → TDS RECEIVABLE Dr / points Cr.
+
+            //- ───────────────────────── Reconciliation ─────────────────────────
+            if tab === 'recon'
+                form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="recon")
+                    if vendors.length > 1
+                        .mr-2.mb-2
+                            label.small.mb-1 Vendor
+                            select.form-control.form-control-sm(name="vendor")
+                                each v in vendors
+                                    option(value=v.vendor_id selected=(v.vendor_id === vendor.vendor_id)) #{v.oil_company} #{v.vendor_code}
+                    .mr-2.mb-2
+                        label.small.mb-1 Bills from
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+                p.small.text-muted.mb-2
+                    | One row per month of bills. #{vendor.oil_company} pays both half-month bills together about the 5th of the next month, so what came in the next month (bank credits tagged #[strong= receiptLabel] + XTRAPOWER card recharges) is set against them.
+                if !recon.rows.length
+                    .text-muted.small Nothing to reconcile between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    .table-responsive
+                        table.table.table-sm.table-bordered
+                            thead.thead-light
+                                tr
+                                    th Bills of
+                                    th.num Taxable
+                                    th.num.tt-hide-sm GST (RCM)
+                                    th.num TDS
+                                    th.num Due
+                                    th Paid in
+                                    th.num Bank
+                                    th.num Card
+                                    th.num Received
+                                    th.num Difference
+                            tbody
+                                each r in recon.rows
+                                    tr(class=(Math.abs(r.difference) > 1 ? 'table-warning' : ''))
+                                        td.text-nowrap
+                                            | #{monthLabel(r.month)}
+                                            .small.text-muted= r.bills.length ? r.bills.length + ' bill' + (r.bills.length > 1 ? 's' : '') : 'no bills'
+                                        td.num= fmtAmt(r.taxable)
+                                        td.num.tt-hide-sm= fmtAmt(r.gst)
+                                        td.num= fmtAmt(r.tds)
+                                        td.num.font-weight-bold= fmtAmt(r.due)
+                                        td.text-nowrap.small= monthLabel(r.paidIn)
+                                        td.num
+                                            = fmtAmt(r.bankTotal)
+                                            each x in r.bank
+                                                .small.text-muted #{fmtDate(x.txn_date)}
+                                        td.num
+                                            = fmtAmt(r.cardTotal)
+                                            each x in r.card
+                                                .small.text-muted #{fmtDate(x.txn_date)}
+                                        td.num.font-weight-bold
+                                            = fmtAmt(r.received)
+                                            if r.cardShare !== null
+                                                .small.text-muted bank #{(100 - r.cardShare).toFixed(0)}% / card #{r.cardShare.toFixed(0)}%
+                                        td.num.font-weight-bold(class=(Math.abs(r.difference) > 1 ? 'text-danger' : 'text-success'))= fmtAmt(r.difference)
+                                tr.font-weight-bold
+                                    td Total
+                                    td.num= fmtAmt(recon.totals.taxable)
+                                    td.num.tt-hide-sm= fmtAmt(recon.totals.gst)
+                                    td.num= fmtAmt(recon.totals.tds)
+                                    td.num= fmtAmt(recon.totals.due)
+                                    td
+                                    td.num= fmtAmt(recon.totals.bankTotal)
+                                    td.num= fmtAmt(recon.totals.cardTotal)
+                                    td.num= fmtAmt(recon.totals.received)
+                                    td.num= fmtAmt(recon.totals.difference)
+                    p.small.text-muted
+                        | Difference = due − received. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
+                        if !cards.length
+                            |  No fleet card is set up, so the card column is empty.
+
+            //- ───────────────────────── Statement ─────────────────────────
+            if tab === 'statement'
+                form.d-flex.flex-wrap.align-items-end.mb-3(method="get" action="/tt")
+                    input(type="hidden" name="tab" value="statement")
+                    if vendors.length > 1
+                        .mr-2.mb-2
+                            label.small.mb-1 Vendor
+                            select.form-control.form-control-sm(name="vendor")
+                                each v in vendors
+                                    option(value=v.vendor_id selected=(v.vendor_id === vendor.vendor_id)) #{v.oil_company} #{v.vendor_code}
+                    .mr-2.mb-2
+                        label.small.mb-1 From
+                        input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    .mr-2.mb-2
+                        label.small.mb-1 To
+                        input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    .mb-2
+                        button.btn.btn-sm.btn-secondary(type="submit") Show
+
+                .row.no-gutters.mb-3
+                    each tile in [['Opening', statement.opening], ['Bills (net of TDS)', statement.totalDebit], ['Received (bank + card)', statement.totalCredit], ['TDS deducted', statement.totalTds], ['Closing (still due)', statement.closing]]
+                        .col-6.col-md.p-1
+                            .stat-tile
+                                .lbl= tile[0]
+                                .val ₹#{fmtAmt(tile[1])}
+
+                .table-responsive
+                    table.table.table-sm.mb-2
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Type
+                                th Particulars
+                                th.num Bill (Dr)
+                                th.num Received (Cr)
+                                th.num Balance
+                        tbody
+                            tr.text-muted
+                                td= fmtDate(fromDate)
+                                td(colspan=4) Opening balance
+                                td.num= fmtAmt(statement.opening)
+                            each l in statement.lines
+                                tr
+                                    td.text-nowrap= fmtDate(l.txn_date)
+                                    td= l.txn_type
+                                    td.small= l.particulars
+                                    td.num= Number(l.debit) ? fmtAmt(l.debit) : ''
+                                    td.num= Number(l.credit) ? fmtAmt(l.credit) : ''
+                                    td.num= fmtAmt(l.balance)
+                            tr.font-weight-bold
+                                td(colspan=3) Total / closing
+                                td.num= fmtAmt(statement.totalDebit)
+                                td.num= fmtAmt(statement.totalCredit)
+                                td.num= fmtAmt(statement.closing)
+                p.small.text-muted
+                    | Received = bank credits tagged #[strong= receiptLabel] on the bank statement (#{vendor.receipt_bank || 'no receipt bank set'})
+                    | and card recharges from the uploaded XTRAPOWER statements (Fleet Card tab).
+
+            //- ───────────────────────── Deleted ─────────────────────────
+            if tab === 'deleted'
+                if !deletedInvoices.length
+                    .text-muted.small No deleted freight bills.
+                else
+                    .table-responsive
+                        table.table.table-sm
+                            thead.thead-light
+                                tr
+                                    th Bill No
+                                    th Date
+                                    th.num Taxable
+                                    th.num Net due
+                                    th Reason
+                                    th Deleted by
+                                    th Deleted on
+                            tbody
+                                each d in deletedInvoices
+                                    tr
+                                        td= d.bill_no
+                                        td= fmtDate(d.bill_date)
+                                        td.num= fmtAmt(d.taxable_value)
+                                        td.num= fmtAmt(d.net_receivable)
+                                        td.small= d.delete_reason
+                                        td= d.deleted_by
+                                        td.text-nowrap= fmtDate(d.deleted_date)
+
+            //- ───────────────────────── Master: vendor ─────────────────────────
+            if tab === 'vendors'
+                each v in vendors
+                    form.card.mb-3.vendor-form(data-id=v.vendor_id)
+                        .card-header.py-2.font-weight-bold #{v.oil_company} · vendor code #{v.vendor_code}
+                            if v.active_flag !== 'Y'
+                                span.badge.badge-secondary.ml-2 Inactive
+                        .card-body
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Vendor name (as on the bill)
+                                    input.form-control.form-control-sm(name="vendor_name" value=v.vendor_name required)
+                                .form-group.col-md-2
+                                    label.small SAC
+                                    input.form-control.form-control-sm(name="sac_code" value=v.sac_code)
+                                .form-group.col-md-2
+                                    label.small GST rate %
+                                    select.form-control.form-control-sm(name="gst_rate")
+                                        each r in [0, 5, 12, 18]
+                                            option(value=r selected=(Number(v.gst_rate) === r))= r
+                                .form-group.col-md-2
+                                    label.small(title="194C: 1% for an individual / HUF, 2% for a firm or company") TDS %
+                                    input.form-control.form-control-sm(name="tds_percent" type="number" step="0.01" min="0" max="10" value=Number(v.tds_percent))
+                                .form-group.col-md-2
+                                    label.small Bills from
+                                    input.form-control.form-control-sm(name="start_date" type="date" value=v.start_date_iso required)
+                            .form-row
+                                .form-group.col-md-3
+                                    label.small Debtor ledger (what #{v.oil_company} owes)
+                                    select.form-control.form-control-sm(name="debtor_ledger_id")
+                                        option(value="") —
+                                        each l in ledgers.filter(function (x) { return x.kind === 'debtor'; })
+                                            option(value=l.ledger_id selected=(l.ledger_id === v.debtor_ledger_id))= l.ledger_name
+                                .form-group.col-md-3
+                                    label.small Freight income ledger
+                                    select.form-control.form-control-sm(name="income_ledger_id")
+                                        option(value="") —
+                                        each l in ledgers.filter(function (x) { return x.kind === 'income'; })
+                                            option(value=l.ledger_id selected=(l.ledger_id === v.income_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-3
+                                    label.small TDS ledger
+                                    select.form-control.form-control-sm(name="tds_ledger_id")
+                                        option(value="") —
+                                        each l in ledgers.filter(function (x) { return x.kind === 'asset'; })
+                                            option(value=l.ledger_id selected=(l.ledger_id === v.tds_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-3
+                                    label.small Bank the payment comes into
+                                    select.form-control.form-control-sm(name="receipt_bank_id")
+                                        option(value="") —
+                                        each b in banks
+                                            option(value=b.bank_id selected=(b.bank_id === v.receipt_bank_id)) #{b.bank_name} #{b.account_number}
+                            .form-row
+                                .form-group.col-md-9
+                                    label.small Notes
+                                    input.form-control.form-control-sm(name="notes" value=v.notes || '')
+                                .form-group.col-md-3
+                                    label.small Status
+                                    select.form-control.form-control-sm(name="active_flag")
+                                        option(value="Y" selected=(v.active_flag === 'Y')) Active
+                                        option(value="N" selected=(v.active_flag !== 'Y')) Inactive
+                            .small.text-muted.mb-2
+                                | Bank credits tagged #[strong TT FREIGHT - #{v.oil_company}] on the payment bank clear the debtor ledger. #{v.invoice_count} bill(s) uploaded.
+                            button.btn.btn-primary.btn-sm(type="submit") Save
+
+            //- ───────────────────────── Master: trucks ─────────────────────────
+            if tab === 'trucks'
+                .mb-2
+                    button.btn.btn-success.btn-sm#addTruckBtn(type="button")
+                        i.bi.bi-plus-lg.mr-1
+                        | Add truck
+                .table-responsive
+                    table.table.table-sm.table-hover
+                        thead.thead-light
+                            tr
+                                th Truck
+                                th.tt-hide-sm Vendor
+                                th.num.tt-hide-sm KL
+                                th.tt-hide-sm Fleet card
+                                th Insurance
+                                th FC
+                                th.tt-hide-sm Permit
+                                th.tt-hide-sm Road tax
+                                th.num Trips
+                                th
+                        tbody
+                            each h in vehicles
+                                tr(class=(h.active_flag !== 'Y' ? 'text-muted' : ''))
+                                    td.font-weight-bold
+                                        | #{h.vehicle_no}
+                                        if h.active_flag !== 'Y'
+                                            span.badge.badge-secondary.ml-1 Inactive
+                                    td.tt-hide-sm= h.oil_company ? `${h.oil_company} ${h.vendor_code}` : '—'
+                                    td.num.tt-hide-sm= h.capacity_kl ? Number(h.capacity_kl) : ''
+                                    td.tt-hide-sm= h.fleet_card_id || ''
+                                    td.text-nowrap= fmtDate(h.insurance_expiry)
+                                    td.text-nowrap= fmtDate(h.fc_expiry)
+                                    td.tt-hide-sm.text-nowrap= fmtDate(h.permit_expiry)
+                                    td.tt-hide-sm.text-nowrap= fmtDate(h.tax_expiry)
+                                    td.num= h.trip_count
+                                    td.text-nowrap
+                                        button.btn.btn-outline-primary.btn-sm.mr-1.edit-truck-btn(type="button" title="Edit"
+                                            data-id=h.vehicle_id data-no=h.vehicle_no data-vendor=h.vendor_id data-kl=h.capacity_kl
+                                            data-card=h.fleet_card_id data-ins=h.insurance_expiry_iso data-fc=h.fc_expiry_iso
+                                            data-permit=h.permit_expiry_iso data-tax=h.tax_expiry_iso data-active=h.active_flag data-notes=h.notes)
+                                            i.bi.bi-pencil
+                                        if Number(h.trip_count) === 0
+                                            button.btn.btn-outline-danger.btn-sm.delete-truck-btn(type="button" title="Delete" data-id=h.vehicle_id data-no=h.vehicle_no)
+                                                i.bi.bi-trash
+                p.small.text-muted Trucks on an uploaded bill are added here automatically.
+
+                .modal.fade#truckModal(tabindex="-1")
+                    .modal-dialog
+                        form.modal-content#truckForm
+                            .modal-header
+                                h5.modal-title#truckModalTitle Truck
+                                button.close(type="button" data-dismiss="modal") &times;
+                            .modal-body
+                                input(type="hidden" name="vehicle_id")
+                                .form-row
+                                    .form-group.col-6
+                                        label.small Vehicle number
+                                        input.form-control.form-control-sm(name="vehicle_no" required placeholder="TN39BY1899")
+                                    .form-group.col-6
+                                        label.small Vendor
+                                        select.form-control.form-control-sm(name="vendor_id")
+                                            option(value="") —
+                                            each v in vendors
+                                                option(value=v.vendor_id) #{v.oil_company} #{v.vendor_code}
+                                .form-row
+                                    .form-group.col-6
+                                        label.small Capacity (KL)
+                                        input.form-control.form-control-sm(name="capacity_kl" type="number" step="0.01")
+                                    .form-group.col-6
+                                        label.small Fleet card (XtraPower customer id)
+                                        input.form-control.form-control-sm(name="fleet_card_id")
+                                .form-row
+                                    .form-group.col-6
+                                        label.small Insurance valid till
+                                        input.form-control.form-control-sm(name="insurance_expiry" type="date")
+                                    .form-group.col-6
+                                        label.small FC valid till
+                                        input.form-control.form-control-sm(name="fc_expiry" type="date")
+                                .form-row
+                                    .form-group.col-6
+                                        label.small Permit valid till
+                                        input.form-control.form-control-sm(name="permit_expiry" type="date")
+                                    .form-group.col-6
+                                        label.small Road tax valid till
+                                        input.form-control.form-control-sm(name="tax_expiry" type="date")
+                                .form-row
+                                    .form-group.col-8
+                                        label.small Notes
+                                        input.form-control.form-control-sm(name="notes")
+                                    .form-group.col-4
+                                        label.small Status
+                                        select.form-control.form-control-sm(name="active_flag")
+                                            option(value="Y") Active
+                                            option(value="N") Inactive
+                            .modal-footer
+                                button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+                                button.btn.btn-primary.btn-sm(type="submit") Save
+
+            //- ───────────────────────── Master: fleet cards ─────────────────────────
+            if tab === 'cards'
+                if !cards.length
+                    .text-muted.small No XTRAPOWER fleet card is set up for #{user.location_code}.
+                each c in cards
+                    - var assets = ledgers.filter(function (x) { return x.kind === 'asset'; })
+                    form.card.mb-3.card-form(data-id=c.card_id)
+                        .card-header.py-2.font-weight-bold XTRAPOWER customer #{c.customer_id}
+                            if c.active_flag !== 'Y'
+                                span.badge.badge-secondary.ml-2 Inactive
+                        .card-body
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Name on the statement
+                                    input.form-control.form-control-sm(name="customer_name" value=c.customer_name || '')
+                                .form-group.col-md-3
+                                    label.small Freight paid onto it by
+                                    select.form-control.form-control-sm(name="vendor_id")
+                                        option(value="") —
+                                        each v in vendors
+                                            option(value=v.vendor_id selected=(v.vendor_id === c.vendor_id)) #{v.oil_company} #{v.vendor_code}
+                                .form-group.col-md-3
+                                    label.small Truck
+                                    select.form-control.form-control-sm(name="vehicle_id")
+                                        option(value="") —
+                                        each h in vehicles
+                                            option(value=h.vehicle_id selected=(h.vehicle_id === c.vehicle_id))= h.vehicle_no
+                                .form-group.col-md-2
+                                    label.small Statements from
+                                    input.form-control.form-control-sm(name="start_date" type="date" value=c.start_date_iso required)
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Card ledger (money on the card)
+                                    select.form-control.form-control-sm(name="wallet_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.wallet_ledger_id))= l.ledger_name
+                                .form-group.col-md-4
+                                    label.small Loyalty points ledger
+                                    select.form-control.form-control-sm(name="points_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.points_ledger_id))= l.ledger_name
+                                .form-group.col-md-4
+                                    label.small TDS ledger (TDS on loyalty)
+                                    select.form-control.form-control-sm(name="tds_ledger_id")
+                                        option(value="") —
+                                        each l in assets
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.tds_ledger_id))= l.ledger_name
+                            .form-row
+                                .form-group.col-md-4
+                                    label.small Diesel ledger
+                                    select.form-control.form-control-sm(name="diesel_ledger_id")
+                                        option(value="") —
+                                        each l in expenseLedgers
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.diesel_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-4
+                                    label.small Loyalty income ledger
+                                    select.form-control.form-control-sm(name="loyalty_income_ledger_id")
+                                        option(value="") —
+                                        each l in ledgers.filter(function (x) { return x.kind === 'income'; })
+                                            option(value=l.ledger_id selected=(l.ledger_id === c.loyalty_income_ledger_id)) #{l.ledger_name} (#{l.group_name})
+                                .form-group.col-md-4
+                                    label.small Status
+                                    select.form-control.form-control-sm(name="active_flag")
+                                        option(value="Y" selected=(c.active_flag === 'Y')) Active
+                                        option(value="N" selected=(c.active_flag !== 'Y')) Inactive
+                            .small.text-muted.mb-2 #{c.statement_count} statement(s) uploaded. Loyalty: #{c.points_per_rupee} points = ₹1.
+                            button.btn.btn-primary.btn-sm(type="submit") Save
+
+            //- Trips of one bill
+            .modal.fade#tripsModal(tabindex="-1")
+                .modal-dialog.modal-xl
+                    .modal-content
+                        .modal-header
+                            h5.modal-title#tripsTitle Trips
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body#tripsBody
+
+            //- Delete a bill
+            .modal.fade#deleteModal(tabindex="-1")
+                .modal-dialog
+                    form.modal-content#deleteForm
+                        .modal-header
+                            h5.modal-title#deleteTitle Delete bill
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body
+                            input(type="hidden" name="id")
+                            p.small If the bill was posted, Create Accounting reverses its voucher on the next run. You can upload it again afterwards.
+                            label.small Reason
+                            input.form-control.form-control-sm(name="reason" required maxlength="300")
+                        .modal-footer
+                            button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+                            button.btn.btn-danger.btn-sm(type="submit") Delete
+
+        script.
+            (function () {
+                function showMessage(text, ok) {
+                    var el = document.getElementById('messageAlert');
+                    el.className = 'alert alert-dismissible fade show ' + (ok ? 'alert-success' : 'alert-danger');
+                    document.getElementById('messageText').textContent = text;
+                    el.style.display = 'block';
+                    window.scrollTo(0, 0);
+                }
+
+                async function call(method, url, body, isForm) {
+                    var r = await fetch(url, isForm ? { method: method, body: body } : {
+                        method: method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: body ? JSON.stringify(body) : undefined
+                    });
+                    var data = {};
+                    try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+                    if (!r.ok || !data.success) throw new Error(data.error || ('Request failed (' + r.status + ')'));
+                    return data;
+                }
+
+                function formData(form) {
+                    var o = {};
+                    new FormData(form).forEach(function (v, k) { o[k] = v; });
+                    return o;
+                }
+
+                function fmt(n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+                function esc(s) {
+                    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                }
+
+                // ── Upload: read the file, show what would be saved, then save ──
+                var fileInput = document.getElementById('billFile');
+                var previewArea = document.getElementById('previewArea');
+                var STATUS = {
+                    NEW: '<span class="badge badge-success">New</span>',
+                    EXISTS: '<span class="badge badge-secondary">Already uploaded</span>',
+                    BEFORE_START: '<span class="badge badge-secondary">Before start date</span>',
+                    BLOCKED: '<span class="badge badge-danger">Cannot save</span>'
+                };
+                function fileForm() {
+                    var fd = new FormData();
+                    fd.append('file', fileInput.files[0]);
+                    return fd;
+                }
+                var previewBtn = document.getElementById('previewBtn');
+                if (previewBtn) previewBtn.addEventListener('click', async function () {
+                    if (!fileInput.files.length) return showMessage('Choose the freight bill PDF first.', false);
+                    previewBtn.disabled = true;
+                    previewArea.innerHTML = '<span class="text-muted small">Reading…</span>';
+                    try {
+                        var d = await call('POST', '/tt/api/upload/preview', fileForm(), true);
+                        var h = d.header, html = '';
+                        html += '<div class="small mb-2"><strong>' + esc(h.vendor_name) + '</strong> · vendor ' + esc(h.vendor_code) +
+                            ' · GSTIN ' + esc(h.vendor_gstin) + ' → ' + esc(h.recipient_name) + ' (' + esc(h.recipient_gstin) + ')</div>';
+                        d.errors.forEach(function (e) { html += '<div class="alert alert-danger small py-1 mb-1">' + esc(e) + '</div>'; });
+                        d.warnings.forEach(function (w) { html += '<div class="alert alert-warning small py-1 mb-1">' + esc(w) + '</div>'; });
+                        html += '<div class="table-responsive"><table class="table table-sm table-bordered bg-white mb-2"><thead class="thead-light"><tr>' +
+                            '<th>Bill No</th><th>Date</th><th>Period</th><th>Truck</th><th class="num">Trips</th><th class="num">Taxable</th>' +
+                            '<th class="num">GST (RCM)</th><th class="num">TDS</th><th class="num">Net due</th><th>Status</th></tr></thead><tbody>';
+                        var newCount = 0;
+                        d.bills.forEach(function (b, i) {
+                            if (b.status === 'NEW') newCount++;
+                            html += '<tr><td>' + esc(b.bill_no) + (b.reverse_charge === 'Y' ? '' : ' <span class="badge badge-warning">not RCM</span>') + '</td>' +
+                                '<td>' + esc(b.bill_date_display) + '</td><td class="small">' + esc(b.period) + '</td><td>' + esc(b.vehicles) + '</td>' +
+                                '<td class="num"><a href="#" class="pv-trips" data-i="' + i + '">' + b.trip_count + '</a></td>' +
+                                '<td class="num">' + fmt(b.taxable_value) + '</td><td class="num">' + fmt(b.cgst_amount + b.sgst_amount + b.igst_amount) + '</td>' +
+                                '<td class="num">' + fmt(b.tds_amount) + '</td><td class="num">' + fmt(b.net_receivable) + '</td>' +
+                                '<td>' + STATUS[b.status] + (b.problems.length ? '<div class="small text-danger">' + esc(b.problems.join(' ')) + '</div>' : '') + '</td></tr>';
+                        });
+                        html += '</tbody></table></div>';
+                        if (!d.errors.length && newCount) {
+                            html += '<button type="button" class="btn btn-success btn-sm" id="saveBillsBtn"><i class="bi bi-check2 mr-1"></i>Save ' + newCount + ' new bill' + (newCount > 1 ? 's' : '') + '</button>';
+                        } else if (!d.errors.length) {
+                            html += '<div class="small text-muted">Nothing new to save in this file.</div>';
+                        }
+                        previewArea.innerHTML = html;
+                        previewArea.querySelectorAll('.pv-trips').forEach(function (a) {
+                            a.addEventListener('click', function (ev) {
+                                ev.preventDefault();
+                                var b = d.bills[Number(a.dataset.i)];
+                                showTrips('Bill ' + b.bill_no + ' · ' + b.trip_count + ' trips', b.trips.map(function (t) {
+                                    return { sno: t.sno, truck: t.vehicle_no, inv: t.delivery_invoice_no, date: t.delivery_date, shipTo: t.ship_to,
+                                        mat: t.material_code, kl: t.qty_kl, km: t.km, gross: t.gross_amount };
+                                }));
+                            });
+                        });
+                        var saveBtn = document.getElementById('saveBillsBtn');
+                        if (saveBtn) saveBtn.addEventListener('click', async function () {
+                            saveBtn.disabled = true;
+                            try {
+                                var s = await call('POST', '/tt/api/upload', fileForm(), true);
+                                var msg = 'Saved ' + s.saved.length + ' bill(s): ' + s.saved.join(', ') + '.';
+                                if (s.skipped.length) msg += ' Skipped: ' + s.skipped.map(function (k) { return k.bill_no + ' (' + k.reason + ')'; }).join(', ') + '.';
+                                sessionStorage.setItem('ttMessage', msg);
+                                window.location.reload();
+                            } catch (e) {
+                                saveBtn.disabled = false;
+                                showMessage(e.message, false);
+                            }
+                        });
+                    } catch (e) {
+                        previewArea.innerHTML = '';
+                        showMessage(e.message, false);
+                    } finally {
+                        previewBtn.disabled = false;
+                    }
+                });
+                var pending = sessionStorage.getItem('ttMessage');
+                if (pending) { sessionStorage.removeItem('ttMessage'); showMessage(pending, true); }
+
+                // ── Trips modal ──
+                function showTrips(title, trips) {
+                    document.getElementById('tripsTitle').textContent = title;
+                    var html = '<div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead class="thead-light"><tr>' +
+                        '<th>#</th><th>Truck</th><th>Delivery inv.</th><th>Date</th><th>Ship-to</th><th>Material</th>' +
+                        '<th class="num">KL</th><th class="num">Km</th><th class="num">Freight</th></tr></thead><tbody>';
+                    var kl = 0, gross = 0;
+                    trips.forEach(function (t) {
+                        kl += Number(t.kl); gross += Number(t.gross);
+                        html += '<tr><td>' + t.sno + '</td><td>' + esc(t.truck) + '</td><td>' + esc(t.inv) + '</td><td class="text-nowrap">' + esc(t.date) + '</td>' +
+                            '<td>' + esc(t.shipTo) + '</td><td>' + esc(t.mat) + '</td><td class="num">' + Number(t.kl).toFixed(3) + '</td>' +
+                            '<td class="num">' + Number(t.km).toFixed(1) + '</td><td class="num">' + fmt(t.gross) + '</td></tr>';
+                    });
+                    html += '<tr class="font-weight-bold"><td colspan="6">Total</td><td class="num">' + kl.toFixed(3) + '</td><td></td><td class="num">' + fmt(gross) + '</td></tr>';
+                    html += '</tbody></table></div>';
+                    document.getElementById('tripsBody').innerHTML = html;
+                    $('#tripsModal').modal('show');
+                }
+                document.querySelectorAll('.trips-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        try {
+                            var d = await call('GET', '/tt/api/invoices/' + btn.dataset.id);
+                            var inv = d.invoice;
+                            showTrips('Bill ' + inv.bill_no + ' · ' + inv.bill_date_display + ' · ' + inv.period + ' (generated ' + inv.generated_on_display + ')',
+                                inv.lines.map(function (l) {
+                                    return { sno: l.sno, truck: l.vehicle_no, inv: l.delivery_invoice_no, date: l.delivery_date_display,
+                                        shipTo: (l.ship_to_code || '') + ' ' + (l.ship_to_name || ''), mat: l.material_code, kl: l.qty_kl,
+                                        km: Number(l.rtd_p) + Number(l.rtd_h) + Number(l.rtd_hh), gross: l.gross_amount };
+                                }));
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+
+                // ── Delete a bill ──
+                document.querySelectorAll('.delete-bill-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () {
+                        var f = document.getElementById('deleteForm');
+                        f.reset();
+                        f.elements.id.value = btn.dataset.id;
+                        document.getElementById('deleteTitle').textContent = 'Delete bill ' + btn.dataset.no;
+                        $('#deleteModal').modal('show');
+                    });
+                });
+                var deleteForm = document.getElementById('deleteForm');
+                if (deleteForm) deleteForm.addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    try {
+                        await call('POST', '/tt/api/invoices/' + deleteForm.elements.id.value + '/delete', { reason: deleteForm.elements.reason.value });
+                        sessionStorage.setItem('ttMessage', 'Bill deleted.');
+                        window.location.reload();
+                    } catch (e) { showMessage(e.message, false); }
+                });
+
+                // ── Fleet card statement: read, show, save ──
+                var KIND = { RECHARGE: 'Recharge (freight)', SALE: 'Diesel', SALE_COMPLETE: 'Diesel', REVERSAL: 'Reversal',
+                    POINTS_TO_CARD: 'Points → card', LOYALTY_AWARD: 'Loyalty award', LOYALTY_TDS: 'Loyalty TDS',
+                    LOYALTY_REDEEM: 'Points redeemed', LOYALTY_EXPIRY: 'Points expired', LOYALTY_OTHER: 'Loyalty (other)', OTHER: 'Other' };
+                function cardRows(txns) {
+                    var html = '<div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead class="thead-light"><tr>' +
+                        '<th>#</th><th>Date</th><th>Type</th><th>Merchant</th><th>Vehicle</th><th>Product</th>' +
+                        '<th class="num">Amount</th><th class="num">₹</th><th class="num">Card balance</th></tr></thead><tbody>';
+                    txns.forEach(function (t) {
+                        var pts = /^LOYALTY/.test(t.kind);
+                        html += '<tr' + (pts ? ' class="text-muted"' : '') + '><td>' + t.sno + '</td><td class="text-nowrap">' + esc(t.date) + '</td>' +
+                            '<td>' + esc(KIND[t.kind] || t.kind) + '</td><td>' + esc(t.merchant) + '</td><td>' + esc(t.vehicle_no || '') + '</td>' +
+                            '<td>' + esc(t.product || '') + '</td><td class="num">' + (pts ? Number(t.amount).toLocaleString('en-IN') + ' pts' : fmt(t.amount)) + '</td>' +
+                            '<td class="num">' + fmt(t.rupees) + '</td><td class="num">' + (pts ? '' : fmt(t.balance)) + '</td></tr>';
+                    });
+                    return html + '</tbody></table></div>';
+                }
+                var cardFile = document.getElementById('cardFile');
+                var cardArea = document.getElementById('cardPreviewArea');
+                function cardForm() { var fd = new FormData(); fd.append('file', cardFile.files[0]); return fd; }
+                var cardPreviewBtn = document.getElementById('cardPreviewBtn');
+                if (cardPreviewBtn) cardPreviewBtn.addEventListener('click', async function () {
+                    if (!cardFile.files.length) return showMessage('Choose the XTRAPOWER statement PDF first.', false);
+                    cardPreviewBtn.disabled = true;
+                    cardArea.innerHTML = '<span class="text-muted small">Reading…</span>';
+                    try {
+                        var d = await call('POST', '/tt/api/card/preview', cardForm(), true);
+                        var s = d.summary, c = s.ccms, L = s.loyalty, b = d.booked, html = '';
+                        html += '<div class="small mb-2"><strong>XTRAPOWER ' + esc(s.customer_id) + '</strong> ' + esc(s.customer_name || '') + ' · ' + esc(s.period) + '</div>';
+                        d.errors.forEach(function (e) { html += '<div class="alert alert-danger small py-1 mb-1">' + esc(e) + '</div>'; });
+                        d.warnings.forEach(function (w) { html += '<div class="alert alert-warning small py-1 mb-1">' + esc(w) + '</div>'; });
+                        html += '<div class="table-responsive"><table class="table table-sm table-bordered bg-white mb-2"><tbody>' +
+                            '<tr><td>Card: opening ' + fmt(c.opening) + ' + recharge ' + fmt(c.recharge) + ' − sales ' + fmt(c.sale + c.sale_complete) + ' = closing <strong>' + fmt(c.closing) + '</strong></td></tr>' +
+                            (L ? '<tr><td>Loyalty points: opening ' + L.opening + ' + award ' + L.award + ' − redeemed ' + L.redemption + ' − TDS ' + L.tds + ' − expired ' + L.expiry + ' = closing <strong>' + L.closing + '</strong></td></tr>' : '') +
+                            '<tr><td>Will book: freight recharge <strong>₹' + fmt(b.recharge) + '</strong> · diesel <strong>₹' + fmt(b.diesel) + '</strong>' +
+                            (b.pointsToCard ? ' · points to card ₹' + fmt(b.pointsToCard) : '') + ' · loyalty ₹' + fmt(b.loyalty) + ' · its TDS ₹' + fmt(b.loyaltyTds) + '</td></tr>' +
+                            '</tbody></table></div>';
+                        html += '<details class="mb-2"><summary class="small">' + d.txns.length + ' transactions</summary>' + cardRows(d.txns) + '</details>';
+                        if (d.status === 'EXISTS') html += '<div class="small text-muted">This statement is already uploaded.</div>';
+                        else if (d.status === 'BEFORE_START') html += '<div class="small text-muted">This month is before the card\'s start date; not taken.</div>';
+                        else if (!d.errors.length) html += '<button type="button" class="btn btn-success btn-sm" id="saveCardBtn"><i class="bi bi-check2 mr-1"></i>Save statement</button>';
+                        cardArea.innerHTML = html;
+                        var saveCardBtn = document.getElementById('saveCardBtn');
+                        if (saveCardBtn) saveCardBtn.addEventListener('click', async function () {
+                            saveCardBtn.disabled = true;
+                            try {
+                                await call('POST', '/tt/api/card', cardForm(), true);
+                                sessionStorage.setItem('ttMessage', 'XTRAPOWER statement for ' + s.period + ' saved.');
+                                window.location.reload();
+                            } catch (e) { saveCardBtn.disabled = false; showMessage(e.message, false); }
+                        });
+                    } catch (e) {
+                        cardArea.innerHTML = '';
+                        showMessage(e.message, false);
+                    } finally {
+                        cardPreviewBtn.disabled = false;
+                    }
+                });
+                document.querySelectorAll('.card-txns-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        try {
+                            var d = await call('GET', '/tt/api/card/' + btn.dataset.id);
+                            var s = d.statement;
+                            document.getElementById('tripsTitle').textContent = 'XTRAPOWER ' + s.customer_id + ' · ' + s.period;
+                            document.getElementById('tripsBody').innerHTML = cardRows(s.txns);
+                            $('#tripsModal').modal('show');
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+                document.querySelectorAll('.delete-card-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete the XTRAPOWER statement for ' + btn.dataset.month + '? If it was posted, Create Accounting reverses it.')) return;
+                        try {
+                            await call('DELETE', '/tt/api/card/' + btn.dataset.id);
+                            sessionStorage.setItem('ttMessage', 'Statement deleted.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+                document.querySelectorAll('.card-form').forEach(function (f) {
+                    f.addEventListener('submit', async function (ev) {
+                        ev.preventDefault();
+                        try {
+                            await call('PUT', '/tt/api/cards/' + f.dataset.id, formData(f));
+                            sessionStorage.setItem('ttMessage', 'Fleet card saved.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+
+                // ── Master: vendor settings ──
+                document.querySelectorAll('.vendor-form').forEach(function (f) {
+                    f.addEventListener('submit', async function (ev) {
+                        ev.preventDefault();
+                        try {
+                            await call('PUT', '/tt/api/vendors/' + f.dataset.id, formData(f));
+                            sessionStorage.setItem('ttMessage', 'Vendor saved.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+
+                // ── Master: trucks ──
+                var truckForm = document.getElementById('truckForm');
+                function openTruck(d) {
+                    truckForm.reset();
+                    var el = truckForm.elements;
+                    el.vehicle_id.value = d.id || '';
+                    el.vehicle_no.value = d.no || '';
+                    el.vendor_id.value = d.vendor || '';
+                    el.capacity_kl.value = d.kl || '';
+                    el.fleet_card_id.value = d.card || '';
+                    el.insurance_expiry.value = d.ins || '';
+                    el.fc_expiry.value = d.fc || '';
+                    el.permit_expiry.value = d.permit || '';
+                    el.tax_expiry.value = d.tax || '';
+                    el.notes.value = d.notes || '';
+                    el.active_flag.value = d.active || 'Y';
+                    document.getElementById('truckModalTitle').textContent = d.id ? 'Edit truck ' + d.no : 'Add truck';
+                    $('#truckModal').modal('show');
+                }
+                var addTruckBtn = document.getElementById('addTruckBtn');
+                if (addTruckBtn) addTruckBtn.addEventListener('click', function () { openTruck({}); });
+                document.querySelectorAll('.edit-truck-btn').forEach(function (btn) {
+                    btn.addEventListener('click', function () { openTruck(btn.dataset); });
+                });
+                if (truckForm) truckForm.addEventListener('submit', async function (ev) {
+                    ev.preventDefault();
+                    var body = formData(truckForm);
+                    var id = body.vehicle_id;
+                    try {
+                        await call(id ? 'PUT' : 'POST', '/tt/api/vehicles' + (id ? '/' + id : ''), body);
+                        sessionStorage.setItem('ttMessage', 'Truck saved.');
+                        window.location.reload();
+                    } catch (e) { showMessage(e.message, false); }
+                });
+                document.querySelectorAll('.delete-truck-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete truck ' + btn.dataset.no + '?')) return;
+                        try {
+                            await call('DELETE', '/tt/api/vehicles/' + btn.dataset.id);
+                            sessionStorage.setItem('ttMessage', 'Truck deleted.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+            })();
