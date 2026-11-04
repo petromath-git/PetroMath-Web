@@ -146,7 +146,7 @@ block content
                                 td.text-center
                                     span.badge(class=`badge-status-${inv.status}`)= inv.status
                                 td.text-center
-                                    a.btn.btn-outline-secondary.btn-sm(href=`/platform-billing/${inv.invoice_id}/pdf` title='Download PDF')
+                                    a.btn.btn-outline-secondary.btn-sm(href=`/platform-billing/${inv.invoice_id}/pdf` target='_blank' download=`${inv.invoice_number}.pdf` title='Download PDF')
                                         i.bi.bi-file-earmark-pdf
                                 td.text-center
                                     button.btn.btn-outline-secondary.btn-sm.btn-adjust(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
