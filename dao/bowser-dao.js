@@ -9,7 +9,9 @@ module.exports = {
     getBowsersByLocation: (locationCode) => {
         return db.sequelize.query(`
             SELECT b.bowser_id, b.bowser_name, b.capacity_litres, b.product_id,
-                   p.product_name, b.is_active
+                   p.product_name, b.is_active, b.opening_stock,
+                   DATE_FORMAT(b.opening_stock_date, '%Y-%m-%d') AS opening_stock_date,
+                   DATE_FORMAT(b.opening_stock_date, '%d-%b-%Y') AS opening_stock_date_fmt
             FROM m_bowser b
             JOIN m_product p ON p.product_id = b.product_id
             WHERE b.location_code = :locationCode
@@ -41,8 +43,8 @@ module.exports = {
 
     createBowser: (data) => {
         return db.sequelize.query(`
-            INSERT INTO m_bowser (location_code, bowser_name, capacity_litres, product_id, created_by)
-            VALUES (:locationCode, :bowserName, :capacityLitres, :productId, :createdBy)
+            INSERT INTO m_bowser (location_code, bowser_name, capacity_litres, opening_stock, opening_stock_date, product_id, created_by)
+            VALUES (:locationCode, :bowserName, :capacityLitres, :openingStock, :openingStockDate, :productId, :createdBy)
         `, { replacements: data, type: db.Sequelize.QueryTypes.INSERT });
     },
 
@@ -51,10 +53,12 @@ module.exports = {
             UPDATE m_bowser
             SET bowser_name = :bowserName,
                 capacity_litres = :capacityLitres,
+                opening_stock = :openingStock,
+                opening_stock_date = :openingStockDate,
                 product_id = :productId,
                 updated_by = :updatedBy,
                 updation_date = NOW()
-            WHERE bowser_id = :bowserId
+            WHERE bowser_id = :bowserId AND location_code = :locationCode
         `, { replacements: { ...data, bowserId }, type: db.Sequelize.QueryTypes.UPDATE });
     },
 
@@ -456,7 +460,45 @@ module.exports = {
 
     // ── Report Queries ────────────────────────────────────────
 
-    getFillsReport: (locationCode, fromDate, toDate, bowserId) => {
+    // Stock in and out per day, in litres: fills from the shift closing Intercompany tab,
+    // out from the bowser closing deliveries (meter readings are not used, not every
+    // location enters them). Cash and digital store only an amount, so litres = amount / rate.
+    getStockMovements: (bowserId, locationCode, toDate) => {
+        return db.sequelize.query(`
+            SELECT DATE_FORMAT(m.movement_date, '%Y-%m-%d') AS movement_date,
+                   SUM(m.fill_qty)    AS fill_qty,
+                   SUM(m.credit_qty)  AS credit_qty,
+                   SUM(m.cash_qty)    AS cash_qty,
+                   SUM(m.digital_qty) AS digital_qty,
+                   MAX(m.bowser_closing_id) AS bowser_closing_id,
+                   MAX(m.status)      AS status
+            FROM (
+                SELECT ic.closing_date AS movement_date, ic.quantity AS fill_qty,
+                       0 AS credit_qty, 0 AS cash_qty, 0 AS digital_qty,
+                       NULL AS bowser_closing_id, NULL AS status
+                FROM t_closing_intercompany ic
+                WHERE ic.bowser_id = :bowserId
+                  AND ic.location_code = :locationCode
+                  AND ic.closing_date <= :toDate
+
+                UNION ALL
+
+                SELECT bc.closing_date, 0,
+                       COALESCE((SELECT SUM(cr.quantity) FROM t_bowser_credits cr WHERE cr.bowser_closing_id = bc.bowser_closing_id), 0),
+                       COALESCE((SELECT SUM(cs.amount) FROM t_bowser_cashsales cs WHERE cs.bowser_closing_id = bc.bowser_closing_id) / NULLIF(bc.rate, 0), 0),
+                       COALESCE((SELECT SUM(ds.amount) FROM t_bowser_digital_sales ds WHERE ds.bowser_closing_id = bc.bowser_closing_id) / NULLIF(bc.rate, 0), 0),
+                       bc.bowser_closing_id, bc.status
+                FROM t_bowser_closing bc
+                WHERE bc.bowser_id = :bowserId
+                  AND bc.location_code = :locationCode
+                  AND bc.closing_date <= :toDate
+            ) m
+            GROUP BY m.movement_date
+            ORDER BY m.movement_date
+        `, { replacements: { bowserId, locationCode, toDate }, type: db.Sequelize.QueryTypes.SELECT });
+    },
+
+    getFillsReport:(locationCode, fromDate, toDate, bowserId) => {
         const bowserFilter = bowserId ? 'AND ic.bowser_id = :bowserId' : '';
         return db.sequelize.query(`
             SELECT ic.closing_date, b.bowser_name, p.product_name, ic.quantity
