@@ -4,7 +4,9 @@ const router = express.Router();
 const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn({});
 const security = require('../utils/app-security');
+const multer = require('multer');
 const controller = require('../controllers/platform-billing-controller');
+const bankReceiptController = require('../controllers/platform-bank-receipt-controller');
 
 // ── Location-scoped: any logged-in user sees only their own location's invoices ──
 // Temporarily locked down to MANAGE_PLATFORM_BILLING (SuperUser) — not yet
@@ -37,6 +39,30 @@ router.get('/outstanding/:locationCode', [isLoginEnsured, security.hasPermission
 
 // GET /platform-billing/payments
 router.get('/payments', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getPayments);
+
+// ── Bank receipts: PetroMath's own IOB statement (tkt #459) ──
+const manageBilling = [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')];
+const statementUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (/\.xlsx?$/i.test(file.originalname)) return cb(null, true);
+        cb(new Error('Only Excel (.xls, .xlsx) files are allowed'));
+    }
+}).single('statementFile');
+
+router.get('/bank-receipts', manageBilling, bankReceiptController.getPage);
+router.post('/bank-receipts/upload', manageBilling, (req, res, next) => {
+    statementUpload(req, res, (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+        next();
+    });
+}, bankReceiptController.upload);
+router.post('/bank-receipts/apply-suggestions', manageBilling, bankReceiptController.applySuggestions);
+router.post('/bank-receipts/uploads/:id/remove', manageBilling, bankReceiptController.removeUpload);
+router.post('/bank-receipts/:id/tag', manageBilling, bankReceiptController.tag);
+router.post('/bank-receipts/:id/ignore', manageBilling, bankReceiptController.ignore);
+router.post('/bank-receipts/:id/undo', manageBilling, bankReceiptController.undo);
 
 // GET /platform-billing/plans
 router.get('/plans', [isLoginEnsured, security.hasPermission('MANAGE_PLATFORM_BILLING')], controller.getPlans);

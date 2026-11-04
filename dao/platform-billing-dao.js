@@ -246,7 +246,11 @@ const PlatformBillingDao = {
         return db.sequelize.query(
             `SELECT pp.payment_id, pp.location_code, l.location_name, pp.payment_date, pp.amount,
                     pp.payment_mode, pp.reference_number, pp.status, pp.remarks,
-                    GROUP_CONCAT(pi.invoice_number SEPARATOR ', ') AS invoice_numbers
+                    GROUP_CONCAT(pi.invoice_number SEPARATOR ', ') AS invoice_numbers,
+                    (SELECT GROUP_CONCAT(DATE_FORMAT(bt.txn_date, '%d-%b-%Y') ORDER BY bt.txn_date SEPARATOR ', ')
+                     FROM t_platform_bank_txn_payment lk
+                     JOIN t_platform_bank_txn bt ON bt.bank_txn_id = lk.bank_txn_id
+                     WHERE lk.payment_id = pp.payment_id) AS statement_dates
              FROM t_platform_payment pp
              JOIN m_location l ON l.location_code = pp.location_code
              LEFT JOIN t_platform_payment_allocation ppa ON ppa.payment_id = pp.payment_id
