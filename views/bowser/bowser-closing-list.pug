@@ -7,6 +7,8 @@ block content
             .col
                 h4 Bowser Closings
             .col-auto
+                if showStockStatement
+                    a.btn.btn-outline-dark.mr-2(href='/bowser/stock-statement') Stock Statement
                 a.btn.btn-dark(href='/bowser/closing/new') + New Closing
 
         //- Date filter

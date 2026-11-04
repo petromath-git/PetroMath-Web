@@ -62,6 +62,15 @@ router.get('/report/excel',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],
     bowserController.exportReportExcel);
 
+// ── Bowser Stock Statement ────────────────────────────────────
+router.get('/stock-statement',
+    [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_STOCK_STATEMENT')],
+    bowserController.getStockStatementPage);
+
+router.get('/stock-statement/excel',
+    [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_STOCK_STATEMENT')],
+    bowserController.exportStockStatementExcel);
+
 // ── Bowser Closing ────────────────────────────────────────────
 router.get('/closing',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_CLOSING')],
