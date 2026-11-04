@@ -80,4 +80,47 @@ function buildStockStatement(movements, fromDate, toDate, capacity, openingBalan
     return statement;
 }
 
-module.exports = { buildStockStatement };
+// One day's deliveries grouped by type for the Total Out popup. Group totals use the
+// same sums as the statement's row (amount / rate on the whole group), so they tie to it.
+function buildOutBreakup(creditItems, cashItems, digitalItems, rate) {
+    const litresOf = amount => (rate > 0 ? round3(Number(amount) / rate) : 0);
+    const sum = (items, key) => items.reduce((s, i) => s + (Number(i[key]) || 0), 0);
+
+    const groups = [
+        {
+            label: 'Credit',
+            litres: round3(sum(creditItems, 'quantity')),
+            amount: sum(creditItems, 'amount'),
+            lines: creditItems.map(i => ({
+                party: i.customer_name, vehicle: i.vehicle_number, ref: i.bill_no,
+                litres: round3(i.quantity), amount: Number(i.amount) || 0
+            }))
+        },
+        {
+            label: 'Cash',
+            litres: litresOf(sum(cashItems, 'amount')),
+            amount: sum(cashItems, 'amount'),
+            lines: cashItems.map(i => ({
+                party: null, vehicle: null, ref: null,
+                litres: litresOf(i.amount), amount: Number(i.amount) || 0
+            }))
+        },
+        {
+            label: 'Digital',
+            litres: litresOf(sum(digitalItems, 'amount')),
+            amount: sum(digitalItems, 'amount'),
+            lines: digitalItems.map(i => ({
+                party: i.digital_vendor_name, vehicle: null, ref: i.digital_ref,
+                litres: litresOf(i.amount), amount: Number(i.amount) || 0
+            }))
+        }
+    ].filter(g => g.lines.length > 0);
+
+    return {
+        groups,
+        total_litres: round3(groups.reduce((s, g) => s + g.litres, 0)),
+        total_amount: groups.reduce((s, g) => s + g.amount, 0)
+    };
+}
+
+module.exports = { buildStockStatement, buildOutBreakup };

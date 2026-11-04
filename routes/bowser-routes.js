@@ -67,6 +67,10 @@ router.get('/stock-statement',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_STOCK_STATEMENT')],
     bowserController.getStockStatementPage);
 
+router.get('/stock-statement/day-detail',
+    [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_STOCK_STATEMENT')],
+    bowserController.getStockDayDetail);
+
 router.get('/stock-statement/excel',
     [ensureLoggedIn, security.hasPermission('VIEW_BOWSER_STOCK_STATEMENT')],
     bowserController.exportStockStatementExcel);

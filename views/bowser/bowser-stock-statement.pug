@@ -137,9 +137,6 @@ block content
                                         th Date
                                         th.text-right Opening
                                         th.text-right Fill In
-                                        th.text-right Credit
-                                        th.text-right Cash
-                                        th.text-right Digital
                                         th.text-right Total Out
                                         th.text-right Remaining
                                         th.text-center Closing
@@ -151,11 +148,16 @@ block content
                                             //- phones only: the collapsed card's one-line summary
                                             td.m-only.m-summary(class=badBalance ? 'text-danger' : '')= fmtQty(d.closing) + ' L'
                                             td.text-right(data-label='Opening')= fmtQty(d.opening)
-                                            td.text-right(data-label='Fill In')= fmtMove(d.fill)
-                                            td.text-right(data-label='Credit')= fmtMove(d.credit)
-                                            td.text-right(data-label='Cash')= fmtMove(d.cash)
-                                            td.text-right(data-label='Digital')= fmtMove(d.digital)
-                                            td.text-right(data-label='Total Out')= fmtMove(d.out)
+                                            td.text-right(data-label='Fill In')
+                                                if d.fill && !isPdf
+                                                    a.bowser-stock-detail(href='#' data-kind='fill' data-date=d.date data-label=fmtDate(d.date) title='Where this fill came from')= fmtMove(d.fill)
+                                                else
+                                                    = fmtMove(d.fill)
+                                            td.text-right(data-label='Total Out')
+                                                if d.out && !isPdf
+                                                    a.bowser-stock-detail(href='#' data-kind='out' data-date=d.date data-label=fmtDate(d.date) title='See the breakup')= fmtMove(d.out)
+                                                else
+                                                    = fmtMove(d.out)
                                             td.text-right.font-weight-bold(data-label='Remaining' class=badBalance ? 'text-danger' : '')= fmtQty(d.closing)
                                             td.text-center(data-label='Closing')
                                                 if d.bowser_closing_id
@@ -171,9 +173,6 @@ block content
                                         td.m-title Total
                                         td.text-right(data-label='Opening')= fmtQty(s.opening)
                                         td.text-right(data-label='Fill In')= fmtQty(s.totals.fill)
-                                        td.text-right(data-label='Credit')= fmtQty(s.totals.credit)
-                                        td.text-right(data-label='Cash')= fmtQty(s.totals.cash)
-                                        td.text-right(data-label='Digital')= fmtQty(s.totals.digital)
                                         td.text-right(data-label='Total Out')= fmtQty(s.totals.out)
                                         td.text-right(data-label='Remaining')= fmtQty(s.closing)
                                         td.m-hide
@@ -190,3 +189,89 @@ block content
 
     include ../overlay.pug
     +cardToggleMobile('table.bowser-stock-table > tbody > tr:not(.m-static)')
+
+    if bowser && !isPdf
+        #bowserStockDetailModal.modal.fade(tabindex='-1' role='dialog' data-bowser=bowser.bowser_id)
+            .modal-dialog.modal-lg(role='document')
+                .modal-content
+                    .modal-header
+                        h5.modal-title#bowserStockDetailTitle
+                        button.close(type='button' data-dismiss='modal' aria-label='Close')
+                            span &times;
+                    .modal-body
+                        .table-responsive
+                            table.table.table-sm.table-bordered.mb-0
+                                thead.thead-light#bowserStockDetailHead
+                                tbody#bowserStockDetailBody
+
+        script.
+            (function () {
+                var modal = document.getElementById('bowserStockDetailModal');
+                var head = document.getElementById('bowserStockDetailHead');
+                var body = document.getElementById('bowserStockDetailBody');
+
+                function fmt(n, d) {
+                    return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: d, maximumFractionDigits: d });
+                }
+                // Names come from entered data, so always set them as text
+                function addRow(parent, cells, rowClass) {
+                    var tr = document.createElement('tr');
+                    if (rowClass) tr.className = rowClass;
+                    cells.forEach(function (c) {
+                        var cell = document.createElement(parent === head ? 'th' : 'td');
+                        cell.textContent = c.text === null || c.text === undefined || c.text === '' ? '—' : c.text;
+                        if (c.right) cell.className = 'text-right';
+                        if (c.span) cell.colSpan = c.span;
+                        tr.appendChild(cell);
+                    });
+                    parent.appendChild(tr);
+                }
+                function showMessage(text) {
+                    head.innerHTML = '';
+                    body.innerHTML = '';
+                    addRow(body, [{ text: text }]);
+                }
+                function showFills(fills) {
+                    addRow(head, [{ text: 'Closing ID' }, { text: 'Cashier' }, { text: 'Fill In (L)', right: true }]);
+                    var total = 0;
+                    fills.forEach(function (f) {
+                        total += Number(f.quantity) || 0;
+                        addRow(body, [{ text: f.closing_id }, { text: f.cashier_name }, { text: fmt(f.quantity, 3), right: true }]);
+                    });
+                    addRow(body, [{ text: 'Total', span: 2 }, { text: fmt(total, 3), right: true }], 'font-weight-bold');
+                }
+                function showOut(out) {
+                    addRow(head, [{ text: 'Customer / Vendor' }, { text: 'Vehicle' }, { text: 'Bill / Ref' }, { text: 'Out (L)', right: true }, { text: 'Amount (₹)', right: true }]);
+                    out.groups.forEach(function (g) {
+                        addRow(body, [{ text: g.label, span: 3 }, { text: fmt(g.litres, 3), right: true }, { text: fmt(g.amount, 2), right: true }], 'font-weight-bold table-light');
+                        g.lines.forEach(function (l) {
+                            addRow(body, [{ text: l.party }, { text: l.vehicle }, { text: l.ref }, { text: fmt(l.litres, 3), right: true }, { text: fmt(l.amount, 2), right: true }]);
+                        });
+                    });
+                    addRow(body, [{ text: 'Total', span: 3 }, { text: fmt(out.total_litres, 3), right: true }, { text: fmt(out.total_amount, 2), right: true }], 'font-weight-bold');
+                }
+
+                document.addEventListener('click', function (e) {
+                    var link = e.target.closest('a.bowser-stock-detail');
+                    if (!link) return;
+                    e.preventDefault();
+
+                    var kind = link.getAttribute('data-kind');
+                    document.getElementById('bowserStockDetailTitle').textContent =
+                        (kind === 'fill' ? 'Fill In' : 'Total Out') + ' - ' + link.getAttribute('data-label');
+                    showMessage('Loading...');
+                    $(modal).modal('show');
+
+                    var params = new URLSearchParams({ bowserId: modal.getAttribute('data-bowser'), date: link.getAttribute('data-date') });
+                    fetch('/bowser/stock-statement/day-detail?' + params.toString())
+                        .then(function (r) { return r.json(); })
+                        .then(function (data) {
+                            if (!data.success) return showMessage(data.error || 'Could not load the details.');
+                            head.innerHTML = '';
+                            body.innerHTML = '';
+                            if (kind === 'fill') showFills(data.fills);
+                            else showOut(data.out);
+                        })
+                        .catch(function () { showMessage('Could not load the details. Please refresh the page and try again.'); });
+                });
+            })();
