@@ -5,7 +5,7 @@ const locationConfig = require('../utils/location-config');
 const security       = require('../utils/app-security');
 const moment         = require('moment');
 const rolePermissionsDao = require('../dao/role-permissions-dao');
-const { buildStockStatement } = require('../utils/bowser-stock-statement');
+const { buildStockStatement, buildOutBreakup } = require('../utils/bowser-stock-statement');
 
 const canViewStockStatement = (user) =>
     rolePermissionsDao.hasPermission(user.Role, user.location_code, 'VIEW_BOWSER_STOCK_STATEMENT');
@@ -488,6 +488,7 @@ module.exports = {
                 title: 'Bowser Stock Statement',
                 user: req.user,
                 mobileReady: true,
+                isPdf,
                 bowsers,
                 bowser,
                 statement,
@@ -511,6 +512,35 @@ module.exports = {
             console.error('getStockStatementPage error:', err);
             if (isPdf) throw err;
             res.status(500).send('Error loading bowser stock statement');
+        }
+    },
+
+    // Fill In and Total Out popups: where a day's fills came from and what its out is made of
+    getStockDayDetail: async (req, res) => {
+        try {
+            const { bowserId, date } = req.query;
+            if (!bowserId || !moment(date, 'YYYY-MM-DD', true).isValid()) {
+                return res.status(400).json({ success: false, error: 'Bowser and date are required.' });
+            }
+            const locationCode = req.user.location_code;
+            const [fills, closing] = await Promise.all([
+                BowserDao.getStockFillDetails(bowserId, locationCode, date),
+                BowserDao.getBowserClosingForDate(bowserId, locationCode, date)
+            ]);
+
+            let out = buildOutBreakup([], [], [], 0);
+            if (closing) {
+                const [creditItems, cashItems, digitalItems] = await Promise.all([
+                    BowserDao.getCreditItems(closing.bowser_closing_id),
+                    BowserDao.getCashItems(closing.bowser_closing_id),
+                    BowserDao.getDigitalItems(closing.bowser_closing_id)
+                ]);
+                out = buildOutBreakup(creditItems, cashItems, digitalItems, Number(closing.rate) || 0);
+            }
+            res.json({ success: true, fills, out });
+        } catch (err) {
+            console.error('getStockDayDetail error:', err);
+            res.status(500).json({ success: false, error: 'Could not load the details.' });
         }
     },
 
@@ -573,7 +603,7 @@ module.exports = {
 
     // ── Bowser Transactions Report ────────────────────────────
 
-    getReportPage:async (req, res) => {
+    getReportPage: async (req, res) => {
         try {
             const locationCode  = req.user.location_code;
             const selectedRange = req.query.selectedRange || 'this_month';
