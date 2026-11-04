@@ -294,6 +294,10 @@ module.exports = {
             const buttons = document.querySelectorAll('button');
             buttons.forEach(button => button.remove());
 
+            // Screen tabs sit outside the form (Sales Summary Day-wise / Month-wise)
+            const navTabs = document.querySelectorAll('.nav-tabs');
+            navTabs.forEach(tabs => tabs.remove());
+
             // Select the form
             const form = document.querySelector('form');
 
@@ -302,7 +306,7 @@ module.exports = {
                 const children = form.querySelectorAll('*'); // Select all child elements
                 children.forEach(child => child.style.display = 'none');
             }
-        
+
             // Hide all text boxes
             const textBoxes = document.querySelectorAll('input[type="text"], input[type="date"]');
             textBoxes.forEach(textBox => textBox.remove());

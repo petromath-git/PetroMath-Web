@@ -90,7 +90,8 @@ function generatePDF(currentPage,isPrint = 'N') {
     }else if (currentPage.includes('reports-sales-summary')) {
         requestBody.reportType = 'SalesSummary';
         requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
-        requestBody.toClosingDate = document.getElementById('toclosingDate').value;        
+        requestBody.toClosingDate = document.getElementById('toclosingDate').value;
+        requestBody.viewType = document.getElementById('viewTypeInput').value;
     }else if (currentPage.includes('reports-tally-daybook')) {
     requestBody.reportType = 'TallyDaybook';
     requestBody.fromClosingDate = document.getElementById('fromclosingDate').value;
