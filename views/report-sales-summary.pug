@@ -39,7 +39,9 @@ block content
                         .filter(key => key !== 'Date' && key !== 'Day' && key !== 'Month');
                 }
 
-                var result = "<div class='card' style='margin-bottom: 10px;'>";
+                // The PDF's global .card rule avoids page breaks, which pushes a table
+                // longer than one page (e.g. a financial year) off page 1, leaving it blank
+                var result = "<div class='card' style='margin-bottom: 10px; page-break-inside: auto;'>";
                 result += "<div class='card-header text-center font-weight-bold'>"+tabletitle+"</div>";
                 result += "<div class='card-body "+tableWidthClass+"' style='padding-bottom: 10px;'>";
                 result += "<table class='table table-bordered table-sm m-stack sales-summary-table' style='width:100%; border:1px solid #000;'>";
