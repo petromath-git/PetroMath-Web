@@ -127,6 +127,7 @@ block content
                             th.text-right Paid
                             th.text-right Balance
                             th.text-center Status
+                            th.text-center Send
                             th.text-center PDF
                             th.text-center Adjust
                     tbody
@@ -145,6 +146,16 @@ block content
                                 td.text-right= (Number(inv.net_amount) - Number(inv.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})
                                 td.text-center
                                     span.badge(class=`badge-status-${inv.status}`)= inv.status
+                                td.text-center.text-nowrap
+                                    if inv.status !== 'CANCELLED'
+                                        if inv.whatsapp_url
+                                            a.btn.btn-success.btn-sm.btn-wa-send(href=inv.whatsapp_url target='_blank' rel='noopener' data-invoice-id=inv.invoice_id title=`Send on WhatsApp to ${inv.contact_name || inv.whatsapp_number}`)
+                                                i.bi.bi-whatsapp
+                                        button.btn.btn-outline-secondary.btn-sm.ml-1.btn-wa-contact(type='button' title=inv.whatsapp_number ? 'Change WhatsApp contact' : 'Add WhatsApp contact' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number data-sent=inv.sent_label ? '1' : '' data-location-code=inv.location_code data-location-name=inv.location_name data-contact-name=inv.contact_name data-whatsapp-number=inv.whatsapp_number)
+                                            i.bi(class=inv.whatsapp_number ? 'bi-pencil' : 'bi-person-plus')
+                                        .small.text-muted.wa-sent= inv.sent_label ? 'Sent ' + inv.sent_label : ''
+                                        if inv.opened_label
+                                            .small.text-success= 'Opened ' + inv.opened_label
                                 td.text-center
                                     a.btn.btn-outline-secondary.btn-sm(href=`/platform-billing/${inv.invoice_id}/pdf` target='_blank' download=`${inv.invoice_number}.pdf` title='Download PDF')
                                         i.bi.bi-file-earmark-pdf
@@ -228,6 +239,30 @@ block content
                     button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
                     button.btn.btn-primary#btnSavePayment(type='button') Save Payment
 
+    //- ── WhatsApp Contact Modal ───────────────────────────────────────────
+    #waContactModal.modal(tabindex='-1')
+        .modal-dialog
+            .modal-content
+                .modal-header
+                    h5.modal-title WhatsApp contact
+                    button.close(type='button' data-dismiss='modal' aria-label='Close')
+                        span(aria-hidden='true') &times;
+                .modal-body
+                    p.font-weight-bold#waLocationName
+                    p.small.text-muted Invoices for this location go to this number. If someone else forwards them to the dealer, enter that person's number.
+                    .mb-3
+                        label.form-label Name (optional):
+                        input#waContactName.form-control(type='text' maxlength='100')
+                    .mb-3
+                        label.form-label WhatsApp number:
+                        input#waNumber.form-control(type='tel' placeholder='10-digit mobile number')
+                    #waResetBlock.border-top.pt-3
+                        p.small.text-muted.mb-2 If the link for #[span#waInvoiceNumber] went to the wrong person, make a new one. The old link stops working, and you'll need to send the invoice again.
+                        button.btn.btn-outline-danger.btn-sm#btnWaResetLink(type='button') Make new link
+                .modal-footer
+                    button.btn.btn-secondary(type='button' data-dismiss='modal') Cancel
+                    button.btn.btn-primary#btnWaSaveContact(type='button') Save
+
     //- ── Adjustment Modal ─────────────────────────────────────────────────
     #adjustModal.modal(tabindex='-1')
         .modal-dialog
@@ -255,6 +290,45 @@ block content
             const pay  = document.getElementById('filterPaymentStatus').value;
             window.location.href = '/platform-billing?fromPeriod=' + from + '&toPeriod=' + to + '&locationCode=' + loc + '&paymentStatus=' + pay;
         }
+
+        // The link opens WhatsApp by itself; this only records the tap
+        $('.btn-wa-send').on('click', function() {
+            const label = $(this).closest('td').find('.wa-sent');
+            $.post('/platform-billing/' + $(this).data('invoice-id') + '/mark-sent', function(res) {
+                label.text('Sent ' + res.sent_label);
+            });
+        });
+
+        let waRow = null;
+        $('.btn-wa-contact').on('click', function() {
+            waRow = $(this);
+            $('#waLocationName').text(waRow.attr('data-location-name'));
+            $('#waContactName').val(waRow.attr('data-contact-name') || '');
+            $('#waNumber').val((waRow.attr('data-whatsapp-number') || '').replace(/^91/, ''));
+            $('#waInvoiceNumber').text(waRow.attr('data-invoice-number'));
+            $('#waResetBlock').toggle(!!waRow.attr('data-sent'));
+            $('#waContactModal').modal('show');
+        });
+
+        $('#btnWaSaveContact').on('click', function() {
+            $.ajax({
+                url: '/platform-billing/contacts/' + encodeURIComponent(waRow.attr('data-location-code')),
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ contact_name: $('#waContactName').val(), whatsapp_number: $('#waNumber').val() }),
+                success: function() { window.location.reload(); },
+                error: function(xhr) { alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error')); }
+            });
+        });
+
+        $('#btnWaResetLink').on('click', function() {
+            if (!confirm('The old link will stop working. Make a new link?')) return;
+            $.post('/platform-billing/' + waRow.attr('data-invoice-id') + '/reset-link', function() {
+                window.location.reload();
+            }).fail(function(xhr) {
+                alert('Failed: ' + (xhr.responseJSON && xhr.responseJSON.error || 'Unknown error'));
+            });
+        });
 
         let adjustInvoiceId = null;
         $('.btn-adjust').on('click', function() {

@@ -150,6 +150,8 @@ const PlatformBillingDao = {
                 pi.period_start_date, pi.period_end_date, pi.gross_amount,
                 pi.discount_amount, pi.net_amount, pi.due_date, pi.status,
                 pi.generated_date, cp.billing_timing,
+                pi.share_token, pi.sent_date, pi.first_opened_date,
+                ic.contact_name, ic.whatsapp_number,
                 COALESCE((
                     SELECT SUM(ppa.allocated_amount)
                     FROM t_platform_payment_allocation ppa
@@ -159,6 +161,7 @@ const PlatformBillingDao = {
             JOIN m_location l ON l.location_code = pi.location_code
             LEFT JOIN m_location_billing_plan cp
                    ON cp.location_code = pi.location_code AND cp.effective_end_date = '9999-12-31'
+            LEFT JOIN m_platform_invoice_contact ic ON ic.location_code = pi.location_code
             WHERE pi.period_start_date BETWEEN :fromPeriod AND :toPeriod
               AND (:locationCode IS NULL OR pi.location_code = :locationCode)
             ORDER BY pi.period_start_date DESC, l.location_name`,
@@ -221,6 +224,69 @@ const PlatformBillingDao = {
         return db.platform_invoice.update(
             { status, updated_by: userId, updation_date: new Date() },
             { where: { invoice_id: invoiceId } }
+        );
+    },
+
+    // ─── Sending over WhatsApp (tkt #460) ──────────────────────────────────
+
+    findInvoiceIdByShareToken: async (token) => {
+        const rows = await db.sequelize.query(
+            `SELECT invoice_id FROM t_platform_invoice WHERE share_token = :token`,
+            { replacements: { token }, type: QueryTypes.SELECT }
+        );
+        return rows.length ? rows[0].invoice_id : null;
+    },
+
+    setShareToken: (invoiceId, token) => {
+        return db.sequelize.query(
+            `UPDATE t_platform_invoice SET share_token = :token
+              WHERE invoice_id = :invoiceId AND share_token IS NULL`,
+            { replacements: { invoiceId, token }, type: QueryTypes.UPDATE }
+        );
+    },
+
+    // Old link stops working; the Invoices page issues a new one. The new link
+    // hasn't been sent or opened, so those go too.
+    resetShareLink: (invoiceId) => {
+        return db.sequelize.query(
+            `UPDATE t_platform_invoice
+                SET share_token = NULL, sent_date = NULL, sent_by = NULL, sent_to = NULL, first_opened_date = NULL
+              WHERE invoice_id = :invoiceId`,
+            { replacements: { invoiceId }, type: QueryTypes.UPDATE }
+        );
+    },
+
+    // Sent to the station's saved contact. Returns the sent date, or null when
+    // the invoice or the contact doesn't exist.
+    markInvoiceSent: async (invoiceId, userId) => {
+        const sentDate = new Date();
+        const [, affected] = await db.sequelize.query(
+            `UPDATE t_platform_invoice pi
+               JOIN m_platform_invoice_contact ic ON ic.location_code = pi.location_code
+                SET pi.sent_date = :sentDate, pi.sent_by = :userId, pi.sent_to = ic.whatsapp_number
+              WHERE pi.invoice_id = :invoiceId`,
+            { replacements: { invoiceId, userId, sentDate }, type: QueryTypes.UPDATE }
+        );
+        return affected ? sentDate : null;
+    },
+
+    markInvoiceOpened: (invoiceId) => {
+        return db.sequelize.query(
+            `UPDATE t_platform_invoice SET first_opened_date = :openedDate
+              WHERE invoice_id = :invoiceId AND first_opened_date IS NULL`,
+            { replacements: { invoiceId, openedDate: new Date() }, type: QueryTypes.UPDATE }
+        );
+    },
+
+    saveInvoiceContact: (locationCode, contactName, whatsappNumber, userId) => {
+        const now = new Date();
+        return db.sequelize.query(
+            `INSERT INTO m_platform_invoice_contact
+                (location_code, contact_name, whatsapp_number, created_by, creation_date)
+             VALUES (:locationCode, :contactName, :whatsappNumber, :userId, :now)
+             ON DUPLICATE KEY UPDATE contact_name = VALUES(contact_name), whatsapp_number = VALUES(whatsapp_number),
+                updated_by = VALUES(created_by), updation_date = VALUES(creation_date)`,
+            { replacements: { locationCode, contactName, whatsappNumber, userId, now }, type: QueryTypes.INSERT }
         );
     },
 
