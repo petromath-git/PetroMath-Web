@@ -29,12 +29,13 @@ const PlatformBankReceiptController = {
             const status = ['UNTAGGED', 'TAGGED', 'IGNORED', 'ALL'].includes(req.query.status) ? req.query.status : 'UNTAGGED';
             const locationCode = req.query.locationCode || null;
 
-            const [allRows, { payments, suggestions }, counts, uploads, locations] = await Promise.all([
+            const [allRows, { payments, invoices, suggestions }, counts, uploads, locations, timings] = await Promise.all([
                 Dao.findLines(status === 'ALL' ? null : status),
                 Svc.getSuggestions(),
                 Dao.countsByStatus(),
                 Dao.findRecentUploads(),
-                LocationDao.findActiveLocations()
+                LocationDao.findActiveLocations(),
+                Dao.findCurrentBillingTiming()
             ]);
 
             const locationName = {};
@@ -42,13 +43,20 @@ const PlatformBankReceiptController = {
 
             allRows.forEach(r => {
                 r.date_label = dateLabel(r.txn_date);
+                r.date_iso = Svc.ymd(r.txn_date);
+                r.payer_name = Svc.parseNarration(r.description).payer || r.payer_name;
                 const s = suggestions.get(r.bank_txn_id);
                 if (r.status === 'UNTAGGED' && s) {
                     r.suggestion = {
                         location_code: s.location_code,
                         location_name: locationName[s.location_code] || s.location_code,
                         payment_id: s.payment_id,
-                        payment_label: s.payment ? `#${s.payment_id}, ${dateLabel(s.payment.payment_date)}` : null
+                        payment_label: s.payment ? `#${s.payment_id}, ${dateLabel(s.payment.payment_date)}` : null,
+                        pays_for: s.payment ? s.payment.pays_for : s.pays_for,
+                        invoice_ids: s.invoice_ids || [],
+                        advance: s.advance || 0,
+                        review: !!s.review,
+                        review_reason: s.review_reason
                     };
                 }
             });
@@ -77,12 +85,22 @@ const PlatformBankReceiptController = {
                 unlinkedPayments: payments.map(p => ({
                     payment_id: p.payment_id,
                     location_code: p.location_code,
+                    date_iso: Svc.ymd(p.payment_date),
                     date_label: dateLabel(p.payment_date),
+                    pays_for: p.pays_for,
                     amount: Number(p.amount),
                     remaining: Number(p.remaining),
                     mode: p.payment_mode,
                     reference: p.reference_number
                 })),
+                outstandingInvoices: invoices.map(i => ({
+                    invoice_id: i.invoice_id,
+                    location_code: i.location_code,
+                    period_start: Svc.ymd(i.period_start_date),
+                    period_label: i.period_label,
+                    balance: Number(i.balance)
+                })),
+                billingTiming: Object.fromEntries(timings.map(t => [t.location_code, t.billing_timing])),
                 user: req.user
             });
         } catch (err) {
@@ -109,6 +127,7 @@ const PlatformBankReceiptController = {
         await Svc.tagLine(Number(req.params.id), {
             locationCode: req.body.locationCode,
             paymentIds,
+            invoiceIds: (Array.isArray(req.body.invoiceIds) ? req.body.invoiceIds : []).map(Number),
             rememberText: req.body.rememberText
         }, userId);
     }),
