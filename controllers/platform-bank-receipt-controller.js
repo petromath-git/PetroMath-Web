@@ -74,6 +74,7 @@ const PlatformBankReceiptController = {
 
             res.render('platform-billing/bank-receipts', {
                 title: 'Bank Receipts',
+                mobileReady: true,
                 rows,
                 uploads,
                 locations,
