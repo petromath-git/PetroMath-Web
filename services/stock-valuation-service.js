@@ -205,4 +205,4 @@ async function computeStockCOGS(locationCode, fyId, fromDate, toDate) {
     return results;
 }
 
-module.exports = { computeStockCOGS, computeProductStockCOGS };
+module.exports = { computeStockCOGS, computeProductStockCOGS, getDailyPurchases, getDailySoldQty, toDateStr };
