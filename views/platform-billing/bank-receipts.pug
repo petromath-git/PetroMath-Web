@@ -5,10 +5,19 @@ block content
     style.
         .pbr-narration { max-width: 420px; word-break: break-word; font-size: 0.85rem; }
         .pbr-pay-row { display: block; padding: 4px 0; font-weight: normal; margin: 0; }
+        .pbr-tick-label { font-weight: normal; margin: 0; }
+        @media screen and (max-width: 767px) {
+            .pbr-narration { max-width: none; }
+            body.mobile-ready table.m-stack > tbody > tr > td.pbr-tick-cell { order: 1; }
+            body.mobile-ready table.m-stack > tbody > tr > td.m-actions { order: 2; }
+            .pbr-tick-label { display: block; padding: 4px 0; }
+            .pbr-pay-row { padding: 8px 0; }
+            #tagModal .form-control, #filterStatus, #filterLocation { font-size: 16px; }
+        }
 
     .card.mb-3
         .card-header(style='background-color: #f8f9fa;')
-            .d-flex.justify-content-between.align-items-center
+            .d-flex.flex-wrap.justify-content-between.align-items-center
                 h6.mb-0
                     i.bi.bi-bank.me-2
                     | Bank Receipts — PetroMath IOB Account
@@ -48,7 +57,7 @@ block content
                     | Apply ticked suggestions
         if rows.length
             .table-responsive
-                table.table.table-desktop(style='width:100% !important;')
+                table.table.m-stack(style='width:100% !important;')
                     thead.thead-light
                         tr
                             th
@@ -60,13 +69,18 @@ block content
                     tbody
                         each r in rows
                             tr
-                                td
-                                    if r.suggestion && !r.suggestion.review
-                                        input.pbr-tick(type='checkbox' value=r.bank_txn_id checked)
-                                td(style='white-space:nowrap;')= r.date_label
-                                td.pbr-narration= r.description
-                                td.text-right(style='white-space:nowrap;')= money(r.credit_amount)
-                                td
+                                - const canApply = r.suggestion && !r.suggestion.review
+                                td.m-wide.pbr-tick-cell(class=(canApply ? '' : 'm-hide'))
+                                    if canApply
+                                        label.pbr-tick-label
+                                            input.pbr-tick(type='checkbox' value=r.bank_txn_id checked)
+                                            span.d-md-none.ml-2 Include in Apply
+                                td.m-title(style='white-space:nowrap;')
+                                    = r.date_label
+                                    span.float-right.d-md-none= money(r.credit_amount)
+                                td.pbr-narration.m-wide(data-label='Narration')= r.description
+                                td.text-right.m-hide(style='white-space:nowrap;')= money(r.credit_amount)
+                                td.m-wide(data-label='Location')
                                     if r.status === 'TAGGED'
                                         div= (r.location_name || r.location_code) + ' (' + r.location_code + ')'
                                         small.text-muted= (r.has_created_payment ? 'New payment ' : 'Linked to ') + (r.payment_refs || '') + (r.pays_for ? ', pays ' + r.pays_for : ', not applied to an invoice')
@@ -84,7 +98,7 @@ block content
                                                 small.text-danger= ' · ' + money(r.suggestion.advance) + ' left as an advance'
                                     else
                                         span.text-muted -
-                                td(style='white-space:nowrap;')
+                                td.m-actions(style='white-space:nowrap;')
                                     if r.status === 'UNTAGGED'
                                         button.btn.btn-outline-primary.btn-sm.mr-1.pbr-tag(
                                             type='button'
@@ -106,7 +120,7 @@ block content
         if uploads.length
             h6.mt-4 Recent uploads
             .table-responsive
-                table.table.table-sm.table-desktop(style='width:100% !important;')
+                table.table.table-sm.m-stack(style='width:100% !important;')
                     thead.thead-light
                         tr
                             th File
@@ -118,12 +132,12 @@ block content
                     tbody
                         each u in uploads
                             tr
-                                td= u.file_name
-                                td= u.range_label
-                                td.text-right= u.lines_added
-                                td.text-right= u.lines_skipped
-                                td= u.created_by
-                                td
+                                td.m-title= u.file_name
+                                td.m-wide(data-label='Period')= u.range_label
+                                td.text-right(data-label='New')= u.lines_added
+                                td.text-right(data-label='Already uploaded')= u.lines_skipped
+                                td.m-wide(data-label='By')= u.created_by
+                                td.m-actions(class=(u.untagged_count > 0 ? '' : 'm-hide'))
                                     if u.untagged_count > 0
                                         button.btn.btn-link.btn-sm.p-0.pbr-remove-upload(type='button' data-id=u.upload_id data-count=u.untagged_count) Remove #{u.untagged_count} untagged
 
