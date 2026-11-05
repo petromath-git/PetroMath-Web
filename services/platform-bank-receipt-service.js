@@ -38,21 +38,49 @@ function parseIobDate(raw) {
 
 // Pulls the reference and payer out of an IOB narration:
 //   UPI/630275111169/CR/PAYER NAME/BANK/...
+//   UPI/354006360899/Rev/ PAYER NAME/IOB/
 //   NEFT-YESB-YESBN62826206013-PAYER NAME-...
+//   IMPS/622917617752/PAYER NAME/SBIN/XXXXXX2469/...
+//   MB/628714219670/XXXXXX2556/PAYER NAME/...
+//   By PAYER NAME
 function parseNarration(description) {
     const text = String(description || '').trim();
     const clean = s => (s || '').replace(/\s+/g, ' ').trim() || null;
 
     if (/^UPI\//i.test(text)) {
         const parts = text.split('/');
-        const hasDirection = /^(CR|DR)$/i.test((parts[2] || '').trim());
+        const hasDirection = /^(CR|DR|REV)$/i.test((parts[2] || '').trim());
         return { mode: 'MANUAL_UPI', reference: clean(parts[1]), payer: clean(hasDirection ? parts[3] : parts[2]) };
     }
     if (/^(NEFT|RTGS|IMPS)-/i.test(text)) {
         const parts = text.split('-');
         return { mode: 'MANUAL_BANK', reference: clean(parts[2]), payer: clean(parts[3]) };
     }
+    if (/^IMPS\//i.test(text)) {
+        const parts = text.split('/');
+        return { mode: 'MANUAL_BANK', reference: clean(parts[1]), payer: clean(parts[2]) };
+    }
+    if (/^MB\//i.test(text)) {
+        const parts = text.split('/');
+        return { mode: 'MANUAL_BANK', reference: clean(parts[1]), payer: clean(parts[3]) };
+    }
+    // "BY CASH SELF" and "BY CLG: 864099-..." start the same way but name nobody
+    const by = text.match(/^By\s+(.+)$/i);
+    if (by && !/^(CASH|CLG)\b/i.test(by[1])) {
+        return { mode: 'MANUAL_BANK', reference: null, payer: clean(by[1]) };
+    }
     return { mode: 'MANUAL_BANK', reference: null, payer: null };
+}
+
+// Lines uploaded before a narration format was understood are read again, so
+// they needn't be uploaded twice (a re-upload skips them as duplicates).
+function withNarration(line) {
+    const narration = parseNarration(line.description);
+    return {
+        ...line,
+        reference: narration.reference || line.reference,
+        payer_name: narration.payer || line.payer_name
+    };
 }
 
 /**
@@ -159,6 +187,32 @@ function locationFromAlias(line, aliases) {
     return best ? best.location_code : null;
 }
 
+function planNewPayment(line, amount, invoices) {
+    const unpaid = invoices.filter(i => i.left >= PAISA);
+    if (!unpaid.length) {
+        return { review: true, review_reason: 'no unpaid invoice, it would sit as an advance' };
+    }
+    const payable = unpaid.filter(i => ymd(i.period_start_date) <= ymd(line.txn_date));
+    if (!payable.length) {
+        return { review: true, review_reason: `dated before the oldest unpaid invoice (${unpaid[0].period_label})` };
+    }
+    let left = amount;
+    const paid = [];
+    for (const invoice of payable) {
+        if (left < PAISA) break;
+        const applied = Math.min(left, invoice.left);
+        invoice.left = Math.round((invoice.left - applied) * 100) / 100;
+        left = Math.round((left - applied) * 100) / 100;
+        paid.push(invoice);
+    }
+    return {
+        review: false,
+        invoice_ids: paid.map(i => i.invoice_id),
+        pays_for: paid.map(i => i.period_label).join(', '),
+        advance: left
+    };
+}
+
 /**
  * What to do with each untagged line, for the user to review. Oldest lines
  * pick first and a payment is offered to one line only.
@@ -166,17 +220,23 @@ function locationFromAlias(line, aliases) {
  *  - Remembered payer and nothing to link => new payment for that location.
  *  - Amount alone fits more than one location => no guess, the user picks
  *    (1,750 is several locations' monthly rate).
- * Returns Map(bank_txn_id => { location_code, payment_id|null, payment })
+ *  - A new payment goes to the oldest invoices unpaid at the receipt's date,
+ *    with the older lines paying first. With no such invoice it is flagged
+ *    review and never applied in bulk: a March receipt must not mark October
+ *    as paid, so the user decides in the Tag dialog.
+ * Returns Map(bank_txn_id => { location_code, payment_id|null, payment,
+ *                              invoice_ids, pays_for, advance, review, review_reason })
  */
-function buildSuggestions(lines, payments, aliases) {
+function buildSuggestions(lines, payments, aliases, invoices = []) {
     const suggestions = new Map();
     const taken = new Set();
+    const open = invoices.map(i => ({ ...i, left: Number(i.balance) }));
 
     for (const line of lines) {
         const aliasLocation = locationFromAlias(line, aliases);
         const amount = Number(line.credit_amount);
-        const open = payments.filter(p => !taken.has(p.payment_id));
-        const sameAmount = open.filter(p => Math.abs(Number(p.remaining) - amount) < PAISA);
+        const available = payments.filter(p => !taken.has(p.payment_id));
+        const sameAmount = available.filter(p => Math.abs(Number(p.remaining) - amount) < PAISA);
 
         let match = line.reference
             ? sameAmount.find(p => p.reference_number && String(p.reference_number).trim() === line.reference)
@@ -199,27 +259,53 @@ function buildSuggestions(lines, payments, aliases) {
             taken.add(match.payment_id);
             suggestions.set(line.bank_txn_id, { location_code: match.location_code, payment_id: match.payment_id, payment: match });
         } else if (aliasLocation) {
-            suggestions.set(line.bank_txn_id, { location_code: aliasLocation, payment_id: null, payment: null });
+            suggestions.set(line.bank_txn_id, {
+                location_code: aliasLocation,
+                payment_id: null,
+                payment: null,
+                ...planNewPayment(line, amount, open.filter(i => i.location_code === aliasLocation))
+            });
         }
     }
     return suggestions;
 }
 
-async function getSuggestions() {
-    const [lines, payments, aliases] = await Promise.all([
+async function getSuggestions(onlyIds = null) {
+    const [rawLines, payments, aliases, invoices] = await Promise.all([
         Dao.findUntaggedOldestFirst(),
         Dao.findUnlinkedPayments(),
-        Dao.findAliases()
+        Dao.findAliases(),
+        Dao.findOutstandingInvoices()
     ]);
-    return { lines, payments, suggestions: buildSuggestions(lines, payments, aliases) };
+    const lines = (onlyIds ? rawLines.filter(l => onlyIds.has(l.bank_txn_id)) : rawLines).map(withNarration);
+    return { lines, payments, invoices, suggestions: buildSuggestions(lines, payments, aliases, invoices) };
+}
+
+async function allocateToInvoices(locationCode, invoiceIds, amount) {
+    const wanted = new Set(invoiceIds);
+    const invoices = (await Dao.findOutstandingInvoices()).filter(i =>
+        i.location_code === locationCode && wanted.has(i.invoice_id));
+    if (invoices.length !== wanted.size) {
+        throw new Error('One of the chosen invoices is no longer unpaid for this location. Please refresh the page.');
+    }
+    let left = amount;
+    const allocations = [];
+    for (const invoice of invoices) {
+        if (left < PAISA) break;
+        const applied = Math.min(left, Number(invoice.balance));
+        allocations.push({ invoice_id: invoice.invoice_id, allocated_amount: applied });
+        left = Math.round((left - applied) * 100) / 100;
+    }
+    return allocations;
 }
 
 /**
  * Tag one credit line to a location. paymentIds are hand-entered payments this
  * line is connecting to; whatever they don't cover becomes a new payment,
- * allocated to the location's oldest unpaid invoices.
+ * allocated to invoiceIds oldest first. Anything still left over stays on the
+ * payment unallocated.
  */
-async function tagLine(bankTxnId, { locationCode, paymentIds = [], rememberText }, userId) {
+async function tagLine(bankTxnId, { locationCode, paymentIds = [], invoiceIds = [], rememberText }, userId) {
     if (!locationCode) throw new Error('Please choose the location that paid.');
 
     const line = await Dao.findLine(bankTxnId);
@@ -249,15 +335,15 @@ async function tagLine(bankTxnId, { locationCode, paymentIds = [], rememberText 
 
         if (left >= PAISA) {
             const narration = parseNarration(line.description);
-            const payment = await PlatformBillingSvc.recordBulkPayment({
+            const payment = await PlatformBillingSvc.recordPayment({
                 location_code: locationCode,
                 payment_date: ymd(line.txn_date),
                 amount: left,
                 payment_mode: narration.mode,
-                reference_number: line.reference,
+                reference_number: narration.reference || line.reference,
                 remarks: 'From bank statement',
                 created_by: userId
-            });
+            }, await allocateToInvoices(locationCode, invoiceIds, left));
             await Dao.transaction(t => Dao.addLink(bankTxnId, payment.payment_id, left, true, userId, t));
         }
     } catch (err) {
@@ -278,17 +364,20 @@ async function tagLine(bankTxnId, { locationCode, paymentIds = [], rememberText 
  * stands alone: one failure doesn't stop the rest.
  */
 async function applySuggestions(bankTxnIds, userId) {
+    // Worked out from the ticked lines alone: an unticked older line mustn't
+    // hold on to the invoice it would have paid
     const wanted = new Set(bankTxnIds.map(Number));
-    const { lines, suggestions } = await getSuggestions();
+    const { lines, suggestions } = await getSuggestions(wanted);
 
     const result = { linked: 0, created: 0, failed: [] };
     for (const line of lines) {
         const suggestion = suggestions.get(line.bank_txn_id);
-        if (!wanted.has(line.bank_txn_id) || !suggestion) continue;
+        if (!suggestion || suggestion.review) continue;
         try {
             await tagLine(line.bank_txn_id, {
                 locationCode: suggestion.location_code,
-                paymentIds: suggestion.payment_id ? [suggestion.payment_id] : []
+                paymentIds: suggestion.payment_id ? [suggestion.payment_id] : [],
+                invoiceIds: suggestion.invoice_ids || []
             }, userId);
             result[suggestion.payment_id ? 'linked' : 'created']++;
             if (line.payer_name && normalizeText(line.payer_name).length >= MIN_ALIAS_LENGTH) {
@@ -351,6 +440,7 @@ async function ignoreLine(bankTxnId, userId) {
 module.exports = {
     parseStatement,
     parseNarration,
+    ymd,
     buildSuggestions,
     uploadStatement,
     getSuggestions,
