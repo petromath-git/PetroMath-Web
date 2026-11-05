@@ -179,6 +179,7 @@ const PlatformBillingController = {
 
             res.render('platform-billing/master-list', {
                 title: 'Platform Billing',
+                mobileReady: true,
                 invoices,
                 nextAutoRun: dateFormat(nextRun, 'dd-mmm-yyyy'),
                 thisMonth: dateFormat(now, 'yyyy-mm'),

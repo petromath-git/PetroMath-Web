@@ -1,4 +1,5 @@
 extends ../layout
+include ../mixins/card-toggle-mobile
 
 block content
     style.
@@ -6,7 +7,7 @@ block content
             max-height: calc(100vh - 350px);
             overflow-y: auto;
         }
-        table.table-desktop thead.thead-light {
+        table.pb-invoices thead.thead-light {
             position: sticky;
             top: 0;
             z-index: 10;
@@ -20,14 +21,27 @@ block content
         .badge-run-PARTIAL { background-color: #fd7e14; color: #fff; }
         .badge-run-FAILED { background-color: #dc3545; color: #fff; }
         .badge-run-RUNNING { background-color: #0d6efd; color: #fff; }
+        @media screen and (max-width: 767px) {
+            .table-responsive { max-height: none; overflow: visible; }
+            .pb-head { flex-wrap: wrap; }
+            /* Invoices come first on a phone: filters and page actions open from one button */
+            .pb-top:not(.pb-show) .pb-head-actions,
+            .pb-top:not(.pb-show) > .card-body { display: none; }
+            .pb-head-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; }
+            .pb-head-actions .btn { margin: 0 !important; }
+            .pb-filters > div { margin-bottom: .5rem; }
+            .form-control { font-size: 16px; }
+            .pb-send .btn { min-width: 40px; min-height: 36px; }
+        }
 
-    .card.mb-3
+    .card.mb-3.pb-top
         .card-header(style='background-color: #f8f9fa;')
-            .d-flex.justify-content-between.align-items-center
+            .d-flex.justify-content-between.align-items-center.pb-head
                 h6.mb-0
                     i.bi.bi-receipt.me-2
                     | Platform Billing — All Locations
-                div
+                button.btn.btn-outline-secondary.btn-sm.d-md-none#btnPbMore(type='button') Filters & actions
+                .pb-head-actions
                     a.btn.btn-outline-secondary.btn-sm.me-2(href='/platform-billing/plans')
                         i.bi.bi-sliders.me-1
                         | Billing Plans
@@ -50,7 +64,7 @@ block content
                         i.bi.bi-cash-coin.me-1
                         | Record Payment
         .card-body
-            .small.text-muted.mb-2
+            .small.text-muted.mb-2.d-none.d-md-block
                 i.bi.bi-clock-history.me-1
                 | Invoices are generated automatically on the 3rd of every month (next run: #{nextAutoRun}) —
                 | Arrears locations are billed for the month just ended, Advance locations for the current month.
@@ -67,7 +81,7 @@ block content
                     a(href='/platform-billing/runs')  view log
                 else
                     span.text-muted No billing runs recorded yet.
-            .row.g-3
+            .row.g-3.pb-filters
                 .col-md-2.col-6
                     label.form-label Period:
                     select.form-control#periodPreset(onchange="glSetPeriod(this)" data-from="fromPeriod" data-to="toPeriod" data-monthyear="pbMonthYearWrap" data-month="pbMonth" data-year="pbYear")
@@ -115,7 +129,7 @@ block content
     div.container-fluid
         if invoices && invoices.length
             .table-responsive
-                table.table.table-desktop(style='width:100% !important;')
+                table.table.pb-invoices.m-stack.m-collapse(style='width:100% !important;')
                     thead.thead-light.sticky-top
                         tr
                             th Location
@@ -132,21 +146,26 @@ block content
                             th.text-center Adjust
                     tbody
                         each inv in invoices
+                            - var balance = Number(inv.net_amount) - Number(inv.paid_amount)
                             tr
-                                td
+                                td.m-title
                                     = inv.location_name + ' (' + inv.location_code + ')'
                                     if inv.billing_timing
                                         span.badge.ml-1(class=inv.billing_timing === 'ADVANCE' ? 'badge-info' : 'badge-secondary' title='Current billing timing')= inv.billing_timing === 'ADVANCE' ? 'Advance' : 'Arrears'
-                                td= inv.invoice_number
-                                td= inv.service_label
-                                td.text-right= Number(inv.gross_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
-                                td.text-right= Number(inv.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
-                                td.text-right= Number(inv.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
-                                td.text-right= Number(inv.paid_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
-                                td.text-right= (Number(inv.net_amount) - Number(inv.paid_amount)).toLocaleString('en-IN', {minimumFractionDigits: 2})
-                                td.text-center
+                                    //- Phones: month, amount and status stay visible on the collapsed card
+                                    .d-md-none.small.font-weight-normal.mt-1
+                                        | #{inv.service_label} · ₹#{(inv.status === 'PAID' ? Number(inv.net_amount) : balance).toLocaleString('en-IN', {minimumFractionDigits: 2})}
+                                        span.badge.ml-1(class=`badge-status-${inv.status}` style='color:#fff')= inv.status
+                                td(data-label='Invoice #')= inv.invoice_number
+                                td.m-hide= inv.service_label
+                                td.text-right(data-label='Gross')= Number(inv.gross_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right(data-label='Discount')= Number(inv.discount_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right(data-label='Net')= Number(inv.net_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right(data-label='Paid')= Number(inv.paid_amount).toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-right(data-label='Balance')= balance.toLocaleString('en-IN', {minimumFractionDigits: 2})
+                                td.text-center.m-hide
                                     span.badge(class=`badge-status-${inv.status}`)= inv.status
-                                td.text-center.text-nowrap
+                                td.text-center.text-nowrap.m-summary.pb-send
                                     if inv.status !== 'CANCELLED'
                                         if inv.whatsapp_url
                                             a.btn.btn-success.btn-sm.btn-wa-send(href=inv.whatsapp_url target='_blank' rel='noopener' data-invoice-id=inv.invoice_id title=`Send on WhatsApp to ${inv.contact_name || inv.whatsapp_number}`)
@@ -156,14 +175,21 @@ block content
                                         .small.text-muted.wa-sent= inv.sent_label ? 'Sent ' + inv.sent_label : ''
                                         if inv.opened_label
                                             .small.text-success= 'Opened ' + inv.opened_label
-                                td.text-center
+                                td.text-center.m-actions
                                     a.btn.btn-outline-secondary.btn-sm(href=`/platform-billing/${inv.invoice_id}/pdf` target='_blank' download=`${inv.invoice_number}.pdf` title='Download PDF')
                                         i.bi.bi-file-earmark-pdf
-                                td.text-center
+                                        span.d-md-none  PDF
+                                    button.btn.btn-outline-secondary.btn-sm.btn-adjust.d-md-none(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
+                                        i.bi.bi-pencil-square
+                                        |  Adjust
+                                td.text-center.m-hide
                                     button.btn.btn-outline-secondary.btn-sm.btn-adjust(type='button' data-invoice-id=inv.invoice_id data-invoice-number=inv.invoice_number)
                                         i.bi.bi-pencil-square
         else
             .alert.alert-info No invoices found for the selected period.
+
+    //- phones: invoice cards start collapsed; the Send button works without opening one
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     //- ── Generate Invoices Modal ──────────────────────────────────────────
     #generateModal.modal(tabindex='-1')
@@ -290,6 +316,8 @@ block content
             const pay  = document.getElementById('filterPaymentStatus').value;
             window.location.href = '/platform-billing?fromPeriod=' + from + '&toPeriod=' + to + '&locationCode=' + loc + '&paymentStatus=' + pay;
         }
+
+        $('#btnPbMore').on('click', function() { $('.pb-top').toggleClass('pb-show'); });
 
         // The link opens WhatsApp by itself; this only records the tap
         $('.btn-wa-send').on('click', function() {
