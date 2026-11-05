@@ -190,7 +190,7 @@ block content
                                 input.form-control(type="number", name="cc_limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
-                                input.form-control(type="text", name="ledger_name")
+                                input.form-control(type="text", name="ledger_name", placeholder="Blank = bank name")
                             //- The screen decides the kind: Bank Master = internal bank, Oil Company Accounts = oil (server enforces)
                             input(type="hidden", name="is_oil_company", value=isOil ? 'Y' : 'N')
                             .col-md-6.mb-3
@@ -238,7 +238,7 @@ block content
                                 input.form-control(type="number", name="cc_limit", id="edit-cc-limit", min="0")
                             .col-md-6.mb-3
                                 label.form-label Ledger Name
-                                input.form-control(type="text", name="ledger_name", id="edit-ledger-name")
+                                input.form-control(type="text", name="ledger_name", id="edit-ledger-name", placeholder="Blank = bank name")
                             .col-md-6.mb-3
                                 label.form-label Statement Template
                                 select.form-control(name="template_id", id="edit-template-id")
