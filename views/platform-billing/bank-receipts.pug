@@ -41,7 +41,7 @@ block content
                 |  · Payments not yet on the statement: #[strong= unlinkedCount]
 
     div.container-fluid
-        if rows.some(r => r.suggestion)
+        if rows.some(r => r.suggestion && !r.suggestion.review)
             .mb-2
                 button#btnApply.btn.btn-success.btn-sm(type='button')
                     i.bi.bi-check2-all.me-1
@@ -61,7 +61,7 @@ block content
                         each r in rows
                             tr
                                 td
-                                    if r.suggestion
+                                    if r.suggestion && !r.suggestion.review
                                         input.pbr-tick(type='checkbox' value=r.bank_txn_id checked)
                                 td(style='white-space:nowrap;')= r.date_label
                                 td.pbr-narration= r.description
@@ -69,12 +69,19 @@ block content
                                 td
                                     if r.status === 'TAGGED'
                                         div= (r.location_name || r.location_code) + ' (' + r.location_code + ')'
-                                        small.text-muted= (r.has_created_payment ? 'New payment ' : 'Linked to ') + (r.payment_refs || '')
+                                        small.text-muted= (r.has_created_payment ? 'New payment ' : 'Linked to ') + (r.payment_refs || '') + (r.pays_for ? ', pays ' + r.pays_for : ', not applied to an invoice')
                                     else if r.status === 'IGNORED'
                                         span.text-muted Ignored
                                     else if r.suggestion
                                         div= r.suggestion.location_name + ' (' + r.suggestion.location_code + ')'
-                                        small.text-muted= r.suggestion.payment_id ? 'Link to payment ' + r.suggestion.payment_label : 'New payment'
+                                        if r.suggestion.review
+                                            small.text-danger= 'Check before tagging: ' + r.suggestion.review_reason
+                                        else if r.suggestion.payment_id
+                                            small.text-muted= 'Link to payment ' + r.suggestion.payment_label + (r.suggestion.pays_for ? ', pays ' + r.suggestion.pays_for : '')
+                                        else
+                                            small.text-muted= 'New payment, pays ' + r.suggestion.pays_for
+                                            if r.suggestion.advance > 0
+                                                small.text-danger= ' · ' + money(r.suggestion.advance) + ' left as an advance'
                                     else
                                         span.text-muted -
                                 td(style='white-space:nowrap;')
@@ -83,6 +90,8 @@ block content
                                             type='button'
                                             data-id=r.bank_txn_id
                                             data-amount=r.credit_amount
+                                            data-date=r.date_iso
+                                            data-invoices=(r.suggestion ? r.suggestion.invoice_ids.join(',') : '')
                                             data-narration=r.description
                                             data-payer=r.payer_name
                                             data-location=(r.suggestion ? r.suggestion.location_code : '')
@@ -134,9 +143,21 @@ block content
                             option(value='') Select...
                             each loc in locations
                                 option(value=loc.location_code)= loc.location_name + ' (' + loc.location_code + ')'
+                    p.small.text-muted#tagTiming
+                    #tagModeWrap.form-group
+                        .form-check
+                            input#tagModeNew.form-check-input(type='radio' name='tagMode' value='new')
+                            label.form-check-label(for='tagModeNew') Create new payment
+                        .form-check
+                            input#tagModeLink.form-check-input(type='radio' name='tagMode' value='link')
+                            label.form-check-label(for='tagModeLink') Connect to existing payment
                     #tagPaymentsWrap.form-group(style='display:none')
-                        label Already entered? Connect to:
+                        label Payment already entered:
                         #tagPayments
+                        button#tagShowAll.btn.btn-link.btn-sm.p-0(type='button' style='display:none')
+                    #tagInvoicesWrap.form-group(style='display:none')
+                        label Pays for:
+                        #tagInvoices
                     p.small#tagOutcome
                     .form-group.mb-0
                         label.mb-1(for='tagRemember') Remember this payer for this location (blank = don't):
@@ -147,8 +168,15 @@ block content
 
     script.
         const UNLINKED_PAYMENTS = !{JSON.stringify(unlinkedPayments).replace(/</g, '\\u003c')};
+        const OUTSTANDING_INVOICES = !{JSON.stringify(outstandingInvoices).replace(/</g, '\\u003c')};
+        const BILLING_TIMING = !{JSON.stringify(billingTiming).replace(/</g, '\\u003c')};
+        // Further apart than this, a payment is hidden until asked for. Hand-entered
+        // dates are only approximate, but not by months.
+        const CONNECT_WINDOW_DAYS = 45;
         let tagLineId = null;
         let tagLineAmount = 0;
+        let tagLineDate = '';
+        let tagShowAllPayments = false;
 
         function applyFilter() {
             window.location.href = '/platform-billing/bank-receipts?status=' + $('#filterStatus').val()
@@ -167,25 +195,88 @@ block content
             alert((xhr.responseJSON && xhr.responseJSON.error) || 'Something went wrong');
         }
 
-        function updateOutcome() {
+        function daysBetween(a, b) {
+            return Math.abs(new Date(a + 'T00:00:00Z') - new Date(b + 'T00:00:00Z')) / 86400000;
+        }
+
+        function amountLeftForNewPayment() {
             let left = tagLineAmount;
-            const parts = [];
-            $('.pbr-pay:checked').each(function () {
-                const used = Math.min(left, Number($(this).data('remaining')));
-                left = Math.round((left - used) * 100) / 100;
-                parts.push('#' + $(this).val());
-            });
+            if ($('#tagModeLink').prop('checked')) {
+                $('.pbr-pay:checked').each(function () {
+                    left = Math.round((left - Math.min(left, Number($(this).attr('data-remaining')))) * 100) / 100;
+                });
+            }
+            return left;
+        }
+
+        function updateOutcome() {
+            const connecting = $('#tagModeLink').prop('checked');
+            const left = amountLeftForNewPayment();
+            const outcome = $('#tagOutcome').empty().removeClass('text-danger');
+            $('#tagPaymentsWrap').toggle(connecting);
+            $('#tagInvoicesWrap').toggle(left > 0 && $('.pbr-inv').length > 0);
+
             const text = [];
-            if (parts.length) text.push('Connects to payment ' + parts.join(', ') + '.');
-            if (left > 0) text.push('Creates a new payment of ' + inr(left) + ', applied to the oldest unpaid invoices.');
-            $('#tagOutcome').text(text.join(' '));
+            if (connecting) {
+                const ids = $('.pbr-pay:checked').map(function () { return '#' + this.value; }).get();
+                if (ids.length) text.push('Connects to payment ' + ids.join(', ') + '. Its invoices stay as they are.');
+            }
+            if (left > 0 && (!connecting || $('.pbr-pay:checked').length)) {
+                let toApply = left;
+                const paid = [];
+                $('.pbr-inv:checked').each(function () {
+                    if (toApply <= 0) return;
+                    const balance = Number($(this).attr('data-balance'));
+                    const used = Math.min(toApply, balance);
+                    toApply = Math.round((toApply - used) * 100) / 100;
+                    paid.push($(this).attr('data-label') + ' ' + inr(used) + (used < balance ? ' (' + inr(balance - used) + ' still due)' : ''));
+                });
+                text.push('New payment of ' + inr(left) + (paid.length ? ' pays ' + paid.join(', ') + '.' : '.'));
+                if (toApply > 0) {
+                    text.push(inr(toApply) + ' is not applied to any invoice and stays as an advance. A later invoice will not pick it up by itself.');
+                    outcome.addClass('text-danger');
+                }
+            }
+            outcome.text(text.join(' '));
+        }
+
+        function renderInvoices(preselectIds) {
+            const location = $('#tagLocation').val();
+            const box = $('#tagInvoices').empty();
+            let toCover = amountLeftForNewPayment();
+            OUTSTANDING_INVOICES
+                .filter(function (i) { return i.location_code === location; })
+                .forEach(function (i) {
+                    const afterReceipt = i.period_start > tagLineDate;
+                    let tick;
+                    if (preselectIds) {
+                        tick = preselectIds.indexOf(i.invoice_id) !== -1;
+                    } else {
+                        tick = toCover > 0 && !afterReceipt;
+                        if (tick) toCover -= i.balance;
+                    }
+                    const label = $('<label class="pbr-pay-row"></label>');
+                    $('<input type="checkbox" class="pbr-inv mr-2">')
+                        .val(i.invoice_id)
+                        .attr('data-balance', i.balance)
+                        .attr('data-label', i.period_label)
+                        .prop('checked', tick)
+                        .appendTo(label);
+                    label.append(document.createTextNode(i.period_label + ' · ' + inr(i.balance) + ' due'
+                        + (afterReceipt ? ' · starts after this receipt' : '')));
+                    box.append(label);
+                });
         }
 
         function renderPayments(preselectId) {
             const location = $('#tagLocation').val();
-            const list = UNLINKED_PAYMENTS.filter(function (p) { return p.location_code === location; });
+            const all = UNLINKED_PAYMENTS.filter(function (p) { return p.location_code === location; });
+            const near = all.filter(function (p) {
+                return p.payment_id === preselectId || daysBetween(p.date_iso, tagLineDate) <= CONNECT_WINDOW_DAYS;
+            });
+            const shown = tagShowAllPayments ? all : near;
             const box = $('#tagPayments').empty();
-            list.forEach(function (p) {
+            shown.forEach(function (p) {
                 const label = $('<label class="pbr-pay-row"></label>');
                 $('<input type="checkbox" class="pbr-pay mr-2">')
                     .val(p.payment_id)
@@ -195,10 +286,24 @@ block content
                 let text = '#' + p.payment_id + ' · ' + p.date_label + ' · ' + inr(p.amount);
                 if (p.remaining !== p.amount) text += ' (' + inr(p.remaining) + ' left)';
                 text += ' · ' + p.mode + (p.reference ? ' · ' + p.reference : '');
+                text += ' · ' + (p.pays_for ? 'paid ' + p.pays_for : 'no invoice');
                 label.append(document.createTextNode(text));
                 box.append(label);
             });
-            $('#tagPaymentsWrap').toggle(list.length > 0);
+            if (!shown.length) box.append($('<div class="small text-muted"></div>').text('None near this date.'));
+            const hidden = all.length - near.length;
+            $('#tagShowAll').toggle(hidden > 0)
+                .text(tagShowAllPayments ? 'Show only payments near this date' : 'Show ' + hidden + ' more, further from this date');
+            $('#tagModeWrap').toggle(all.length > 0);
+            if (!all.length) $('#tagModeNew').prop('checked', true);
+        }
+
+        function renderForLocation(preselectPaymentId, preselectInvoiceIds) {
+            const timing = BILLING_TIMING[$('#tagLocation').val()];
+            $('#tagTiming').text(timing === 'ARREARS' ? 'Billed in arrears: a receipt normally pays the month before.'
+                : timing === 'ADVANCE' ? 'Billed in advance: a receipt normally pays the same month.' : '');
+            renderPayments(preselectPaymentId);
+            renderInvoices(preselectInvoiceIds);
             updateOutcome();
         }
 
@@ -236,25 +341,44 @@ block content
                 const b = $(this);
                 tagLineId = b.data('id');
                 tagLineAmount = Number(b.attr('data-amount'));
+                tagLineDate = b.attr('data-date');
+                tagShowAllPayments = false;
                 $('#tagAmount').text(inr(tagLineAmount));
                 $('#tagNarration').text(b.attr('data-narration') || '');
                 $('#tagLocation').val(b.attr('data-location') || '');
                 $('#tagRemember').val(b.attr('data-payer') || '');
-                renderPayments(Number(b.attr('data-payment')) || null);
+                const paymentId = Number(b.attr('data-payment')) || null;
+                $(paymentId ? '#tagModeLink' : '#tagModeNew').prop('checked', true);
+                const invoiceIds = (b.attr('data-invoices') || '').split(',').filter(Boolean).map(Number);
+                renderForLocation(paymentId, invoiceIds.length ? invoiceIds : null);
                 $('#tagModal').modal('show');
             });
 
-            $('#tagLocation').on('change', function () { renderPayments(null); });
-            $('#tagPayments').on('change', '.pbr-pay', updateOutcome);
+            $('#tagLocation').on('change', function () { renderForLocation(null, null); });
+            $('input[name=tagMode]').on('change', function () { renderInvoices(null); updateOutcome(); });
+            $('#tagPayments').on('change', '.pbr-pay', function () { renderInvoices(null); updateOutcome(); });
+            $('#tagInvoices').on('change', '.pbr-inv', updateOutcome);
+            $('#tagShowAll').on('click', function () {
+                const ticked = $('.pbr-pay:checked').map(function () { return Number(this.value); }).get();
+                tagShowAllPayments = !tagShowAllPayments;
+                renderPayments(null);
+                $('.pbr-pay').each(function () { $(this).prop('checked', ticked.indexOf(Number(this.value)) !== -1); });
+                renderInvoices(null);
+                updateOutcome();
+            });
 
             $('#btnTagSave').on('click', function () {
                 const locationCode = $('#tagLocation').val();
                 if (!locationCode) { alert('Please choose the location that paid.'); return; }
-                const paymentIds = $('.pbr-pay:checked').map(function () { return Number(this.value); }).get();
+                const connecting = $('#tagModeLink').prop('checked');
+                const paymentIds = connecting ? $('.pbr-pay:checked').map(function () { return Number(this.value); }).get() : [];
+                if (connecting && !paymentIds.length) { alert('Tick the payment to connect to, or choose Create new payment.'); return; }
+                const invoiceIds = amountLeftForNewPayment() > 0 ? $('.pbr-inv:checked').map(function () { return Number(this.value); }).get() : [];
                 const btn = $(this).prop('disabled', true);
                 postJson('/platform-billing/bank-receipts/' + tagLineId + '/tag', {
                     locationCode: locationCode,
                     paymentIds: paymentIds,
+                    invoiceIds: invoiceIds,
                     rememberText: $('#tagRemember').val()
                 })
                     .done(function () { window.location.reload(); })

@@ -7,6 +7,11 @@ const { QueryTypes } = require("sequelize");
 const select = (sql, replacements = {}, options = {}) =>
     db.sequelize.query(sql, { replacements, type: QueryTypes.SELECT, ...options });
 
+// Aug-2026, or Apr-2026 to Mar-2027 for a longer plan
+const PERIOD_LABEL = `IF(DATE_FORMAT(i.period_start_date, '%Y%m') = DATE_FORMAT(i.period_end_date, '%Y%m'),
+                       DATE_FORMAT(i.period_start_date, '%b-%Y'),
+                       CONCAT(DATE_FORMAT(i.period_start_date, '%b-%Y'), ' to ', DATE_FORMAT(i.period_end_date, '%b-%Y')))`;
+
 const PlatformBankReceiptDao = {
 
     transaction: (fn) => db.sequelize.transaction(fn),
@@ -74,7 +79,12 @@ const PlatformBankReceiptDao = {
     findLines: (status) => select(
         `SELECT t.*, l.location_name,
                 GROUP_CONCAT(CONCAT('#', lk.payment_id) ORDER BY lk.payment_id SEPARATOR ', ') AS payment_refs,
-                MAX(lk.created_payment) AS has_created_payment
+                MAX(lk.created_payment) AS has_created_payment,
+                (SELECT GROUP_CONCAT(${PERIOD_LABEL} ORDER BY i.period_start_date SEPARATOR ', ')
+                 FROM t_platform_bank_txn_payment lk2
+                 JOIN t_platform_payment_allocation a ON a.payment_id = lk2.payment_id
+                 JOIN t_platform_invoice i ON i.invoice_id = a.invoice_id
+                 WHERE lk2.bank_txn_id = t.bank_txn_id) AS pays_for
          FROM t_platform_bank_txn t
          LEFT JOIN m_location l ON l.location_code = t.location_code
          LEFT JOIN t_platform_bank_txn_payment lk ON lk.bank_txn_id = t.bank_txn_id
@@ -114,7 +124,11 @@ const PlatformBankReceiptDao = {
     // remaining = the part of each payment no statement line accounts for yet
     findUnlinkedPayments: (options = {}) => select(
         `SELECT p.payment_id, p.location_code, p.payment_date, p.amount, p.payment_mode, p.reference_number,
-                p.amount - COALESCE(SUM(lk.linked_amount), 0) AS remaining
+                p.amount - COALESCE(SUM(lk.linked_amount), 0) AS remaining,
+                (SELECT GROUP_CONCAT(${PERIOD_LABEL} ORDER BY i.period_start_date SEPARATOR ', ')
+                 FROM t_platform_payment_allocation a
+                 JOIN t_platform_invoice i ON i.invoice_id = a.invoice_id
+                 WHERE a.payment_id = p.payment_id) AS pays_for
          FROM t_platform_payment p
          LEFT JOIN t_platform_bank_txn_payment lk ON lk.payment_id = p.payment_id
          WHERE p.status NOT IN ('FAILED', 'REFUNDED')
@@ -123,6 +137,26 @@ const PlatformBankReceiptDao = {
          ORDER BY p.payment_date DESC, p.payment_id DESC`,
         {},
         options
+    ),
+
+    // ─── Unpaid invoices and how each location is billed ───────────────────
+
+    // Oldest first within a location, which is the order a receipt pays them
+    findOutstandingInvoices: () => select(
+        `SELECT i.invoice_id, i.location_code, i.period_start_date, ${PERIOD_LABEL} AS period_label,
+                i.net_amount - COALESCE(SUM(a.allocated_amount), 0) AS balance
+         FROM t_platform_invoice i
+         LEFT JOIN t_platform_payment_allocation a ON a.invoice_id = i.invoice_id
+         WHERE i.status IN ('UNPAID', 'PARTIAL')
+         GROUP BY i.invoice_id
+         HAVING balance > 0.005
+         ORDER BY i.location_code, i.period_start_date, i.invoice_id`
+    ),
+
+    findCurrentBillingTiming: () => select(
+        `SELECT location_code, billing_timing
+         FROM m_location_billing_plan
+         WHERE CURDATE() BETWEEN effective_start_date AND effective_end_date`
     ),
 
     // Locks the payment so two lines can't both claim its remaining amount
