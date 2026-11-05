@@ -8,6 +8,7 @@ const db = require('../db/db-connection');
 const createAccountingService = require('../services/create-accounting-service');
 const glBatchService = require('../services/gl-batch-service');
 const stockValuationService = require('../services/stock-valuation-service');
+const glAccountingSetupService = require('../services/gl-accounting-setup-service');
 const { getLocationConfigValue } = require('../utils/location-config');
 
 // GET /gl/api/ledgers/search?location=&group=&q=
@@ -1270,10 +1271,16 @@ router.get('/ledgers', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTI
 // product ledger mapping, static ledger map review, and CREDIT/SUPPLIER/BANK
 // ledger master coverage.
 
+const ENGINE_REQUIRED_LEDGERS = [
+    'Unclassified Bank Transaction', 'Unclassified Cashflow', 'General Adjustment',
+    'Opening Balance Equity', 'Digital Vendor Charges', 'POS Rental Charges',
+];
+
 async function buildSetupCheck(locationCode) {
     const [fyRows, enabledRows, salesMissing, purchaseMissing,
            outputCgstMissing, outputSgstMissing, inputCgstMissing, inputSgstMissing,
-           staticUnreviewed, creditMissing, supplierMissing, bankMissing, tallyMappedRows] = await Promise.all([
+           staticUnreviewed, creditMissing, supplierMissing, bankMissing, tallyMappedRows,
+           systemLedgerRows, headsNoMap, stockNotSeeded] = await Promise.all([
 
         db.sequelize.query(
             `SELECT fy_id, fy_name, start_date, end_date, is_current, is_closed
@@ -1377,7 +1384,38 @@ async function buildSetupCheck(locationCode) {
         db.sequelize.query(
             `SELECT COUNT(*) AS c FROM gl_ledgers WHERE location_code = :locationCode AND active_flag = 'Y' AND tally_ledger_name IS NOT NULL`,
             { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Ledgers the engine resolves by name and errors without
+        db.sequelize.query(
+            `SELECT ledger_name FROM gl_ledgers WHERE location_code = :locationCode AND ledger_name IN (:names)`,
+            { replacements: { locationCode, names: ENGINE_REQUIRED_LEDGERS }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Active heads with no map row post to Unclassified, and the Static
+        // Ledger Map screen can only edit rows, so they can't be reviewed there.
+        db.sequelize.query(
+            `SELECT ah.account_head_name AS name FROM m_account_heads ah
+             WHERE ah.location_code = :locationCode AND ah.active_flag = 'Y'
+             AND NOT EXISTS (SELECT 1 FROM gl_static_ledger_map m
+                 WHERE m.location_code = ah.location_code AND m.ledger_name = ah.account_head_name)
+             ORDER BY ah.account_head_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
+
+        // Product Master opening inside a financial year with no P&L row for that year
+        db.sequelize.query(
+            `SELECT p.product_name AS name
+             FROM t_lubes_stock_adjustment a
+             JOIN m_product p ON p.product_id = a.product_id
+             JOIN gl_financial_years fy ON fy.location_code = a.location_code
+                  AND a.adjustment_date BETWEEN fy.start_date AND fy.end_date
+             WHERE a.location_code = :locationCode AND a.adjustment_type = 'OPENING' AND a.qty > 0
+             AND NOT EXISTS (SELECT 1 FROM gl_stock_opening_balance s
+                 WHERE s.location_code = a.location_code AND s.product_id = a.product_id AND s.fy_id = fy.fy_id)
+             ORDER BY p.product_name`,
+            { replacements: { locationCode }, type: db.Sequelize.QueryTypes.SELECT }),
     ]);
+
+    const foundSystemLedgers = new Set(systemLedgerRows.map(r => r.ledger_name.toLowerCase()));
+    const systemMissing = ENGINE_REQUIRED_LEDGERS.filter(n => !foundSystemLedgers.has(n.toLowerCase()));
 
     const currentFy = fyRows.find(r => r.is_current === 'Y') || null;
     const glEnabled = !!(enabledRows[0] && enabledRows[0].enabled);
@@ -1451,6 +1489,24 @@ async function buildSetupCheck(locationCode) {
             detail: bankMissing.length === 0 ? 'Every bank account has a ledger.' : `${bankMissing.length} bank account(s) with no ledger.`,
             rows: bankMissing
         },
+        {
+            key: 'system_ledgers', label: 'System Ledgers',
+            pass: systemMissing.length === 0,
+            detail: systemMissing.length === 0 ? 'All ledgers the engine looks up by name are present.' : `${systemMissing.length} ledger(s) missing. Accounting will error until they exist.`,
+            rows: systemMissing.map(name => ({ name }))
+        },
+        {
+            key: 'heads_no_map', label: 'Account Heads Missing from Static Ledger Map',
+            pass: headsNoMap.length === 0,
+            detail: headsNoMap.length === 0 ? 'Every active account head is on the Static Ledger Map.' : `${headsNoMap.length} head(s) will post to Unclassified and cannot be reviewed yet.`,
+            rows: headsNoMap
+        },
+        {
+            key: 'stock_opening', label: 'Opening Stock for P&L', severity: 'warning',
+            pass: stockNotSeeded.length === 0,
+            detail: stockNotSeeded.length === 0 ? 'Product opening stock has reached the P&L.' : `${stockNotSeeded.length} product(s) have opening stock in Product Master that the P&L cannot see. Without it the P&L shows purchases, not cost of goods sold.`,
+            rows: stockNotSeeded
+        },
     ];
 
     const blockerCount = checks.filter(c => !c.pass && c.severity !== 'warning').length;
@@ -1476,6 +1532,58 @@ router.get('/setup-check', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
         console.error('Setup check error:', err);
         req.flash('error', err.message);
         res.redirect('/gl/control');
+    }
+});
+
+// ── Accounting Setup ─────────────────────────────────────────────────────────
+// GET /gl/accounting-setup — preview of what a location is missing, plus opening
+// stock built from Product Master. Onboarding runs the same setup automatically;
+// this page is for locations onboarded before that, and for filling later gaps.
+
+router.get('/accounting-setup', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCOUNTING')], async function(req, res) {
+    const locationCode = req.user.location_code;
+    try {
+        const [plan, stockRows] = await Promise.all([
+            glAccountingSetupService.buildPlan(locationCode),
+            glAccountingSetupService.buildStockPlan(locationCode),
+        ]);
+        res.render('gl-accounting-setup', {
+            title:    'Accounting Setup',
+            user:     req.user,
+            config:   require('../config/app-config').APP_CONFIGS,
+            plan,
+            stockRows,
+            canEdit:  require('../config/app-config').APP_CONFIGS.adminRoles.includes(req.user.Role),
+            messages: req.flash()
+        });
+    } catch (err) {
+        console.error('Accounting setup error:', err);
+        req.flash('error', err.message);
+        res.redirect('/gl/setup-check');
+    }
+});
+
+router.post('/api/accounting-setup/apply', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const user = req.user.username || String(req.user.Person_id);
+    try {
+        const plan = await glAccountingSetupService.applyPlan(req.user.location_code, user);
+        res.json({ success: true, todo: plan.todo, manual: plan.staticManual.length });
+    } catch (err) {
+        console.error('Accounting setup apply error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/api/accounting-setup/stock', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const user = req.user.username || String(req.user.Person_id);
+    const rows = Array.isArray(req.body.rows) ? req.body.rows : [];
+    if (!rows.length) return res.status(400).json({ success: false, error: 'Select at least one product' });
+    try {
+        const result = await glAccountingSetupService.saveStockRows(req.user.location_code, user, rows);
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Accounting setup stock error:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

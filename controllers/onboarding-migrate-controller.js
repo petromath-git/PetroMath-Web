@@ -3,6 +3,7 @@ const db = require('../db/db-connection');
 const { QueryTypes } = require('sequelize');
 const OnboardingDao = require('../dao/onboarding-dao');
 const ProductDao = require('../dao/product-dao');
+const glAccountingSetupService = require('../services/gl-accounting-setup-service');
 const bcrypt = require('bcrypt');
 
 // Password for the ADMIN-<LOC> login created on migrate — client changes it after handoff
@@ -407,6 +408,19 @@ module.exports = {
                 results.push({ section: 'Ledger Rules', inserted: 1, skipped: 0, errors: [] });
             } catch (e) {
                 results.push({ section: 'Ledger Rules', inserted: 0, skipped: 0, errors: [e.message] });
+            }
+
+            // ── Step 11b: Accounting setup (FY, ledgers, product + static maps) ──
+            // Rerunning migrate only fills gaps. Opening stock comes later, once
+            // the location has entered it.
+            try {
+                const plan = await glAccountingSetupService.applyPlan(loc, 'onboarding');
+                results.push({ section: 'Accounting: Financial Year', inserted: plan.fyToCreate.length, skipped: 0, errors: [] });
+                results.push({ section: 'Accounting: Ledgers', inserted: plan.ledgersToCreate.length, skipped: 0, errors: plan.needsReview });
+                results.push({ section: 'Accounting: Product Ledger Map', inserted: plan.productMaps.length, skipped: 0, errors: [] });
+                results.push({ section: 'Accounting: Static Ledger Map', inserted: plan.staticSkip.length + plan.staticPost.length, skipped: plan.staticManual.length, errors: [] });
+            } catch (e) {
+                results.push({ section: 'Accounting Setup', inserted: 0, skipped: 0, errors: [e.message] });
             }
 
             // ── Step 12: Default Admin login (ADMIN-<LOC> / welcome123) ──────────

@@ -6,7 +6,9 @@ block content
 
         .d-flex.justify-content-between.align-items-center.mb-3
             h4.mb-0 Accounting Setup Check
-            a.btn.btn-sm.btn-outline-secondary(href="/gl/control") GL Control &rarr;
+            div
+                a.btn.btn-sm.btn-primary.mr-2(href="/gl/accounting-setup") Accounting Setup
+                a.btn.btn-sm.btn-outline-secondary(href="/gl/control") GL Control &rarr;
 
         if ready && warningCount === 0
             .alert.alert-success.py-2
