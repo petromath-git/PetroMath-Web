@@ -13,8 +13,14 @@ const moment = require('moment');
  * - DEV_TRACKER_MANAGE triage (status/priority/assignee/scope), tasks, work log, delete
  *
  * Reporters never see due dates, hours, assignee or internal tasks/comments, so
- * granting DEV_TRACKER to station users later doesn't set expectations we can't meet.
+ * granting DEV_TRACKER to station users doesn't set expectations we can't meet.
+ *
+ * Station users (e.g. Admin, granted per location in Menu Management) raise tickets
+ * for their login location and see only the tickets they raised. The support team
+ * roles below see every ticket for their stations.
  */
+
+const SUPPORT_TEAM_ROLES = ['SuperUser', 'PowerUser'];
 
 const TYPES = ['Bug', 'Feature', 'Enhancement', 'Task'];
 const REPORTER_TYPES = ['Bug', 'Feature', 'Enhancement'];
@@ -50,11 +56,16 @@ const saveAttachments = (files, tracker, userName) => Promise.all(files.map(f =>
 
 const { fmtSize } = attachmentUpload;
 
-const getAccess = (user) => ({
-    locations: security.getAccessibleLocations(user),
-    canManage: security.hasMenuChk(user, 'DEV_TRACKER_MANAGE'),
-    isSuperUser: !!user && user.Role === 'SuperUser'
-});
+const getAccess = (user) => {
+    const canManage = security.hasMenuChk(user, 'DEV_TRACKER_MANAGE');
+    return {
+        locations: security.getAccessibleLocations(user),
+        canManage,
+        ownOnly: !canManage && !SUPPORT_TEAM_ROLES.includes(user.Role),
+        userName: user.User_Name,
+        isSuperUser: user.Role === 'SuperUser'
+    };
+};
 
 // Claude conversation links (SuperUser only): one per line, each an https://
 // link or a Claude Code session id. Returns { error } or { value } for saving.
@@ -146,6 +157,7 @@ module.exports = {
                 filters,
                 locations,
                 canManage: access.canManage,
+                ownOnly: access.ownOnly,
                 isSuperUser: access.isSuperUser,
                 hoursRanges: HOURS_RANGES,
                 tokenRanges: TOKEN_RANGES,
