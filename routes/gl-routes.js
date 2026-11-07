@@ -576,7 +576,7 @@ router.get('/trial-balance', [isLoginEnsured, security.hasPermission('VIEW_GL_AC
                 g.group_name,
                 g.group_nature,
                 l.ledger_id,
-                l.ledger_name,
+                CONCAT(l.ledger_name, IF(l.active_flag = 'Y', '', ' (inactive)')) AS ledger_name,
                 COALESCE(b.total_dr, 0) AS total_dr,
                 COALESCE(b.total_cr, 0) AS total_cr
             FROM gl_ledgers l
@@ -592,7 +592,7 @@ router.get('/trial-balance', [isLoginEnsured, security.hasPermission('VIEW_GL_AC
                 GROUP BY jl.ledger_id
             ) b ON b.ledger_id = l.ledger_id
             WHERE l.location_code = :locationCode
-              AND l.active_flag   = 'Y'
+              AND (l.active_flag = 'Y' OR b.ledger_id IS NOT NULL)
             ORDER BY
                 FIELD(g.group_nature, 'ASSETS', 'LIABILITIES', 'INCOME', 'EXPENSES'),
                 g.group_name,
@@ -666,7 +666,7 @@ router.get('/profit-loss', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
                 g.group_name,
                 g.group_nature,
                 l.ledger_id,
-                l.ledger_name,
+                CONCAT(l.ledger_name, IF(l.active_flag = 'Y', '', ' (inactive)')) AS ledger_name,
                 COALESCE(b.total_dr, 0) AS total_dr,
                 COALESCE(b.total_cr, 0) AS total_cr
             FROM gl_ledgers l
@@ -682,7 +682,6 @@ router.get('/profit-loss', [isLoginEnsured, security.hasPermission('VIEW_GL_ACCO
                 GROUP BY jl.ledger_id
             ) b ON b.ledger_id = l.ledger_id
             WHERE l.location_code = :locationCode
-              AND l.active_flag   = 'Y'
               AND g.group_nature  IN ('INCOME', 'EXPENSES')
               AND (b.total_dr IS NOT NULL OR b.total_cr IS NOT NULL)
             ORDER BY g.group_nature DESC, g.group_name, l.ledger_name
@@ -803,7 +802,7 @@ router.get('/balance-sheet', [isLoginEnsured, security.hasPermission('VIEW_GL_AC
                 g.group_name,
                 g.group_nature,
                 l.ledger_id,
-                l.ledger_name,
+                CONCAT(l.ledger_name, IF(l.active_flag = 'Y', '', ' (inactive)')) AS ledger_name,
                 COALESCE(b.total_dr, 0) AS total_dr,
                 COALESCE(b.total_cr, 0) AS total_cr
             FROM gl_ledgers l
@@ -819,7 +818,6 @@ router.get('/balance-sheet', [isLoginEnsured, security.hasPermission('VIEW_GL_AC
                 GROUP BY jl.ledger_id
             ) b ON b.ledger_id = l.ledger_id
             WHERE l.location_code = :locationCode
-              AND l.active_flag   = 'Y'
               AND g.group_nature  IN ('ASSETS', 'LIABILITIES')
               AND (b.total_dr IS NOT NULL OR b.total_cr IS NOT NULL)
             ORDER BY g.group_nature, g.group_name, l.ledger_name
@@ -1923,6 +1921,20 @@ router.put('/api/ledger/:id', [isLoginEnsured, security.isAdmin()], async functi
     const { ledger_name, group_id, active_flag, tally_ledger_name } = req.body;
     if (!ledger_name || !group_id) return res.status(400).json({ success: false, error: 'ledger_name and group_id are required' });
     try {
+        // Ask before switching off a ledger that has entries. It stays in the books either way.
+        if (active_flag !== 'Y' && !req.body.confirm_inactive) {
+            const [used] = await db.sequelize.query(`
+                SELECT COUNT(*) AS entries, l.active_flag
+                FROM gl_ledgers l
+                LEFT JOIN gl_journal_lines jl ON jl.ledger_id = l.ledger_id
+                WHERE l.ledger_id = :ledgerId AND l.location_code = :locationCode
+                  AND jl.ledger_id IS NOT NULL
+                GROUP BY l.active_flag
+            `, { replacements: { ledgerId, locationCode }, type: db.Sequelize.QueryTypes.SELECT });
+            if (used && used.active_flag === 'Y') {
+                return res.json({ success: false, needs_confirm: true, error: `"${ledger_name}" has ${used.entries} accounting entries. They stay in the books and in the reports, shown as inactive. Switch it off anyway?` });
+            }
+        }
         await db.sequelize.query(`
             UPDATE gl_ledgers SET ledger_name=:ledger_name, group_id=:group_id, active_flag=:active_flag,
                 tally_ledger_name=:tally_ledger_name, updated_by=:user
