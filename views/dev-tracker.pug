@@ -12,7 +12,7 @@ block content
                 h2.mb-1
                     i.bi.bi-life-preserver.mr-2
                     | Support Tickets
-                p.text-muted.mb-0 Issues and feature requests from the stations
+                p.text-muted.mb-0= ownOnly ? 'Issues and feature requests you have raised' : 'Issues and feature requests from the stations'
             .d-flex.gap-2
                 if canManage
                     a.btn.btn-outline-secondary(href="/dev-tracker/hours")
@@ -53,14 +53,15 @@ block content
                         option(value="") All
                         each t in ['Bug', 'Feature', 'Enhancement', 'Task']
                             option(value=t selected=(filters.type === t))= typeLabel[t]
-                .col-6.col-md-2
-                    label.small Station
-                    select.form-control.form-control-sm(name="location_code")
-                        option(value="") All my stations
-                        each loc in locations
-                            option(value=loc.location_code selected=(filters.location_code === loc.location_code))= loc.location_code
-                        if canManage
-                            option(value="NONE" selected=(filters.location_code === 'NONE')) Platform (no station)
+                if !ownOnly
+                    .col-6.col-md-2
+                        label.small Station
+                        select.form-control.form-control-sm(name="location_code")
+                            option(value="") All my stations
+                            each loc in locations
+                                option(value=loc.location_code selected=(filters.location_code === loc.location_code))= loc.location_code
+                            if canManage
+                                option(value="NONE" selected=(filters.location_code === 'NONE')) Platform (no station)
                 if canManage
                     .col-6.col-md-2
                         label.small Scope
