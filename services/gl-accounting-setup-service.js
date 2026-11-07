@@ -411,6 +411,7 @@ async function buildStockPlan(locationCode) {
                 row.seeded_value = Number(seed.opening_value);
                 row.qty = row.seeded_qty;
                 row.value = row.seeded_value;
+                if (seed.source === 'FY_CLOSE') row.status = 'locked';
             } else {
                 row.value = 0;
                 row.message = 'Purchased, but no opening stock entered. Saved as zero.';
@@ -557,4 +558,65 @@ async function mapNewProducts(locationCode, user, options = {}) {
     return options.transaction ? run(options.transaction) : db.sequelize.transaction(run);
 }
 
-module.exports = { buildPlan, applyPlan, buildStockPlan, saveStockRows, classifyProduct, ensureCurrentFinancialYear, mapNewProducts };
+// Closing stock of the year before becomes this year's opening. Only products
+// with an opening row last year have a closing to carry. A value entered by hand
+// (SEED) stays; a row carried earlier (FY_CLOSE) is recalculated, so pressing the
+// button again after late invoices corrects it.
+async function buildStockCarryForward(locationCode, fyId) {
+    const fys = await select(`SELECT fy_id, fy_name, is_closed,
+                                     DATE_FORMAT(start_date, '%Y-%m-%d') AS start_date, DATE_FORMAT(end_date, '%Y-%m-%d') AS end_date
+                              FROM gl_financial_years WHERE location_code = :locationCode`, { locationCode });
+    const target = fys.find(f => f.fy_id === Number(fyId));
+    if (!target) return null;
+    const previous = fys.find(f => f.end_date === moveDay(target.start_date, -1)) || null;
+    if (!previous) return { target, previous, rows: [] };
+
+    const [lastYear, thisYear] = await Promise.all([
+        select(`SELECT s.product_id, p.product_name
+                FROM gl_stock_opening_balance s JOIN m_product p ON p.product_id = s.product_id
+                WHERE s.location_code = :locationCode AND s.fy_id = :fy_id
+                ORDER BY p.product_name`, { locationCode, fy_id: previous.fy_id }),
+        select(`SELECT product_id, opening_qty, opening_value, source
+                FROM gl_stock_opening_balance WHERE location_code = :locationCode AND fy_id = :fy_id`, { locationCode, fy_id: target.fy_id }),
+    ]);
+    const existing = new Map(thisYear.map(s => [s.product_id, s]));
+
+    const rows = [];
+    for (const p of lastYear) {
+        const closing = await stockValuationService.computeProductStockCOGS(locationCode, previous.fy_id, p.product_id, previous.start_date, previous.end_date);
+        if (!closing) continue;
+        const now = existing.get(p.product_id);
+        rows.push({
+            product_id: p.product_id,
+            product_name: p.product_name,
+            qty: Math.round(closing.closingQty * 1000) / 1000,
+            value: round2(closing.closingValue),
+            kept: !!now && now.source !== 'FY_CLOSE',
+            current_value: now ? Number(now.opening_value) : null,
+        });
+    }
+    return { target, previous, rows };
+}
+
+async function saveStockCarryForward(locationCode, fyId, user, options = {}) {
+    const plan = await buildStockCarryForward(locationCode, fyId);
+    if (!plan) return null;
+    if (plan.target.is_closed === 'Y') throw new Error(`${plan.target.fy_name} is closed`);
+    if (!plan.previous) throw new Error(`No financial year ends the day before ${plan.target.fy_name} starts`);
+
+    const rows = plan.rows.filter(r => !r.kept);
+    const notes = `Closing stock of ${plan.previous.fy_name}`;
+    const run = async (transaction) => {
+        for (const r of rows) {
+            await db.sequelize.query(`
+                INSERT INTO gl_stock_opening_balance (location_code, product_id, fy_id, opening_qty, opening_value, source, notes, created_by)
+                VALUES (:locationCode, :product_id, :fy_id, :qty, :value, 'FY_CLOSE', :notes, :user)
+                ON DUPLICATE KEY UPDATE opening_qty = VALUES(opening_qty), opening_value = VALUES(opening_value), notes = VALUES(notes)
+            `, { replacements: { locationCode, user, notes, fy_id: plan.target.fy_id, product_id: r.product_id, qty: r.qty, value: r.value }, type: QueryTypes.INSERT, transaction });
+        }
+        return { saved: rows.length, kept: plan.rows.length - rows.length };
+    };
+    return options.transaction ? run(options.transaction) : db.sequelize.transaction(run);
+}
+
+module.exports = { buildPlan, applyPlan, buildStockPlan, saveStockRows, classifyProduct, ensureCurrentFinancialYear, mapNewProducts, buildStockCarryForward, saveStockCarryForward };

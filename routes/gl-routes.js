@@ -1799,6 +1799,29 @@ router.post('/api/financial-years/:id/set-current', [isLoginEnsured, security.is
     }
 });
 
+router.get('/api/financial-years/:id/stock-carry-forward', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    try {
+        const plan = await glAccountingSetupService.buildStockCarryForward(req.user.location_code, parseInt(req.params.id));
+        if (!plan) return res.status(404).json({ success: false, error: 'Financial year not found' });
+        res.json({ success: true, ...plan });
+    } catch (err) {
+        console.error('Stock carry forward preview error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+router.post('/api/financial-years/:id/stock-carry-forward', [isLoginEnsured, security.isAdmin()], async function(req, res) {
+    const user = req.user.username || String(req.user.Person_id);
+    try {
+        const result = await glAccountingSetupService.saveStockCarryForward(req.user.location_code, parseInt(req.params.id), user);
+        if (!result) return res.status(404).json({ success: false, error: 'Financial year not found' });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('Stock carry forward error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 router.post('/api/financial-years/:id/close', [isLoginEnsured, security.isAdmin()], async function(req, res) {
     const locationCode = req.user.location_code;
     const fyId = parseInt(req.params.id);

@@ -43,7 +43,7 @@ block content
                     if years.length === 0
                         tr
                             td.text-muted.small(colspan="7") No financial years defined for #{user.location_code} yet.
-                    each y in years
+                    each y, i in years
                         tr(data-fy-id=y.fy_id)
                             td.small= y.fy_name
                             td.small= y.start_date
@@ -62,6 +62,8 @@ block content
                             td.text-center
                                 if y.is_current !== 'Y'
                                     button.btn.btn-outline-success.btn-sm.btn-set-current(type="button" title="Set as current FY") Set Current
+                                if i < years.length - 1 && y.is_closed !== 'Y'
+                                    button.btn.btn-outline-primary.btn-sm.btn-carry-stock.ml-1(type="button" title="Use closing stock of the year before as this year's opening") Opening Stock
                                 if y.is_closed === 'Y'
                                     button.btn.btn-outline-warning.btn-sm.btn-reopen.ml-1(type="button" title="Reopen this FY") Reopen
                                 else
@@ -153,6 +155,34 @@ block content
                 });
             });
         }
+
+        document.querySelectorAll('.btn-carry-stock').forEach(function(btn) {
+            btn.addEventListener('click', async function() {
+                const url = '/gl/api/financial-years/' + this.closest('tr').dataset.fyId + '/stock-carry-forward';
+                const money = (n) => Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                this.disabled = true;
+                try {
+                    const plan = await (await fetch(url)).json();
+                    if (!plan.success) throw new Error(plan.error);
+                    if (!plan.previous) throw new Error('No financial year ends the day before this one starts.');
+                    if (!plan.rows.length) throw new Error(plan.previous.fy_name + ' has no opening stock, so there is no closing stock to carry.');
+
+                    const lines = plan.rows.map(function(r) {
+                        return r.product_name + ': ' + r.qty + ' = Rs ' + money(r.value) + (r.kept ? ' (keeping Rs ' + money(r.current_value) + ' already entered)' : '');
+                    });
+                    const warning = plan.previous.is_closed === 'Y' ? '' : '\n\n' + plan.previous.fy_name + ' is not closed. Check that all its invoices and sales are entered.';
+                    if (!confirm('Closing stock of ' + plan.previous.fy_name + ' becomes the opening stock of ' + plan.target.fy_name + ':\n\n' + lines.join('\n') + warning + '\n\nContinue?')) return;
+
+                    const saved = await (await fetch(url, { method: 'POST' })).json();
+                    if (!saved.success) throw new Error(saved.error);
+                    alert(saved.saved + ' product(s) saved' + (saved.kept ? ', ' + saved.kept + ' kept as entered' : '') + '.');
+                } catch (e) {
+                    alert('Error: ' + e.message);
+                } finally {
+                    this.disabled = false;
+                }
+            });
+        });
 
         wireRowAction('.btn-set-current', '/set-current', 'POST', null);
         wireRowAction('.btn-close-fy',    '/close',        'POST', 'Mark this financial year as closed?');
