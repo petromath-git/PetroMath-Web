@@ -343,8 +343,13 @@ block content
                 const tallyName = document.getElementById('lTallyName').value.trim();
                 const body      = { ledger_name: name, group_id, tally_ledger_name: tallyName || null };
                 if (editingLedgerId) body.active_flag = active;
-                const resp = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-                const data = await resp.json();
+                const send = async () => (await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+                let data = await send();
+                if (data.needs_confirm) {
+                    if (!confirm(data.error)) { this.disabled = false; return; }
+                    body.confirm_inactive = true;
+                    data = await send();
+                }
                 if (data.success) { reloadPage(); } else { alert('Error: ' + data.error); this.disabled = false; }
             } catch (e) { alert('Network error.'); this.disabled = false; }
         });
