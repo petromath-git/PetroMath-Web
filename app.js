@@ -144,6 +144,8 @@ require('./services/oil-portal-health-scheduler').start();
 require('./services/deadline-reminder-scheduler').start();
 // Rent drafts on each location's invoice day, 07:00 IST (prod only) - see services/rental-draft-scheduler.js
 require('./services/rental-draft-scheduler').start();
+// Financial year and new product maps for each location, 00:10 IST daily (prod only) - see services/gl-daily-setup-scheduler.js
+require('./services/gl-daily-setup-scheduler').start();
 // Bank holidays from RBI's list, monthly - see services/bank-holiday-service.js
 require('./services/bank-holiday-service').start();
 
