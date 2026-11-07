@@ -751,6 +751,68 @@ const CHECKS = [
         }
     },
     {
+        code: 'P13', stage: 'PRE', severity: 'fail',
+        title: 'Payments on the oil-company statement missing from the bank statement',
+        why: 'A payment posts from the bank\'s statement, and the oil company\'s copy tagged to that bank is skipped. If the bank\'s statement has no such line, the payment never reaches the books: the oil company still shows as owed and the bank balance is too high.',
+        fix: 'Upload the paying bank\'s statement for these dates. If the statement is already uploaded, check the amount and the bank tagged on the oil company\'s line.',
+        fixUrl: '/transaction-upload',
+        run: async c => {
+            // Oil-company credits that are payments: tagged to a bank, or a bank
+            // transfer narration (IFSC_account), which catches any label.
+            const payments = await q(`
+                SELECT o.t_bank_id, DATE_FORMAT(o.trans_date,'%Y-%m-%d') _d, UPPER(DATE_FORMAT(o.trans_date,'%d-%b-%Y')) trans_date,
+                       ob.bank_name oil_account, o.credit_amount amount,
+                       COALESCE(CASE WHEN LOWER(o.external_source) = 'bank' THEN pb.bank_name END, '(not tagged to a bank)') paid_from,
+                       CASE WHEN LOWER(o.external_source) = 'bank' THEN o.external_id END _bank_id,
+                       COALESCE(o.ledger_name,'') label, LEFT(o.remarks, 60) narration
+                FROM t_bank_transaction o
+                JOIN m_bank ob ON ob.bank_id = o.bank_id AND ob.is_oil_company = 'Y'
+                LEFT JOIN m_bank pb ON pb.bank_id = o.external_id
+                WHERE ob.location_code = :loc AND o.trans_date BETWEEN :from AND :to AND o.credit_amount > 0
+                  AND (LOWER(o.external_source) = 'bank' OR o.remarks REGEXP '[A-Z]{4}0[0-9A-Z]{6}_')
+                ORDER BY o.trans_date, o.t_bank_id`, c.r);
+            if (!payments.length) return { rows: [] };
+
+            const debits = await q(`
+                SELECT t.bank_id, DATE_FORMAT(t.trans_date,'%Y-%m-%d') d, t.debit_amount amount
+                FROM t_bank_transaction t
+                JOIN m_bank b ON b.bank_id = t.bank_id AND COALESCE(b.is_oil_company,'N') <> 'Y'
+                WHERE b.location_code = :loc AND t.debit_amount > 0
+                  AND t.trans_date BETWEEN DATE_SUB(:from, INTERVAL 3 DAY) AND DATE_ADD(:to, INTERVAL 3 DAY)`, c.r);
+            const coverage = await q(`
+                SELECT t.bank_id, DATE_FORMAT(MIN(t.trans_date),'%Y-%m-%d') first_day, DATE_FORMAT(MAX(t.trans_date),'%Y-%m-%d') last_day
+                FROM t_bank_transaction t
+                JOIN m_bank b ON b.bank_id = t.bank_id AND COALESCE(b.is_oil_company,'N') <> 'Y'
+                WHERE b.location_code = :loc
+                GROUP BY t.bank_id`, c.r);
+            const covered = new Map(coverage.map(r => [r.bank_id, r]));
+
+            // One bank line pays one oil-company line: amounts repeat, so a plain
+            // "same amount exists" test would hide a missing payment. Nearest date first.
+            const days = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000);
+            const used = new Set();
+            const unmatched = [];
+            for (const maxDays of [0, 1, 2, 3]) {
+                for (const p of (unmatched.length || maxDays ? unmatched.splice(0) : payments)) {
+                    const i = debits.findIndex((d, n) => !used.has(n) && Number(d.amount) === Number(p.amount) && days(d.d, p._d) <= maxDays);
+                    if (i >= 0) used.add(i); else unmatched.push(p);
+                }
+            }
+
+            const rows = unmatched.map(p => {
+                const cov = p._bank_id ? covered.get(p._bank_id) : null;
+                let statement = 'Not tagged, so no statement to check';
+                if (p._bank_id) {
+                    if (!cov) statement = 'Statement never uploaded';
+                    else if (p._d < cov.first_day || p._d > cov.last_day) statement = 'Date is outside the uploaded statement';
+                    else statement = 'Statement uploaded, line missing';
+                }
+                return { trans_date: p.trans_date, oil_account: p.oil_account, paid_from: p.paid_from, amount: p.amount, statement, label: p.label, narration: p.narration };
+            });
+            return { rows, amount: sum(rows, 'amount') };
+        }
+    },
+    {
         code: 'A01', stage: 'POST', severity: 'fail',
         title: 'GL events not processed',
         why: 'An event in ERROR or UNPROCESSED means a sale, receipt, bank line or cashflow line is missing from the books.',
