@@ -25,6 +25,8 @@ const SYSTEM_LEDGERS = [
     { name: 'POS Rental Charges',            group: 'Indirect Expenses', why: 'POS rental adjustments' },
 ];
 
+const NEW_PRODUCT_DAYS = 7;
+
 const GST_LEDGERS = {
     OUTPUT_CGST: 'OUTPUT CGST',
     OUTPUT_SGST: 'OUTPUT SGST',
@@ -270,6 +272,29 @@ async function buildPlan(locationCode, options = {}) {
     return plan;
 }
 
+async function insertLedgers(locationCode, user, ledgers, transaction) {
+    for (const l of ledgers) {
+        await db.sequelize.query(`
+            INSERT INTO gl_ledgers (location_code, ledger_name, group_id, source_type, source_id, active_flag, created_by, updated_by)
+            SELECT :locationCode, :ledger_name, g.group_id, :source_type, :source_id, 'Y', :user, :user
+            FROM gl_ledger_groups g
+            WHERE g.location_code = :locationCode AND g.group_name = :group_name
+            LIMIT 1
+        `, { replacements: { locationCode, user, ...l }, type: QueryTypes.INSERT, transaction });
+    }
+}
+
+async function insertProductMaps(locationCode, user, maps, transaction) {
+    for (const m of maps) {
+        await db.sequelize.query(`
+            INSERT IGNORE INTO gl_product_ledger_map (location_code, product_id, map_type, ledger_id, created_by, updated_by)
+            SELECT :locationCode, :product_id, :map_type, l.ledger_id, :user, :user
+            FROM gl_ledgers l
+            WHERE l.location_code = :locationCode AND l.ledger_name = :ledger_name
+        `, { replacements: { locationCode, user, product_id: m.product_id, map_type: m.map_type, ledger_name: m.ledger_name }, type: QueryTypes.INSERT, transaction });
+    }
+}
+
 // Recomputes the plan inside the transaction, so a stale preview can't write
 // anything a concurrent change has made wrong. Safe to run repeatedly.
 async function applyPlan(locationCode, user, options = {}) {
@@ -284,24 +309,8 @@ async function applyPlan(locationCode, user, options = {}) {
             `, { replacements: { locationCode, user, ...fy }, type: QueryTypes.INSERT, transaction });
         }
 
-        for (const l of plan.ledgersToCreate) {
-            await db.sequelize.query(`
-                INSERT INTO gl_ledgers (location_code, ledger_name, group_id, source_type, source_id, active_flag, created_by, updated_by)
-                SELECT :locationCode, :ledger_name, g.group_id, :source_type, :source_id, 'Y', :user, :user
-                FROM gl_ledger_groups g
-                WHERE g.location_code = :locationCode AND g.group_name = :group_name
-                LIMIT 1
-            `, { replacements: { locationCode, user, ...l }, type: QueryTypes.INSERT, transaction });
-        }
-
-        for (const m of plan.productMaps) {
-            await db.sequelize.query(`
-                INSERT IGNORE INTO gl_product_ledger_map (location_code, product_id, map_type, ledger_id, created_by, updated_by)
-                SELECT :locationCode, :product_id, :map_type, l.ledger_id, :user, :user
-                FROM gl_ledgers l
-                WHERE l.location_code = :locationCode AND l.ledger_name = :ledger_name
-            `, { replacements: { locationCode, user, product_id: m.product_id, map_type: m.map_type, ledger_name: m.ledger_name }, type: QueryTypes.INSERT, transaction });
-        }
+        await insertLedgers(locationCode, user, plan.ledgersToCreate, transaction);
+        await insertProductMaps(locationCode, user, plan.productMaps, transaction);
 
         for (const label of plan.staticRowsToAdd) {
             await db.sequelize.query(`
@@ -402,6 +411,7 @@ async function buildStockPlan(locationCode) {
                 row.seeded_value = Number(seed.opening_value);
                 row.qty = row.seeded_qty;
                 row.value = row.seeded_value;
+                if (seed.source === 'FY_CLOSE') row.status = 'locked';
             } else {
                 row.value = 0;
                 row.message = 'Purchased, but no opening stock entered. Saved as zero.';
@@ -489,4 +499,124 @@ function moveDay(dateStr, days) {
     return d.toISOString().substring(0, 10);
 }
 
-module.exports = { buildPlan, applyPlan, buildStockPlan, saveStockRows, classifyProduct };
+// Creates the financial year that today falls in, if the location has none
+// covering it. The current flag moves only off the year that just ended, so a
+// location still deliberately working in an older year keeps its choice.
+async function ensureCurrentFinancialYear(locationCode, user, options = {}) {
+    const startYear = indianFyStartYear(options.today || todayIst());
+    const start = `${startYear}-04-01`;
+    const end = `${startYear + 1}-03-31`;
+    const previousEnd = `${startYear}-03-31`;
+
+    const run = async (transaction) => {
+        const r = { locationCode, start, end, previousEnd, user, fy_name: `${startYear}-${startYear + 1}` };
+        const fys = await select(`SELECT fy_id, is_current, DATE_FORMAT(end_date, '%Y-%m-%d') AS end_date
+                                  FROM gl_financial_years
+                                  WHERE location_code = :locationCode`, r, transaction);
+        const covered = await select(`SELECT fy_id FROM gl_financial_years
+                                      WHERE location_code = :locationCode AND start_date <= :end AND end_date >= :start
+                                      LIMIT 1`, r, transaction);
+        if (covered.length) return null;
+
+        const current = fys.find(f => f.is_current === 'Y');
+        const takeOver = !current || current.end_date === previousEnd;
+        if (current && takeOver) {
+            await db.sequelize.query(`UPDATE gl_financial_years SET is_current = 'N', updated_by = :user WHERE fy_id = :fy_id`,
+                { replacements: { user, fy_id: current.fy_id }, type: QueryTypes.UPDATE, transaction });
+        }
+        await db.sequelize.query(`
+            INSERT INTO gl_financial_years (location_code, fy_name, start_date, end_date, is_current, created_by, updated_by)
+            VALUES (:locationCode, :fy_name, :start, :end, :is_current, :user, :user)
+        `, { replacements: { ...r, is_current: takeOver ? 'Y' : 'N' }, type: QueryTypes.INSERT, transaction });
+        return { fy_name: r.fy_name, is_current: takeOver ? 'Y' : 'N' };
+    };
+    return options.transaction ? run(options.transaction) : db.sequelize.transaction(run);
+}
+
+// Maps products added in the last few days, and creates only the ledgers those
+// maps need. Older unmapped products are left alone: a location may have left
+// them out on purpose, and only the Accounting Setup page should touch them.
+async function mapNewProducts(locationCode, user, options = {}) {
+    const days = options.days || NEW_PRODUCT_DAYS;
+    const run = async (transaction) => {
+        const recent = await select(`SELECT product_id FROM m_product
+                                     WHERE location_code = :locationCode AND creation_date >= NOW() - INTERVAL :days DAY`,
+            { locationCode, days }, transaction);
+        if (!recent.length) return [];
+
+        const plan = await buildPlan(locationCode, { transaction });
+        if (!plan.hasGroups) return [];
+
+        const recentIds = new Set(recent.map(p => p.product_id));
+        const maps = plan.productMaps.filter(m => recentIds.has(m.product_id));
+        const names = new Set(maps.map(m => m.ledger_name.toLowerCase()));
+        const ledgers = plan.ledgersToCreate.filter(l => names.has(l.ledger_name.toLowerCase()));
+        await insertLedgers(locationCode, user, ledgers, transaction);
+        await insertProductMaps(locationCode, user, maps, transaction);
+        return maps;
+    };
+    return options.transaction ? run(options.transaction) : db.sequelize.transaction(run);
+}
+
+// Closing stock of the year before becomes this year's opening. Only products
+// with an opening row last year have a closing to carry. A value entered by hand
+// (SEED) stays; a row carried earlier (FY_CLOSE) is recalculated, so pressing the
+// button again after late invoices corrects it.
+async function buildStockCarryForward(locationCode, fyId) {
+    const fys = await select(`SELECT fy_id, fy_name, is_closed,
+                                     DATE_FORMAT(start_date, '%Y-%m-%d') AS start_date, DATE_FORMAT(end_date, '%Y-%m-%d') AS end_date
+                              FROM gl_financial_years WHERE location_code = :locationCode`, { locationCode });
+    const target = fys.find(f => f.fy_id === Number(fyId));
+    if (!target) return null;
+    const previous = fys.find(f => f.end_date === moveDay(target.start_date, -1)) || null;
+    if (!previous) return { target, previous, rows: [] };
+
+    const [lastYear, thisYear] = await Promise.all([
+        select(`SELECT s.product_id, p.product_name
+                FROM gl_stock_opening_balance s JOIN m_product p ON p.product_id = s.product_id
+                WHERE s.location_code = :locationCode AND s.fy_id = :fy_id
+                ORDER BY p.product_name`, { locationCode, fy_id: previous.fy_id }),
+        select(`SELECT product_id, opening_qty, opening_value, source
+                FROM gl_stock_opening_balance WHERE location_code = :locationCode AND fy_id = :fy_id`, { locationCode, fy_id: target.fy_id }),
+    ]);
+    const existing = new Map(thisYear.map(s => [s.product_id, s]));
+
+    const rows = [];
+    for (const p of lastYear) {
+        const closing = await stockValuationService.computeProductStockCOGS(locationCode, previous.fy_id, p.product_id, previous.start_date, previous.end_date);
+        if (!closing) continue;
+        const now = existing.get(p.product_id);
+        rows.push({
+            product_id: p.product_id,
+            product_name: p.product_name,
+            qty: Math.round(closing.closingQty * 1000) / 1000,
+            value: round2(closing.closingValue),
+            kept: !!now && now.source !== 'FY_CLOSE',
+            current_value: now ? Number(now.opening_value) : null,
+        });
+    }
+    return { target, previous, rows };
+}
+
+async function saveStockCarryForward(locationCode, fyId, user, options = {}) {
+    const plan = await buildStockCarryForward(locationCode, fyId);
+    if (!plan) return null;
+    if (plan.target.is_closed === 'Y') throw new Error(`${plan.target.fy_name} is closed`);
+    if (!plan.previous) throw new Error(`No financial year ends the day before ${plan.target.fy_name} starts`);
+
+    const rows = plan.rows.filter(r => !r.kept);
+    const notes = `Closing stock of ${plan.previous.fy_name}`;
+    const run = async (transaction) => {
+        for (const r of rows) {
+            await db.sequelize.query(`
+                INSERT INTO gl_stock_opening_balance (location_code, product_id, fy_id, opening_qty, opening_value, source, notes, created_by)
+                VALUES (:locationCode, :product_id, :fy_id, :qty, :value, 'FY_CLOSE', :notes, :user)
+                ON DUPLICATE KEY UPDATE opening_qty = VALUES(opening_qty), opening_value = VALUES(opening_value), notes = VALUES(notes)
+            `, { replacements: { locationCode, user, notes, fy_id: plan.target.fy_id, product_id: r.product_id, qty: r.qty, value: r.value }, type: QueryTypes.INSERT, transaction });
+        }
+        return { saved: rows.length, kept: plan.rows.length - rows.length };
+    };
+    return options.transaction ? run(options.transaction) : db.sequelize.transaction(run);
+}
+
+module.exports = { buildPlan, applyPlan, buildStockPlan, saveStockRows, classifyProduct, ensureCurrentFinancialYear, mapNewProducts, buildStockCarryForward, saveStockCarryForward };
