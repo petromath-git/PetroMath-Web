@@ -1,0 +1,243 @@
+extends layout
+include mixins/mixins
+
+block content
+    - var fmtDate = function(d) { if (!d) return ''; var m = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC']; var p = d.split('-'); return p[2] + '-' + m[Number(p[1]) - 1] + '-' + p[0]; }
+    - var fmtQty = function(n) { return Number(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }); }
+    .container-fluid.pt-3
+
+        .d-flex.justify-content-between.align-items-center.mb-3
+            h4.mb-0 Accounting Setup
+            a.btn.btn-sm.btn-outline-secondary(href="/gl/setup-check") Setup Check &rarr;
+
+        if !plan.hasGroups
+            .alert.alert-danger.py-2 This location has no ledger groups, so accounting cannot be set up yet.
+        else if plan.todo === 0
+            .alert.alert-success.py-2 Nothing to create for #{user.location_code}.
+        else
+            .alert.alert-info.py-2.d-flex.justify-content-between.align-items-center.flex-wrap
+                span #{plan.todo} item(s) to set up for #{user.location_code}. Existing ledgers, mappings and reviewed labels are not changed.
+                if canEdit
+                    button.btn.btn-primary.btn-sm#btnApply(type="button") Set Up Accounting
+
+        if plan.needsReview.length
+            .alert.alert-warning.py-2
+                strong Needs a person
+                ul.mb-0.pl-3
+                    each msg in plan.needsReview
+                        li.small= msg
+
+        if plan.fyToCreate.length
+            .card.mb-3
+                .card-header.py-2 Financial Years (#{plan.fyToCreate.length})
+                .table-responsive
+                    table.table.table-sm.table-bordered.mb-0
+                        thead.thead-light
+                            tr
+                                th Name
+                                th From
+                                th To
+                                th Current
+                        tbody
+                            each fy in plan.fyToCreate
+                                tr
+                                    td.small= fy.fy_name
+                                    td.small= fmtDate(fy.start_date)
+                                    td.small= fmtDate(fy.end_date)
+                                    td.small= fy.is_current === 'Y' ? 'Yes' : 'No'
+
+        if plan.ledgersToCreate.length
+            .card.mb-3
+                .card-header.py-2 Ledgers to Create (#{plan.ledgersToCreate.length})
+                .table-responsive
+                    table.table.table-sm.table-bordered.mb-0
+                        thead.thead-light
+                            tr
+                                th Ledger
+                                th Group
+                                th Why
+                        tbody
+                            each l in plan.ledgersToCreate
+                                tr
+                                    td.small= l.ledger_name
+                                    td.small= l.group_name
+                                    td.small= l.why
+
+        if plan.productMaps.length
+            .card.mb-3
+                .card-header.py-2 Product Ledger Mappings (#{plan.productMaps.length})
+                .table-responsive
+                    table.table.table-sm.table-bordered.mb-0
+                        thead.thead-light
+                            tr
+                                th Product
+                                th Type
+                                th Ledger
+                        tbody
+                            each m in plan.productMaps
+                                tr
+                                    td.small= m.product_name
+                                    td.small= m.map_type
+                                    td.small= m.ledger_name
+
+        if plan.staticRowsToAdd.length || plan.staticSkip.length || plan.staticPost.length
+            .card.mb-3
+                .card-header.py-2 Static Ledger Map (#{plan.staticSkip.length + plan.staticPost.length} defaults)
+                .table-responsive
+                    table.table.table-sm.table-bordered.mb-0
+                        thead.thead-light
+                            tr
+                                th Label
+                                th Treatment
+                                th Ledger / Reason
+                        tbody
+                            each s in plan.staticPost
+                                tr
+                                    td.small= s.ledger_name
+                                    td.small POST
+                                    td.small= s.target
+                            each s in plan.staticSkip
+                                tr
+                                    td.small= s.ledger_name
+                                    td.small SKIP
+                                    td.small= s.skip_reason
+
+        if plan.staticManual.length
+            .card.mb-3.border-warning
+                .card-header.py-2 Decide on the Static Ledger Map (#{plan.staticManual.length})
+                .card-body.py-2
+                    p.small.mb-2 These depend on the location, for example owner withdrawals or income tax, so they are not defaulted.
+                    p.small.mb-2= plan.staticManual.join(', ')
+                    a.btn.btn-sm.btn-outline-secondary(href="/gl/static-ledger-map") Static Ledger Map &rarr;
+
+        .card.mb-3
+            .card-header.py-2.d-flex.justify-content-between.align-items-center.flex-wrap
+                span Opening Stock for P&amp;L
+                if canEdit && stockRows.length
+                    button.btn.btn-primary.btn-sm#btnSaveStock(type="button") Save Selected
+            .card-body.py-2
+                p.small.mb-0 Quantity comes from Product Master. Value is suggested at this location's first purchase rate, so change it if the books show a different cost.
+            if !stockRows.length
+                .card-body.py-2.small.text-muted No opening stock entered in Product Master, and no purchases.
+            else
+                .table-responsive
+                    table.table.table-sm.table-bordered.mb-0#stockTable
+                        thead.thead-light
+                            tr
+                                th(style="width:40px")
+                                th Product
+                                th Opening Date
+                                th FY
+                                th.text-right Qty
+                                th.text-right(style="width:110px") Rate
+                                th.text-right(style="width:140px") Value
+                                th Status
+                        tbody
+                            each r in stockRows
+                                - var editable = canEdit && ['ready', 'needs_rate', 'saved', 'changed'].includes(r.status)
+                                - var checked = r.status === 'ready' || r.status === 'changed'
+                                tr(data-product-id=r.product_id data-fy-id=r.fy_id data-qty=r.qty)
+                                    td.text-center
+                                        if editable
+                                            input.js-pick(type="checkbox" checked=checked)
+                                    td.small= r.product_name
+                                    td.small= fmtDate(r.opening_date)
+                                    td.small= r.fy_name
+                                    td.small.text-right= fmtQty(r.qty)
+                                    td.small.text-right
+                                        if editable && r.qty > 0
+                                            input.form-control.form-control-sm.text-right.js-rate(type="number" min="0" step="0.01" value=(r.rate ? r.rate.toFixed(2) : ''))
+                                    td.small.text-right
+                                        if editable
+                                            input.form-control.form-control-sm.text-right.js-value(type="number" min="0" step="0.01" value=(r.value === null ? '' : r.value))
+                                        else
+                                            span= r.value === null ? '' : Number(r.value).toLocaleString('en-IN')
+                                    td.small
+                                        if r.status === 'saved'
+                                            span.badge.badge-success Saved
+                                        else if r.status === 'ready'
+                                            span.badge.badge-info Ready
+                                        else if r.status === 'changed'
+                                            span.badge.badge-warning Changed
+                                        else if r.status === 'needs_rate'
+                                            span.badge.badge-warning Needs rate
+                                        else if r.status === 'locked'
+                                            span.badge.badge-secondary FY close
+                                        else
+                                            span.badge.badge-danger Review
+                                        if r.message
+                                            .text-muted= r.message
+
+    script.
+        (function() {
+            async function post(url, body) {
+                const resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body || {})
+                });
+                return resp.json();
+            }
+
+            const btnApply = document.getElementById('btnApply');
+            if (btnApply) {
+                btnApply.addEventListener('click', async function() {
+                    if (!confirm('Create the items listed on this page?')) return;
+                    btnApply.disabled = true;
+                    try {
+                        const data = await post('/gl/api/accounting-setup/apply');
+                        if (!data.success) throw new Error(data.error);
+                        location.reload();
+                    } catch (e) {
+                        alert('Setup failed: ' + e.message);
+                        btnApply.disabled = false;
+                    }
+                });
+            }
+
+            const table = document.getElementById('stockTable');
+            if (!table) return;
+
+            // Rate fills the value. The value can still be typed directly.
+            table.querySelectorAll('.js-rate').forEach(function(input) {
+                input.addEventListener('input', function() {
+                    const tr = input.closest('tr');
+                    const rate = parseFloat(input.value);
+                    if (rate >= 0) tr.querySelector('.js-value').value = (rate * parseFloat(tr.dataset.qty)).toFixed(2);
+                    const pick = tr.querySelector('.js-pick');
+                    if (pick) pick.checked = true;
+                });
+            });
+            table.querySelectorAll('.js-value').forEach(function(input) {
+                input.addEventListener('input', function() {
+                    const pick = input.closest('tr').querySelector('.js-pick');
+                    if (pick) pick.checked = true;
+                });
+            });
+
+            const btnSave = document.getElementById('btnSaveStock');
+            if (btnSave) {
+                btnSave.addEventListener('click', async function() {
+                    const rows = [];
+                    let blank = 0;
+                    table.querySelectorAll('tbody tr').forEach(function(tr) {
+                        const pick = tr.querySelector('.js-pick');
+                        if (!pick || !pick.checked) return;
+                        const value = tr.querySelector('.js-value').value;
+                        if (value === '') { blank++; return; }
+                        rows.push({ product_id: tr.dataset.productId, fy_id: tr.dataset.fyId, value: value });
+                    });
+                    if (!rows.length) { alert(blank ? 'Enter a rate or value first.' : 'Select at least one product.'); return; }
+                    btnSave.disabled = true;
+                    try {
+                        const data = await post('/gl/api/accounting-setup/stock', { rows: rows });
+                        if (!data.success) throw new Error(data.error);
+                        if (data.skipped.length) alert('Not saved: ' + data.skipped.join(', '));
+                        location.reload();
+                    } catch (e) {
+                        alert('Save failed: ' + e.message);
+                        btnSave.disabled = false;
+                    }
+                });
+            }
+        })();
