@@ -6,23 +6,31 @@ const personCacheName = 'personCache';
 
 module.exports = {
     initializeCache: () => {
-        Promise.allSettled([setPersonCache()])
-            .then((values) => {
-                appCache.set(personCacheName, values[0].value);
-            }).catch((err) => {
-            console.warn("Error while getting data using promises " + err.toString());
-            Promise.reject(err);
+        loadPersonCache().catch((err) => {
+            // e.g. MySQL still starting when PM2 comes up - ensurePersonCache() retries on first use
+            console.warn("Person cache not loaded at startup: " + err.toString());
         });
     },
     getPersonCache: () => {
         return appCache.get(personCacheName);
+    },
+    // Resolves with the person list, loading it first if the startup load failed.
+    ensurePersonCache: () => {
+        const cached = appCache.get(personCacheName);
+        return cached ? Promise.resolve(cached) : loadPersonCache();
     }
 };
 
-const setPersonCache = () => {
-    return new Promise((resolve, reject) => {
-        PersonDao.findUsers().then(data => {
-            resolve(data);
-        });
-    });
+let pendingLoad = null;
+
+const loadPersonCache = () => {
+    if (!pendingLoad) {
+        pendingLoad = PersonDao.findUsers()
+            .then(data => {
+                appCache.set(personCacheName, data);
+                return data;
+            })
+            .finally(() => { pendingLoad = null; });
+    }
+    return pendingLoad;
 };

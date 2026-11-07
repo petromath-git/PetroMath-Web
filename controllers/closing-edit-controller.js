@@ -190,6 +190,7 @@ module.exports = {
                 homeController.employeeDataPromise(locationCode),
                 txnController.txnEmployeeAdvancePromise(closingId)])
                 .then(async (values) => {
+                    if (values[1].status === 'rejected') throw values[1].reason;
                     const creditProductValues = await homeController.sortProductsByCreditUsage(locationCode, values[2].value.products);
                     res.render('edit-draft-closing', {
                         user: req.user,
@@ -239,7 +240,7 @@ module.exports = {
                     });
                 }).catch((err) => {
                 console.warn("Error while getting data using promises " + err.toString());
-                Promise.reject(err);
+                next(err);
             });
         } else {
             res.render('home', {user: req.user});
@@ -417,11 +418,11 @@ const txnClosingPromise = (closingId) => {
                             closingStatus: data.closing_status,
                             closeReadingTime: data.close_reading_time
                         });
-                    });
+                    }).catch(reject);
                 } else {
                     resolve({});
                 }
-            });
+            }).catch(reject);
     });
 }
 
