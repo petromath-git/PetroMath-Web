@@ -7,11 +7,16 @@ const DevTrackerTasks = db.dev_tracker_tasks;
 const DevTrackerComments = db.dev_tracker_comments;
 const DevTrackerWorklog = db.dev_tracker_worklog;
 
-// access = { locations: null (all) | [codes], canManage: bool }
-// Reporters see tickets for their stations. Manage users also see platform
-// tickets with no station (location_code NULL).
+// access = { locations: null (all) | [codes], canManage: bool, ownOnly: bool, userName }
+// Station users (ownOnly) see just the tickets they raised. The support team sees
+// tickets for their stations. Manage users also see platform tickets with no
+// station (location_code NULL).
 const visibilityWhere = (access) => {
     const where = { is_deleted: { [Op.or]: [0, null] } };
+    if (access.ownOnly) {
+        where.created_by = access.userName;
+        return where;
+    }
     if (access.locations === null) return where;
     const locs = access.locations.length ? access.locations : ['__none__'];
     if (access.canManage) {
@@ -73,8 +78,11 @@ module.exports = {
         if (filters.type) where.type = filters.type;
         if (filters.priority) where.priority = filters.priority;
         if (filters.scope) where.scope = filters.scope;
-        if (filters.location_code === 'NONE') where.location_code = null;
-        else if (filters.location_code) where.location_code = filters.location_code;
+        // ANDed on: the value comes from the URL and must not replace the
+        // station limit in visibilityWhere
+        const and = [];
+        if (filters.location_code === 'NONE') and.push({ location_code: null });
+        else if (filters.location_code) and.push({ location_code: filters.location_code });
         if (filters.search) {
             const like = `%${filters.search}%`;
             const fields = [
@@ -84,8 +92,9 @@ module.exports = {
             ];
             // Dev notes are SuperUser-only, so only their searches look in them
             if (access.isSuperUser) fields.push({ dev_notes: { [Op.like]: like } });
-            where[Op.and] = [{ [Op.or]: fields }];
+            and.push({ [Op.or]: fields });
         }
+        if (and.length) where[Op.and] = and;
         // Range keys are checked against HOURS_RANGES / TOKEN_RANGES in the controller
         if (filters.hours) {
             const range = HOURS_RANGES[filters.hours];
