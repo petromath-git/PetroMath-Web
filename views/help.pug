@@ -38,6 +38,7 @@ block content
           li: a(href='#sap-upload') Upload the oil company (SAP) statement
           li: a(href='#customer-statement') Run a customer's credit statement
           li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
+          li: a(href='#add-customer') Add a credit customer, with opening balance and login
 
     section#shift
       h2 1. Enter and close a shift
@@ -243,3 +244,45 @@ block content
         li Upload your bank statement first and tag the vendor's payments to the vendor (for example PAYTM), or they won't appear as credits.
         li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
         li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
+
+    section#add-customer
+      h2 6. Add a credit customer, with opening balance and login
+      +howVideo('add-customer', 'add a credit customer')
+      p Customers are added by the owner (Admin login).
+      ol.help-steps
+        li
+          | Open
+          strong  Masters → Customers
+          |  and click
+          strong  Add Customer
+          | .
+        li Enter the company name, a short name (printed on bills), phone, address, and the GST number if they need tax invoices.
+        li
+          strong Remittance Bank:
+          |  the account they pay into. Their payments then appear under this customer when you upload that bank's statement.
+        li
+          strong Opening Balance:
+          |  what they owed before their first bill in PetroMath, from your old ledger.
+          strong  As on
+          |  is filled in as the day before you started on PetroMath. Leave 0 for a brand-new customer.
+        li
+          | Click
+          strong  Save Customer
+          | . PetroMath also creates the customer's login.
+        li
+          | Click the
+          strong  key
+          |  next to the login to see the username and password, and send them to the customer. Reset Password gives a new one; you can also switch the login off there.
+        li
+          | Add their vehicles with the
+          strong  truck
+          |  button.
+      h3 Good to know
+      ul
+        li
+          | An existing customer whose opening balance shows
+          strong  Not set
+          |  can get one with the
+          strong  Set
+          |  button in the Opening Balance column.
+        li Changing an opening balance after it is set needs a reason, and the change is kept in its history.

@@ -60,7 +60,8 @@ function overlayScript() {
   early.textContent = `
     .sidebar-header.canary-instance { background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%) !important; }
     .sidebar-user span[style*="orange"] { display: none !important; }
-    .alert-warning[style*="ff9800"] { display: none !important; }`;
+    .alert-warning[style*="ff9800"] { display: none !important; }
+    #loginInfoPassword { filter: blur(6px) !important; } /* never show a default password in a shared video */`;
   if (document.documentElement) document.documentElement.appendChild(early);
   else {
     const mo = new MutationObserver(() => {
@@ -161,7 +162,7 @@ function makeHelpers(page, t0) {
     async type(l, text, delay = 70) {
       const { el } = await h.point(l, 450);
       await el.click();
-      await el.press('Control+A');
+      await el.fill(''); // clear first: Ctrl+A then typing can drop the first digit in a number box
       await el.pressSequentially(String(text), { delay });
       await pause(350);
     },
@@ -397,6 +398,72 @@ const VIDEOS = {
         'The PDF has your station name and address at the top.',
         'Share it on WhatsApp or print it. The blue Print button opens it ready to print.']);
       await h.say('PetroMath: every customer, every bill, accounted for.', 2400);
+    },
+  },
+
+  'add-customer': {
+    title: 'Add a credit customer, with opening balance and login',
+    user: 'admin', // only Admins can add customers
+    async run(h, page) {
+      const NAME = 'MURUGAN TRAVELS';
+      await h.go('/home');
+      await h.begin();
+      await h.say('Adding a credit customer: their details, what they owed from your old books, and a login.', 3000);
+      await h.say('Customers are added by the owner (Admin). Open Masters, then Customers.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /masters/i }).first(), 700);
+      await h.tap('.sidebar a[href="/credit-master"]', 0);
+      await page.waitForURL(/\/credit-master/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await h.say('Every customer is listed with their opening balance and login.', 600);
+      await h.point('#customers-master-table tbody tr >> nth=0', 2400);
+      await h.say('Click Add Customer.', 400);
+      await h.tap('#addCustomerBtn', 900);
+      await page.locator('#addCustomerModal.show').waitFor();
+
+      await h.say('Enter the company name, a short name for bills, and the phone number.', 400);
+      await h.type('#addCustomerModal input[name=m_credit_name_0]', NAME);
+      await h.type('#addCustomerModal input[name=m_credit_short_name_0]', 'MURUGAN TRAVELS', 50);
+      await h.type('#addCustomerModal input[name=m_credit_phoneno_0]', '98400 66666');
+      await h.say('The address, and the GST number if they need tax invoices.', 400);
+      await h.type('#addCustomerModal textarea[name=m_credit_address_0]', 'BHAVANI ROAD, ERODE', 45);
+      await h.say('Remittance Bank: the account they pay into.', 400);
+      await h.pick('#addCustomerModal select[name=m_credit_remittance_bank_id_0]', 'IOB CA 1234', 400);
+      await h.say('Their payments then appear under this customer when you upload that bank statement.', 2600);
+
+      await h.say('Opening Balance: what they owed before their first bill in PetroMath.', 600);
+      await h.point('#addCustomerModal input[name=ob_date]', 400);
+      await h.say('"As on" is filled in: the day before you started on PetroMath.', 2400);
+      await h.say('Enter the amount from your old ledger. Leave 0 for a brand-new customer.', 300);
+      await h.type('#addCustomerModal input[name=ob_amount]', '18500');
+      await h.pause(600);
+      await h.say('Click Save Customer.', 400);
+      await Promise.all([page.waitForNavigation(), h.tap(page.locator('#addCustomerModal button[type=submit]'), 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.say('Saved.', 1400);
+
+      await h.say('Search for the customer.', 300);
+      await h.type('#searchInput', 'MURUGAN', 90);
+      await h.pause(800);
+      const row = page.locator('#customers-master-table tbody tr', { hasText: NAME }).first();
+      await h.say('The opening balance is set, as on that date.', 400);
+      await h.point(row.locator('td.ob-cell'), 2600);
+      await h.say('PetroMath also made a login, so the customer can see their own bills and statement.', 600);
+      await h.point(row.locator('td', { has: page.locator('.show-login-btn') }), 2600);
+      await h.say('To see the login details, click the key.', 400);
+      await h.tap(row.locator('.show-login-btn'), 1200);
+      await page.locator('#loginInfoModal.show').waitFor();
+      await page.waitForLoadState('networkidle');
+      await h.say('The username, and the password (hidden in this video).', 500);
+      await h.point('#loginInfoUsername', 2200);
+      await h.say('Copy them and send them to the customer, for example on WhatsApp.', 2600);
+      await h.say('Reset Password gives a new one if they forget it. You can also switch the login off here.', 400);
+      await h.point('#resetPasswordBtn', 2600);
+      await h.tap(page.locator('#loginInfoModal .modal-footer button.btn-secondary'), 900);
+      await h.say("Add their vehicles with the truck button. They're ready for credit bills.", 600);
+      await h.point(row.locator('a[title="Manage Vehicles"]'), 2600);
     },
   },
 
@@ -671,7 +738,7 @@ async function record(browser, name) {
   const login = await browser.newContext(ctxOpts);
   const lp = await login.newPage();
   await lp.goto(`${BASE}/login`);
-  await lp.fill('#username', process.env.DEMO_USER);
+  await lp.fill('#username', v.user === 'admin' ? process.env.DEMO_ADMIN_USER : process.env.DEMO_USER);
   await lp.fill('#pw', process.env.DEMO_PASSWORD);
   await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
   if (lp.url().includes('/login')) throw new Error('Demo sign-in failed. Run node demo-location.js first.');
