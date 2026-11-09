@@ -326,7 +326,7 @@ const VIDEOS = {
         file: makeSamples().iob,
         intro: ['Upload your bank statement to bring every bank credit and debit into PetroMath.',
           'First download the statement from your internet banking as an Excel file.'],
-        ledgers: ['CARD SWIPE', 'UPI QR', 'CASH', 'SRI LAKSHMI TRANSPORTS', 'IOCL-SOA (SAP-001234)',
+        ledgers: ['CARD SWIPE', 'PAYTM', 'CASH', 'SRI LAKSHMI TRANSPORTS', 'IOCL-SOA (SAP-001234)',
           'KAVERI ROADWAYS', 'ELECTRICITY EXPENSES', 'BANK CHARGES'],
         midCaption: 'A payment to IOCL goes to your SAP account.',
         listCaption: 'The lines are now in Bank Transactions.',
@@ -397,6 +397,89 @@ const VIDEOS = {
         'The PDF has your station name and address at the top.',
         'Share it on WhatsApp or print it. The blue Print button opens it ready to print.']);
       await h.say('PetroMath: every customer, every bill, accounted for.', 2400);
+    },
+  },
+
+  'paytm-recon': {
+    title: 'Reconcile Paytm (digital reconciliation)',
+    async run(h, page) {
+      await h.go('/home');
+      await h.begin();
+      await h.say('Every day cashiers enter Paytm collections in the shift, and Paytm pays them into your bank.', 2800);
+      await h.say('Reconciliation checks that every rupee collected was paid to you.', 2400);
+      await h.say('Open Reports, then Digital Reconciliation.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /reports/i }).first(), 700);
+      await h.tap('.sidebar a[href="/reports-digital-recon"]', 0);
+      await page.waitForURL(/\/reports-digital-recon/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await h.say('Choose the period and the digital vendor: here, last month and PAYTM.', 400);
+      await h.pick('#dateRange', 'Last Month', 500);
+      await h.pick('#company_id', 'PAYTM', 500);
+      await h.say('Click Go.', 400);
+      await h.tap('#goButton', 0);
+      await page.waitForLoadState('networkidle');
+      await page.locator('#creditstmt-table-container table').waitFor({ timeout: 60000 });
+      await h.pause(800);
+
+      await h.say('Debits are the Paytm sales from your shifts. Credits are Paytm payments into your bank.', 600);
+      await h.point('#creditstmt-table-container table tbody tr >> nth=0', 3000);
+      await h.say("PetroMath matches them for you: each day's sales with the next day's payment.", 600);
+      await h.scrollBy(500, 1400);
+      await h.say('Lines with the same Match ID belong together.', 2600);
+      await h.top(500);
+
+      // The page alerts and reloads after a manual match: catch the message, show it after the reload.
+      const catchAlert = () => page.evaluate(() => {
+        try { sessionStorage.removeItem('__valert'); } catch (e) { /* ignore */ }
+        window.alert = (m) => { try { sessionStorage.setItem('__valert', m); } catch (e) { /* ignore */ } };
+      });
+      const showAlert = async (caption) => {
+        await page.waitForLoadState('networkidle');
+        await page.locator('#creditstmt-table-container table').waitFor({ timeout: 60000 });
+        const msg = await page.evaluate(() => sessionStorage.getItem('__valert'));
+        if (!msg) throw new Error('Manual match showed no message');
+        await h.dialog(msg, caption, true);
+      };
+      const unreconciled = async () => {
+        if (!(await page.isChecked('#showUnreconciled'))) await h.tap('#showUnreconciled', 1000);
+        return page.locator('#creditstmt-table-container table tbody tr:visible');
+      };
+
+      await h.say('Tick Show Only Unreconciled to see what is left.', 500);
+      let rows = await unreconciled();
+      await h.say('Two days were paid together in one payment, so they could not match one-to-one.', 3000);
+      await h.say('Select the two sales and the payment.', 400);
+      for (const i of [2, 3, 4]) await h.tap(rows.nth(i).locator('.row-select'), 450);
+      await h.say('The difference is zero.', 400);
+      await h.point('#selected-summary', 1800);
+      await h.say('Click Manual Match.', 400);
+      await catchAlert();
+      await Promise.all([page.waitForEvent('load', { timeout: 60000 }), h.tap(page.getByRole('button', { name: /Manual Match/ }), 0)]);
+      await showAlert('Matched.');
+
+      rows = await unreconciled();
+      await h.say('One payment came ₹47 short of the sale.', 2400);
+      await h.say('Select the sale and the payment.', 400);
+      for (const i of [0, 1]) await h.tap(rows.nth(i).locator('.row-select'), 450);
+      await h.point('#selected-summary', 1800);
+      await h.say('Click Manual Match.', 400);
+      await h.tap(page.getByRole('button', { name: /Manual Match/ }), 900);
+      await page.locator('#differenceNotesModal.show').waitFor();
+      await h.say('A difference needs a note: say why it is short.', 500);
+      await h.type('#differenceNotes', 'Paytm refund of Rs 47 to a customer', 45);
+      await h.say('Click Save & Match.', 400);
+      await catchAlert();
+      await Promise.all([page.waitForEvent('load', { timeout: 60000 }), h.tap('#saveDifferenceBtn', 0)]);
+      await showAlert('Saved, with your note.');
+
+      rows = await unreconciled();
+      await h.say('Nothing left to reconcile for the month.', 2400);
+      await h.tap('#showUnreconciled', 900);
+      await h.say('Your manual matches keep their Match ID. The red ✕ next to it unmatches a group.', 600);
+      await h.point(page.locator('#creditstmt-table-container button[title="Unmatch this group"]').first(), 2800);
+      await h.say('Do this every month, for every digital vendor.', 2400);
     },
   },
 
@@ -499,7 +582,7 @@ const VIDEOS = {
       // ── Digital Sales ──
       await h.say('Digital Sales: UPI, card and fleet card payments.', 600);
       await h.tap(page.getByRole('button', { name: 'Add Digital Sales' }), 500);
-      await h.pick('#digital-sales-vendor-0', 'UPI QR', 300);
+      await h.pick('#digital-sales-vendor-0', 'PAYTM', 300);
       await h.type('#digital-sales-amt-0', '18450');
       await page.keyboard.press('Tab');
       await h.tap(page.getByRole('button', { name: 'Add Digital Sales' }), 500);
