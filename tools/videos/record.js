@@ -436,6 +436,17 @@ async function uploadWalkthrough(h, page, v) {
   await h.say('From here they are used for reconciliation and the accounts.', 2600);
 }
 
+// The month the accounting video books and reports on.
+const ACCT_MONTH = { y: 2026, m: 1, label: 'January 2026' };
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Period → Month / Year, then the month and year (prefix: ge, ev, ca, gl as on the GL screens).
+async function pickMonth(h, prefix, ms) {
+  await h.pick(`#${prefix}Period`, 'Month / Year', 400);
+  await h.pick(`#${prefix}Month`, MONTH_SHORT[ACCT_MONTH.m - 1], 400);
+  await h.pick(`#${prefix}Year`, String(ACCT_MONTH.y), ms);
+}
+
 const weekAgoIST = () => new Date(Date.now() + 5.5 * 3600e3 - 7 * 864e5).toISOString().slice(0, 10);
 
 const VIDEOS = {
@@ -1054,18 +1065,20 @@ const VIDEOS = {
   },
 
   // Recorded at the beta training station (MUE, renamed by the beta refresh) for a full month of real-looking books.
-  // Run node training-login.js first. Last month's accounting is deleted before recording, so it starts from nothing.
+  // Run node training-login.js first. ACCT_MONTH's accounting is deleted before recording, so it starts from nothing.
+  // January 2026 (FY 25-26): the owner's choice of a typical month, net profit about Rs 2.1 L after stock adjustment.
   accounting: {
     title: 'Create the accounts and read the Profit & Loss',
     user: 'training',
     async prepare(request) {
-      const d = new Date(Date.now() + 5.5 * 3600e3);
-      const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
-      const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0));
-      const range = { from_date: first.toISOString().slice(0, 10), to_date: last.toISOString().slice(0, 10) };
+      const { y, m } = ACCT_MONTH;
+      const range = {
+        from_date: new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10),
+        to_date: new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10),
+      };
       const r = await request.post(`${BASE}/gl/api/delete-accounting`, { data: { ...range, include_manual: 0, confirm: 'DELETE' } });
       const j = await r.json();
-      if (!j.success) throw new Error(`Could not clear last month's accounting: ${j.error}`);
+      if (!j.success) throw new Error(`Could not clear the month's accounting: ${j.error}`);
       console.log(`  cleared ${range.from_date}..${range.to_date}: ${j.headers} vouchers, ${j.events} events`);
     },
     async run(h, page) {
@@ -1082,8 +1095,8 @@ const VIDEOS = {
       // Step 1: Generate Events
       await h.say('Step 1: Generate Events.', 500);
       await h.tap('#tab-generate', 600);
-      await h.say('Choose the month. Here, last month.', 300);
-      await h.pick('#gePeriod', 'Last Month', 900);
+      await h.say(`Choose the month. Here, ${ACCT_MONTH.label}.`, 300);
+      await pickMonth(h, 'ge', 900);
       await h.say('Click Generate Missing Events.', 300);
       await h.tap('#btnGenerate', 0);
       await page.locator('#geResult').waitFor({ state: 'visible', timeout: 120000 });
@@ -1095,7 +1108,7 @@ const VIDEOS = {
       // The queue
       await h.say('Events Monitor shows the queue.', 300);
       await h.tap('#tab-events', 500);
-      await h.pick('#evPeriod', 'Last Month', 500);
+      await pickMonth(h, 'ev', 500);
       await h.tap('#btnLoadEvents', 0);
       await page.locator('#eventsTableWrap').waitFor({ state: 'visible', timeout: 60000 });
       await h.pause(500);
@@ -1110,7 +1123,7 @@ const VIDEOS = {
       // Step 2: Create Accounting
       await h.say('Step 2: Create Accounting.', 500);
       await h.tap('#tab-accounting', 600);
-      await h.pick('#caPeriod', 'Last Month', 700);
+      await pickMonth(h, 'ca', 700);
       await h.say('Click Run Create Accounting.', 300);
       await h.tap('#btnRunAccounting', 0);
       await page.locator('#caResultBody', { hasText: 'Done' }).waitFor({ timeout: 300000 });
@@ -1125,8 +1138,8 @@ const VIDEOS = {
       await page.waitForURL(/\/gl\/profit-loss/);
       await page.waitForLoadState('networkidle');
       await h.pause(400);
-      await h.pick('#glPeriod', 'Last Month', 500);
-      await h.say('Choose last month and click View.', 300);
+      await h.say(`Choose ${ACCT_MONTH.label} and click View.`, 300);
+      await pickMonth(h, 'gl', 500);
       await h.tap('form[action="/gl/profit-loss"] button[type=submit]', 0);
       await page.waitForLoadState('networkidle');
       await h.pause(600);
@@ -1136,7 +1149,12 @@ const VIDEOS = {
       await h.point('#plIncomeTable', 2600);
       await h.say('Expenses: purchases, then salary, rent, bank charges and other costs.', 300);
       await h.point('#plExpenseTable', 1400);
-      await h.scrollBy(260, 1800);
+      await h.scrollBy(260, 1200);
+      const adj = page.locator('#plExpenseTable tr', { hasText: 'Stock Adjustment' });
+      if (await adj.count()) {
+        await h.say('Purchases are adjusted for stock: opening + purchases − closing, so you see what was actually sold.', 300);
+        await h.point(adj.first(), 3200);
+      }
 
       // Drill down: OTHERS
       await h.say('Every ledger opens to the entries behind it. Click OTHERS.', 300);
@@ -1146,7 +1164,8 @@ const VIDEOS = {
       await h.pause(500);
       await h.say('The Ledger Report: each entry with its date, voucher and description.', 300);
       await h.point('#ledgerTable tbody', 3000);
-      await h.say('Here: a few small bank lines tagged OTHERS. If one looks wrong, correct the tag on that bank line.', 3200);
+      await h.say('Here: two stamping fee payments from the bank statement.', 2600);
+      await h.say('If an entry looks wrong, correct the tag on that bank line and run Create Accounting again.', 3000);
 
       // Drill down: GENERAL EXPENSES
       await h.say('Back to the Profit & Loss. Now GENERAL EXPENSES.', 300);
