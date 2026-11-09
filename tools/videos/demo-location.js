@@ -27,9 +27,12 @@ const CONFIG = {
 };
 // name, price, colour
 const FUELS = [['MS', 100.80, '217,234,211'], ['HSD', 92.40, '172,197,220'], ['XP95', 108.50, '234,209,220']];
+// name, price, unit (default NOS). The last four are how MUE stocks the SERVO items on the real Sakthi Ganesh
+// invoice the lube-invoice video uploads.
 const LUBES = [
   ['ENGINE OIL 4T 1 LTR', 420], ['ENGINE OIL 4T 500 ML', 230], ['GEAR OIL 90 1 LTR', 355],
   ['COOLANT 1 LTR', 250], ['BRAKE OIL 500 ML', 220], ['DISTILLED WATER 1 LTR', 40],
+  ['2T LOOSE', 440, 'LIT'], ['4T SCOOTOMATIC 800ML', 483], ['4T 20W40 1 LTR', 518], ['HYPERSPORT 1 LTR', 900],
 ];
 // tank code, product, capacity
 const TANKS = [['T1', 'MS', 20000], ['T2', 'HSD', 20000], ['T3', 'XP95', 15000]];
@@ -55,6 +58,11 @@ const BANK = { bank_name: 'IOB', account_number: '123402000001234', account_nick
   bank_branch: 'ERODE MAIN', ifsc_code: 'IOBA0001234', type: 'Current' };
 const SAP = { account_number: '30210400001234', account_nickname: 'SAP-001234' };
 const TEMPLATE_LOC = 'MUE'; // copy account heads and per-bank ledger rules from here, as onboarding does
+// MUE's SERVO distributor (the lube-invoice video uploads one of its real invoices), with its SKUs already
+// linked to the products above, as they are after the first invoice.
+const LUBE_SUPPLIER = { name: 'SAKTHI GANESH AUTO SERVICE', short: 'SGS', gstin: '33AFZPK4889H1ZM' };
+const LUBE_SKU_LINKS = [['SKU:429000401', '2T LOOSE'], ['SKU:428860156', '4T SCOOTOMATIC 800ML'],
+  ['SKU:621440229', '4T 20W40 1 LTR'], ['SKU:621440181', 'HYPERSPORT 1 LTR']];
 
 async function main() {
   const host = process.env.BETA_DB_HOST;
@@ -113,13 +121,13 @@ async function main() {
         [name, LOC, price, rgb, name === 'XP95' ? null : name, name]);
       }
     }
-    for (const [name, price] of LUBES) {
+    for (const [name, price, unit = 'NOS'] of LUBES) {
       const p = await one('SELECT product_id FROM m_product WHERE location_code = ? AND product_name = ?', [LOC, name]);
       if (p) await q('UPDATE m_product SET price = ? WHERE product_id = ?', [price, p.product_id]);
       else {
         await q(`INSERT INTO m_product (product_name, location_code, qty, unit, price, is_lube_product, hsn_code,
                    cgst_percent, sgst_percent, sku_name, created_by, updated_by)
-                 VALUES (?, ?, 1, 'NOS', ?, 1, '27101973', 9, 9, ?, 'video-demo', 'video-demo')`, [name, LOC, price, name]);
+                 VALUES (?, ?, 1, ?, ?, 1, '27101973', 9, 9, ?, 'video-demo', 'video-demo')`, [name, LOC, unit, price, name]);
       }
     }
 
@@ -251,6 +259,37 @@ async function main() {
     await addRule(sap.bank_id, 'Credit', await party('FLEET CARD'), 'CREDIT');
     await addRule(bank.bank_id, 'Bank', sap.bank_id, 'DEBIT');
     await addRule(sap.bank_id, 'Bank', bank.bank_id, 'CREDIT');
+
+    // ── Lube distributor for the lube-invoice video (an earlier version used a made-up one) ──
+    await q("DELETE FROM m_supplier WHERE location_code = ? AND supplier_name = 'ERODE LUBE DISTRIBUTORS' AND created_by = 'video-demo'", [LOC]);
+    let lubeSupplier = await one('SELECT supplier_id FROM m_supplier WHERE location_code = ? AND supplier_name = ?', [LOC, LUBE_SUPPLIER.name]);
+    if (!lubeSupplier) {
+      const [r] = await db.query(`INSERT INTO m_supplier (supplier_name, supplier_short_name, gstin, location_code, effective_start_date, effective_end_date, created_by, updated_by)
+               VALUES (?, ?, ?, ?, '2026-01-01', '9999-12-31', 'video-demo', 'video-demo')`,
+      [LUBE_SUPPLIER.name, LUBE_SUPPLIER.short, LUBE_SUPPLIER.gstin, LOC]);
+      lubeSupplier = { supplier_id: r.insertId };
+    }
+
+    // ── Reset: fuel and lube purchase invoices from the upload videos, their PDFs and the product links learnt ──
+    const locId = LOC; // t_tank_invoice.location_id holds the location CODE, not m_location.location_id
+    const tankInv = (await q('SELECT id FROM t_tank_invoice WHERE location_id = ?', [locId])).map((r) => r.id);
+    if (tankInv.length) {
+      await q(`DELETE c FROM t_tank_invoice_charges c JOIN t_tank_invoice_dtl d ON d.id = c.invoice_dtl_id WHERE d.invoice_id IN (?)`, [tankInv]);
+      await q('DELETE FROM t_tank_invoice_dtl WHERE invoice_id IN (?)', [tankInv]);
+      await q('DELETE FROM t_tank_invoice WHERE location_id = ? AND id IN (?)', [locId, tankInv]);
+    }
+    const lubeInv = (await q('SELECT lubes_hdr_id FROM t_lubes_inv_hdr WHERE location_code = ?', [LOC])).map((r) => r.lubes_hdr_id);
+    if (lubeInv.length) {
+      await q('DELETE FROM t_lubes_inv_lines WHERE lubes_hdr_id IN (?)', [lubeInv]);
+      await q('DELETE FROM t_lubes_inv_hdr WHERE location_code = ? AND lubes_hdr_id IN (?)', [LOC, lubeInv]);
+    }
+    await q("DELETE FROM t_document_store WHERE location_code = ? AND entity_type IN ('TANK_INVOICE', 'LUBE_INVOICE')", [LOC]);
+    await q('DELETE FROM t_invoice_product_map WHERE location_code = ?', [LOC]);
+    for (const [key, name] of LUBE_SKU_LINKS) {
+      const p = await one('SELECT product_id FROM m_product WHERE location_code = ? AND product_name = ?', [LOC, name]);
+      await q(`INSERT INTO t_invoice_product_map (location_code, supplier_id, invoice_product_name, product_id, conversion_factor)
+               VALUES (?, ?, ?, ?, NULL)`, [LOC, lubeSupplier.supplier_id, key, p.product_id]);
+    }
 
     // ── Reset: products added in a video (anything not in FUELS/LUBES), with their opening stock ──
     const keepProducts = [...FUELS.map(([n]) => n), ...LUBES.map(([n]) => n)];
