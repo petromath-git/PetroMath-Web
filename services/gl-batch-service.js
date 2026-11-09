@@ -85,14 +85,20 @@ async function recoverStaleRequests(locationCode) {
 }
 
 async function getRecentRequests(locationCode, limit) {
+    // Pick the ids first, then fetch only those rows: sorting whole rows (result_summary
+    // holds per-event JSON, hundreds of KB per run) ran out of sort memory.
     return db.sequelize.query(`
-        SELECT request_id, request_type, from_date, to_date, status,
-               submitted_by, submitted_at, started_at, completed_at,
-               result_summary
-        FROM gl_batch_requests
-        WHERE location_code = :locationCode
-        ORDER BY submitted_at DESC
-        LIMIT :limit
+        SELECT b.request_id, b.request_type, b.from_date, b.to_date, b.status,
+               b.submitted_by, b.submitted_at, b.started_at, b.completed_at,
+               b.result_summary
+        FROM gl_batch_requests b
+        JOIN (
+            SELECT request_id FROM gl_batch_requests
+            WHERE location_code = :locationCode
+            ORDER BY submitted_at DESC
+            LIMIT :limit
+        ) recent ON recent.request_id = b.request_id
+        ORDER BY b.submitted_at DESC
     `, { replacements: { locationCode, limit: limit || 20 }, type: QueryTypes.SELECT });
 }
 
