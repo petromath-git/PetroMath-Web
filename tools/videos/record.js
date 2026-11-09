@@ -46,7 +46,11 @@ function overlayScript() {
     #__vconfirm .t { font-size: 13px; color: #5f6368; margin-bottom: 8px; }
     #__vconfirm .b { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
     #__vconfirm button { border-radius: 16px; padding: 6px 18px; font: 600 14px system-ui, "Segoe UI", sans-serif; border: 1px solid #dadce0; background: #fff; color: #1a73e8; }
-    #__vconfirm button.ok { background: #1a73e8; color: #fff; border-color: #1a73e8; }`;
+    #__vconfirm button.ok { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+    #__vdoc { position: fixed; inset: 0; z-index: 2147483644; background: rgba(32,33,36,.82); display: flex; flex-direction: column; align-items: center; }
+    #__vdoc .bar { color: #fff; font: 600 15px system-ui, "Segoe UI", sans-serif; padding: 10px 0 8px; }
+    #__vdoc .page { width: 620px; height: 600px; overflow: hidden; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+    #__vdoc img { width: 620px; display: block; transition: transform 5s ease-in-out; }`;
   const POINTER = '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15.5 L12.5 22.5 L15.5 21 L12 14 L19 14 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
   // Beta-only markers hidden by CSS from the very first paint (the clean-up in ready() runs only after the
@@ -182,6 +186,23 @@ function makeHelpers(page, t0) {
       if (caption) await h.say(caption, 1600); else await h.pause(1200);
       await h.tap('#__vconfirm button.ok', 300, { noClick: true });
       await page.evaluate(() => document.getElementById('__vconfirm').remove());
+    },
+    // Show a document page (an image) as if opened, pan down it, then close it.
+    async showDoc(png, title, captions) {
+      const src = `data:image/png;base64,${fs.readFileSync(png).toString('base64')}`;
+      await page.evaluate(([s, t]) => {
+        const d = document.createElement('div');
+        d.id = '__vdoc';
+        d.innerHTML = `<div class="bar">${t}</div><div class="page"><img src="${s}"></div>`;
+        document.documentElement.appendChild(d);
+      }, [src, title]);
+      await h.say(captions[0], 2600);
+      await page.evaluate(() => {
+        const img = document.querySelector('#__vdoc img');
+        img.style.transform = `translateY(-${Math.max(0, img.offsetHeight - 600)}px)`;
+      });
+      await h.say(captions[1], 5400);
+      await page.evaluate(() => document.getElementById('__vdoc').remove());
     },
     // Click a Next / tab button and wait for the draft to save.
     async next(paneSel, ms = 900) {
@@ -327,6 +348,55 @@ const VIDEOS = {
         listCaption: 'The lines are now in SAP Transactions.',
         listUrl: `/oil-company-statement?fromDate=${weekAgoIST()}&toDate=${todayIST()}&bank_id=${await bankId('IOCL-SOA')}`,
       });
+    },
+  },
+
+  'customer-statement': {
+    title: "Run a customer's credit statement",
+    async run(h, page) {
+      await h.go('/home');
+      await h.begin();
+      await h.say("The Customer Detailed Report is a credit customer's statement: every bill and payment.", 2800);
+      await h.say('Open Reports, then Customer Detailed Report.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /reports/i }).first(), 700);
+      await h.tap('.sidebar a[href="/reports"]', 0);
+      await page.waitForURL(/\/reports$/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await h.say('Choose the period. Here, last month.', 400);
+      await h.pick('#dateRange', 'Last Month', 600);
+      await h.say('You can also pick This Month, a month and year, a financial year, or your own dates.', 2600);
+      await h.say('Then choose the customer.', 400);
+      await h.pick('#company_id', 'SRI LAKSHMI TRANSPORTS', 600);
+      await h.say('Click Go.', 400);
+      await h.tap('#goButton', 0);
+      await page.waitForLoadState('networkidle');
+      await h.pause(700);
+
+      await h.say('The Period Summary: opening balance, bills, payments and closing balance.', 600);
+      await h.point('.period-summary', 3200);
+      await h.say('Below it, every bill: date, bill number, product, vehicle, quantity and amount.', 600);
+      await h.point(page.locator('table.credit-stmt-table tbody tr').nth(2), 2600);
+      await h.say('Payments appear as credits, and the balance runs line by line.', 600);
+      await h.point(page.locator('table.credit-stmt-table tbody tr.stmt-credit').first(), 3000);
+      await h.scrollBy(900, 1600);
+      await h.say('The statement ends with the totals and the closing balance.', 600);
+      await h.point('table.credit-stmt-table tr.stmt-balance-row >> nth=-1', 2600);
+
+      await h.top(700);
+      await h.say('To send it to the customer, click the green Download PDF button.', 600);
+      const btn = page.locator('button[title="Download PDF"]');
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), h.tap(btn, 300)]);
+      const dir = path.join(OUT, 'customer-statement-pdf');
+      fs.mkdirSync(dir, { recursive: true });
+      const pdf = path.join(dir, 'statement.pdf');
+      await dl.saveAs(pdf);
+      execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
+      await h.showDoc(path.join(dir, 'page1.png'), dl.suggestedFilename(), [
+        'The PDF has your station name and address at the top.',
+        'Share it on WhatsApp or print it. The blue Print button opens it ready to print.']);
+      await h.say('PetroMath: every customer, every bill, accounted for.', 2400);
     },
   },
 
@@ -512,7 +582,7 @@ function toMp4(dir, frames, mp4, marks, total) {
 
 async function record(browser, name) {
   const v = VIDEOS[name];
-  const ctxOpts = { viewport: VIEW, deviceScaleFactor: SCALE, locale: 'en-IN', timezoneId: 'Asia/Kolkata' };
+  const ctxOpts = { viewport: VIEW, deviceScaleFactor: SCALE, locale: 'en-IN', timezoneId: 'Asia/Kolkata', acceptDownloads: true };
 
   // Sign in outside the recording.
   const login = await browser.newContext(ctxOpts);

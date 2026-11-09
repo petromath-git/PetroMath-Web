@@ -260,15 +260,119 @@ async function main() {
       await q('DELETE FROM t_day_bill_header WHERE day_bill_id IN (?)', [bills]);
       await q('DELETE FROM t_day_bill WHERE location_code = ? AND day_bill_id IN (?)', [LOC, bills]);
     }
-    for (const t of ['t_reopen_audit', 't_sales_deletions', 't_closing_deleted']) {
+    // Receipts made from bank uploads ("Auto from Bank") have no closing_id, so clear them by location.
+    for (const t of ['t_reopen_audit', 't_sales_deletions', 't_closing_deleted', 't_receipts', 't_receipts_deleted']) {
       await q(`DELETE FROM ${t} WHERE location_code = ?`, [LOC]);
     }
 
+    const history = await seedHistory(q, one, mgr ? mgr.Person_id : (await one('SELECT Person_id FROM m_persons WHERE User_Name = ?', [userName])).Person_id);
+
     await q('CALL RefreshMenuCache()');
-    console.log(`DEMO ready: login ${userName}, ${NOZZLES.length} nozzles, ${STAFF.length} cashiers, ${CUSTOMERS.length} credit customers; removed ${ids.length} old shift(s), ${removedLines} bank line(s).`);
+    console.log(`DEMO ready: login ${userName}, ${NOZZLES.length} nozzles, ${STAFF.length} cashiers, ${CUSTOMERS.length} credit customers; removed ${ids.length} old shift(s), ${removedLines} bank line(s); history: ${history}.`);
   } finally {
     await db.end();
   }
+}
+
+// Past closed shifts with credit bills, and customers' payments, from the 15th of the month before last up to
+// 3 days ago, so the customer reports have something to show. A fixed random sequence keeps every run's figures
+// the same for the same dates. Written straight to the tables (like a shift closed long ago). Meter readings are
+// chained backwards from the nozzles' current openings, so the newest seeded shift closes exactly where the
+// next real shift opens and the shift video's meters don't change.
+async function seedHistory(q, one, closerId) {
+  let seed = 471;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
+  const ist = new Date(Date.now() + 5.5 * 3600e3);
+  const ymd = (d) => d.toISOString().slice(0, 10);
+  const start = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 2, 15));
+  const end = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - 3)); // not the last 2 days: the Cashier Shift list shows those by default
+
+  const cashiers = (await q("SELECT Person_id FROM m_persons WHERE location_code = ? AND Role = 'Cashier' ORDER BY Person_id", [LOC])).map((r) => r.Person_id);
+  const products = {};
+  for (const [name, price] of FUELS) products[name] = { id: (await one('SELECT product_id FROM m_product WHERE location_code = ? AND product_name = ?', [LOC, name])).product_id, price };
+  const customers = [];
+  for (const [name] of CUSTOMERS) {
+    const c = await one('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name = ?', [LOC, name]);
+    const vehicles = await q('SELECT vehicle_id, vehicle_number FROM m_creditlist_vehicles WHERE creditlist_id = ?', [c.creditlist_id]);
+    customers.push({ name, id: c.creditlist_id, vehicles, due: 0 });
+  }
+  // How often each customer fills: the transport companies most days, the school and the trader now and then.
+  const weight = { 'SRI LAKSHMI TRANSPORTS': 0.85, 'KAVERI ROADWAYS': 0.5, 'GREEN VALLEY SCHOOL': 0.25, 'ERODE TEXTILE TRADERS': 0.2 };
+
+  // Meter readings: litres per nozzle per day, then walk back from today's openings.
+  let mseed = 9001;
+  const mrnd = () => { mseed = (mseed * 1103515245 + 12345) % 2147483648; return mseed / 2147483648; };
+  const LITRES = { 'MS-1': [700, 200], 'MS-2': [500, 150], 'HSD-1': [1100, 300], 'HSD-2': [900, 250], 'XP-1': [80, 40] };
+  const price = Object.fromEntries(FUELS.map(([n, p]) => [n, p]));
+  const pumps = [];
+  for (const [code, product, , opening] of NOZZLES) {
+    pumps.push({ code, product, id: (await one('SELECT pump_id FROM m_pump WHERE location_code = ? AND pump_code = ?', [LOC, code])).pump_id, opening });
+  }
+  const days = [];
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) days.push(ymd(d));
+  const readings = {}; // day -> [{pump_id, opening, closing, price}]
+  const meter = Object.fromEntries(pumps.map((p) => [p.code, p.opening]));
+  for (const day of [...days].reverse()) {
+    readings[day] = pumps.map((p) => {
+      const [avg, spread] = LITRES[p.code];
+      const litres = Math.round((avg + (mrnd() * 2 - 1) * spread) * 100) / 100;
+      const closing = meter[p.code];
+      const opening = Math.round((closing - litres) * 1000) / 1000;
+      meter[p.code] = opening;
+      return { pump_id: p.id, opening, closing, price: price[p.product] };
+    });
+  }
+
+  let billNo = 1001;
+  let receiptNo = 5001;
+  let shifts = 0;
+  let bills = 0;
+  let receipts = 0;
+  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = ymd(d);
+    const r = await q(
+      `INSERT INTO t_closing (closer_id, cashier_id, location_code, cash, ex_short, closing_status, notes, closing_date, close_reading_time,
+         created_by, updated_by, creation_date)
+       VALUES (?, ?, ?, 2000, 0, 'CLOSED', 'video demo history', ?, '14:00:00', 'video-demo', 'video-demo', ?)`,
+      [closerId, pick(cashiers), LOC, day, `${day} 08:30:00`]);
+    const closingId = r.insertId;
+    shifts++;
+    for (const rd of readings[day]) {
+      await q(`INSERT INTO t_reading (closing_id, pump_id, opening_reading, closing_reading, price, testing, created_by, updated_by)
+               VALUES (?, ?, ?, ?, ?, 0, 'video-demo', 'video-demo')`, [closingId, rd.pump_id, rd.opening, rd.closing, rd.price]);
+    }
+    for (const c of customers) {
+      if (rnd() > weight[c.name]) continue;
+      const fills = c.name === 'SRI LAKSHMI TRANSPORTS' && rnd() < 0.4 ? 2 : 1;
+      for (let i = 0; i < fills; i++) {
+        const fuel = c.name === 'GREEN VALLEY SCHOOL' ? 'HSD' : (rnd() < 0.85 ? 'HSD' : 'MS');
+        const qty = fuel === 'HSD' ? Math.round(60 + rnd() * 140) : Math.round(10 + rnd() * 30);
+        const amount = Math.round(qty * products[fuel].price * 100) / 100;
+        const v = c.vehicles.length ? pick(c.vehicles) : null;
+        await q(`INSERT INTO t_credits (closing_id, bill_no, creditlist_id, vehicle_id, vehicle_number, product_id, price, price_discount, qty, amount,
+                   credit_bill_date, created_by, updated_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 'video-demo', 'video-demo')`,
+        [closingId, String(billNo++), c.id, v ? v.vehicle_id : null, v ? v.vehicle_number : null, products[fuel].id, products[fuel].price, qty, amount, day]);
+        c.due += amount;
+        bills++;
+      }
+    }
+    // Payments by NEFT on the 5th and 20th: most of what is due, rounded down to the thousand.
+    if (d.getUTCDate() === 5 || d.getUTCDate() === 20) {
+      for (const c of customers) {
+        const pay = Math.floor((c.due * (0.75 + rnd() * 0.2)) / 1000) * 1000;
+        if (pay < 1000) continue;
+        const ref = `NEFT-${String(Math.floor(rnd() * 1e10)).padStart(10, '0')}-${c.name.slice(0, 14)}`;
+        await q(`INSERT INTO t_receipts (receipt_no, creditlist_id, receipt_type, amount, notes, receipt_date, location_code, created_by, updated_by)
+                 VALUES (?, ?, 'Bank Deposit', ?, ?, ?, ?, 'video-demo', 'video-demo')`,
+        [String(receiptNo++), c.id, pay, `Auto from Bank - ${ref}`, day, LOC]);
+        c.due -= pay;
+        receipts++;
+      }
+    }
+  }
+  return `${shifts} closed shifts, ${bills} credit bills, ${receipts} receipts from ${ymd(start)}`;
 }
 
 main().catch((err) => {

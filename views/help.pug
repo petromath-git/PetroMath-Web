@@ -36,6 +36,7 @@ block content
           li: a(href='#shift') Enter and close a shift
           li: a(href='#bank-upload') Upload a bank statement
           li: a(href='#sap-upload') Upload the oil company (SAP) statement
+          li: a(href='#customer-statement') Run a customer's credit statement
 
     section#shift
       h2 1. Enter and close a shift
@@ -162,3 +163,43 @@ block content
           strong  SAP Transactions
           | .
         li Upload both statements regularly: a payment to the oil company appears in both, as a debit in the bank and a credit in SAP.
+
+    section#customer-statement
+      h2 4. Run a customer's credit statement
+      +howVideo('customer-statement', "run a customer's credit statement")
+      p
+        | The
+        strong  Customer Detailed Report
+        |  is a credit customer's statement: every bill and payment in a period, with the running balance.
+      ol.help-steps
+        li
+          | Open
+          strong  Reports → Customer Detailed Report
+          | .
+        li
+          | Choose the
+          strong  Date Range
+          | : This Month, Last Month, a month and year, a financial year, or Custom Date with your own dates.
+        li
+          | Choose the customer in
+          strong  Company Name
+          |  and click
+          strong  Go
+          | .
+        li
+          | Check the
+          strong  Period Summary
+          |  (opening balance, bills, payments, closing balance), then the lines below: each bill with product, vehicle, quantity and amount, and each payment.
+        li
+          | To send it, click the green
+          strong  Download PDF
+          |  button, or the blue
+          strong  Print
+          |  button to open it ready to print.
+      h3 Good to know
+      ul
+        li Bills appear once their shift is closed. Payments appear once they are recorded: from an uploaded bank statement with the customer as the ledger, or entered in Credit Receipts.
+        li The PDF carries your station's name and address, so you can share it on WhatsApp as it is.
+        li For a shorter statement with one line per bill or payment, use
+          strong  Customer Ledger Report
+          | .
