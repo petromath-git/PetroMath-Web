@@ -467,6 +467,68 @@ const VIDEOS = {
     },
   },
 
+  'add-product': {
+    title: 'Add a product (lube or other item) with opening stock',
+    user: 'admin',
+    async run(h, page) {
+      const NAME = 'CHAIN LUBE SPRAY 150 ML';
+      await h.go('/home');
+      await h.begin();
+      await h.say('Adding a product you sell: lubes, coolant, or any other item.', 2600);
+      await h.say('Open Masters, then Products.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /masters/i }).first(), 700);
+      await h.tap('.sidebar a[href="/products"]', 0);
+      await page.waitForURL(/\/products/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await h.say('Every product is listed with its unit, price and opening stock.', 2600);
+      await h.say('Click Add Product.', 400);
+      await h.tap('#addProductBtn', 900);
+      await page.locator('#addProductModal.show').waitFor();
+
+      await h.say('Enter the product name as you want it on bills, with the pack size.', 400);
+      await h.type('#addProductForm input[name=product_name]', NAME, 55);
+      await h.say('The HSN code from the supplier invoice.', 400);
+      await h.type('#addProductForm input[name=hsn_code]', '27101973');
+      await h.say('The unit: NOS for packs and bottles, LIT for loose oil.', 400);
+      await h.pick('#addProductForm select[name=unit]', 'NOS (pieces)', 600);
+      await h.say('The selling price, with GST.', 400);
+      await h.type('#addProductForm input[name=price]', '180');
+      await h.say('The GST rate: half as CGST, half as SGST. 18% is 9 and 9.', 400);
+      await h.type('#addProductForm input[name=cgst_percent]', '9');
+      await h.type('#addProductForm input[name=sgst_percent]', '9');
+      await h.say('Non-Fuel Product is ticked, so PetroMath tracks its stock.', 400);
+      await h.point('#is_lube_product', 2200);
+      await h.say('Click Add Product.', 400);
+      await Promise.all([page.waitForEvent('load', { timeout: 30000 }), h.tap('#addProductModal button[type=submit]', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      const row = page.locator('tr', { hasText: NAME }).first();
+      await h.say('The product is added. Cashiers can now pick it in Lube Sales and Credit Sales.', 600);
+      await h.point(row, 2600);
+      await h.say('Its opening stock is not set yet. Click Set.', 400);
+      await h.tap(row.locator('.opening-stock-btn'), 1000);
+      await page.locator('#openingStockModal.show #osBody').waitFor({ state: 'visible', timeout: 30000 });
+      await h.pause(500);
+      await h.say('Opening stock: how many you have in hand when you start selling it in PetroMath.', 500);
+      await h.point('#osDate', 2400);
+      await h.say('Enter the quantity from a physical count.', 300);
+      await h.type('#osQty', '24');
+      await h.type('#osNote', 'Physical count', 60);
+      await h.say('Click Save.', 400);
+      await Promise.all([page.waitForEvent('load', { timeout: 30000 }), h.tap('#osSaveBtn', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      const row2 = page.locator('tr', { hasText: NAME }).first();
+      await h.say('Opening stock is set. Purchases add to it, and every sale takes from it.', 600);
+      await h.point(row2.locator('td', { has: page.locator('.opening-stock-btn') }), 2800);
+      await h.say('To change a price later, use the edit button on the product.', 600);
+      await h.point(row2.locator('button.btn-primary').first(), 2400);
+    },
+  },
+
   'paytm-recon': {
     title: 'Reconcile Paytm (digital reconciliation)',
     async run(h, page) {

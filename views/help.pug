@@ -39,6 +39,7 @@ block content
           li: a(href='#customer-statement') Run a customer's credit statement
           li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
           li: a(href='#add-customer') Add a credit customer, with opening balance and login
+          li: a(href='#add-product') Add a product, with opening stock
 
     section#shift
       h2 1. Enter and close a shift
@@ -286,3 +287,41 @@ block content
           strong  Set
           |  button in the Opening Balance column.
         li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
+
+    section#add-product
+      h2 7. Add a product, with opening stock
+      +howVideo('add-product', 'add a product')
+      p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
+      ol.help-steps
+        li
+          | Open
+          strong  Masters → Products
+          |  and click
+          strong  Add Product
+          | .
+        li Enter the product name as you want it on bills, with the pack size (for example 500 ML, 1 LTR), and the HSN code from the supplier's invoice.
+        li
+          strong Unit:
+          |  NOS for packs and bottles, LIT for loose oil.
+        li
+          | The selling
+          strong  Price
+          |  (with GST), and the GST rate split into
+          strong  CGST
+          |  and
+          strong  SGST
+          |  (18% is 9 and 9).
+        li
+          | Click
+          strong  Add Product
+          | . Cashiers can now pick it in Lube Sales and Credit Sales.
+        li
+          | In the
+          strong  Opening Stock
+          |  column click
+          strong  Set
+          | , and enter how many you have in hand (from a physical count) on the date shown.
+      h3 Good to know
+      ul
+        li Purchases add to the stock and every sale takes from it, so the opening count matters.
+        li To change a price, use the edit button on the product.
