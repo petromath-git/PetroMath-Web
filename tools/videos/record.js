@@ -1052,6 +1052,117 @@ const VIDEOS = {
       await h.say('PetroMath: every shift, accounted for.', 2200);
     },
   },
+
+  // Recorded at the beta training station (MUE, renamed by the beta refresh) for a full month of real-looking books.
+  // Run node training-login.js first. Last month's accounting is deleted before recording, so it starts from nothing.
+  accounting: {
+    title: 'Create the accounts and read the Profit & Loss',
+    user: 'training',
+    async prepare(request) {
+      const d = new Date(Date.now() + 5.5 * 3600e3);
+      const first = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - 1, 1));
+      const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 0));
+      const range = { from_date: first.toISOString().slice(0, 10), to_date: last.toISOString().slice(0, 10) };
+      const r = await request.post(`${BASE}/gl/api/delete-accounting`, { data: { ...range, include_manual: 0, confirm: 'DELETE' } });
+      const j = await r.json();
+      if (!j.success) throw new Error(`Could not clear last month's accounting: ${j.error}`);
+      console.log(`  cleared ${range.from_date}..${range.to_date}: ${j.headers} vouchers, ${j.events} events`);
+    },
+    async run(h, page) {
+      await h.go('/home');
+      await h.begin();
+      await h.say('PetroMath writes your accounts from your daily work: shifts, bills, invoices and bank lines.', 3000);
+      await h.say("Each month, the owner (Admin) runs two steps. Open Accounting, then GL Control.", 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /accounting/i }).first(), 700);
+      await h.tap('.sidebar a[href="/gl/control"]', 0);
+      await page.waitForURL(/\/gl\/control/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+
+      // Step 1: Generate Events
+      await h.say('Step 1: Generate Events.', 500);
+      await h.tap('#tab-generate', 600);
+      await h.say('Choose the month. Here, last month.', 300);
+      await h.pick('#gePeriod', 'Last Month', 900);
+      await h.say('Click Generate Missing Events.', 300);
+      await h.tap('#btnGenerate', 0);
+      await page.locator('#geResult').waitFor({ state: 'visible', timeout: 120000 });
+      await page.waitForLoadState('networkidle');
+      await h.pause(400);
+      await h.say("Every sale, receipt, invoice and bank line of the month is queued for the accounts.", 600);
+      await h.point('#geResultBody', 3200);
+
+      // The queue
+      await h.say('Events Monitor shows the queue.', 300);
+      await h.tap('#tab-events', 500);
+      await h.pick('#evPeriod', 'Last Month', 500);
+      await h.tap('#btnLoadEvents', 0);
+      await page.locator('#eventsTableWrap').waitFor({ state: 'visible', timeout: 60000 });
+      await h.pause(500);
+      await h.say('All of them are waiting (Unprocessed).', 300);
+      await h.point('#summaryCards', 2200);
+      await h.say('The eye button shows the transaction behind any event.', 300);
+      await h.tap(page.locator('#eventsBody .btn-src-detail').first(), 0);
+      await page.waitForFunction(() => !/^Source Detail$/.test(document.getElementById('srcDetailTitle').textContent), null, { timeout: 30000 });
+      await h.pause(2600);
+      await h.tap('#sourceDetailModal .modal-footer button', 700);
+
+      // Step 2: Create Accounting
+      await h.say('Step 2: Create Accounting.', 500);
+      await h.tap('#tab-accounting', 600);
+      await h.pick('#caPeriod', 'Last Month', 700);
+      await h.say('Click Run Create Accounting.', 300);
+      await h.tap('#btnRunAccounting', 0);
+      await page.locator('#caResultBody', { hasText: 'Done' }).waitFor({ timeout: 300000 });
+      await page.waitForLoadState('networkidle');
+      await h.pause(400);
+      await h.say('Done: the vouchers are written. Dates with a shift still in draft are skipped until it is closed.', 600);
+      await h.point('#caResultBody', 3400);
+
+      // Profit & Loss
+      await h.say('Now open Profit & Loss.', 500);
+      await h.tap('.sidebar a[href="/gl/profit-loss"]', 0);
+      await page.waitForURL(/\/gl\/profit-loss/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(400);
+      await h.pick('#glPeriod', 'Last Month', 500);
+      await h.say('Choose last month and click View.', 300);
+      await h.tap('form[action="/gl/profit-loss"] button[type=submit]', 0);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.say('Total income, total expenses, and the net profit for the month.', 600);
+      await h.point(page.locator('.card', { hasText: /Net (Profit|Loss)/ }).first(), 2600);
+      await h.say('Income: fuel and lube sales, and the dealer margin.', 300);
+      await h.point('#plIncomeTable', 2600);
+      await h.say('Expenses: purchases, then salary, rent, bank charges and other costs.', 300);
+      await h.point('#plExpenseTable', 1400);
+      await h.scrollBy(260, 1800);
+
+      // Drill down: OTHERS
+      await h.say('Every ledger opens to the entries behind it. Click OTHERS.', 300);
+      await h.tap(page.locator('#plExpenseTable a', { hasText: /^OTHERS$/ }), 0);
+      await page.waitForURL(/\/gl\/ledger\?/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('The Ledger Report: each entry with its date, voucher and description.', 300);
+      await h.point('#ledgerTable tbody', 3000);
+      await h.say('Here: a few small bank lines tagged OTHERS. If one looks wrong, correct the tag on that bank line.', 3200);
+
+      // Drill down: GENERAL EXPENSES
+      await h.say('Back to the Profit & Loss. Now GENERAL EXPENSES.', 300);
+      await page.goBack({ waitUntil: 'networkidle' });
+      await h.pause(500);
+      await h.tap(page.locator('#plExpenseTable a', { hasText: /^GENERAL EXPENSES$/ }), 0);
+      await page.waitForURL(/\/gl\/ledger\?/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('The day-to-day cash spends entered in the shift closing, each with its note.', 300);
+      await h.point('#ledgerTable tbody tr:nth-child(3)', 2600);
+      await h.scrollBy(320, 2400);
+      await h.say('So every figure in your Profit & Loss can be checked, line by line.', 3000);
+      await h.say('PetroMath: your books, straight from your daily work.', 2400);
+    },
+  },
 };
 
 // Screencast frames -> MP4. Chrome sends a frame only when the screen changes, so each frame is held until the next one.
@@ -1085,10 +1196,14 @@ async function record(browser, name) {
     const login = await browser.newContext(ctxOpts);
     const lp = await login.newPage();
     await lp.goto(`${BASE}/login`);
-    await lp.fill('#username', v.user === 'admin' ? process.env.DEMO_ADMIN_USER : process.env.DEMO_USER);
+    const users = { admin: process.env.DEMO_ADMIN_USER, training: process.env.TRAINING_USER || 'TRAINING-OWNER' };
+    await lp.fill('#username', users[v.user] || process.env.DEMO_USER);
     await lp.fill('#pw', process.env.DEMO_PASSWORD);
     await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
-    if (lp.url().includes('/login')) throw new Error('Demo sign-in failed. Run node demo-location.js first.');
+    if (lp.url().includes('/login')) {
+      throw new Error(`Sign-in failed. Run node ${v.user === 'training' ? 'training-login.js' : 'demo-location.js'} first.`);
+    }
+    if (v.prepare) await v.prepare(login.request);
     state = await login.storageState();
     await login.close();
   }

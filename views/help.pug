@@ -45,6 +45,7 @@ block content
           li: a(href='#add-product') Add a product, with opening stock
           li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
           li: a(href='#lube-invoice') Upload a lube purchase invoice PDF
+          li: a(href='#accounting') Create the accounts and read the Profit &amp; Loss
 
     section#shift
       h2 1. Enter and close a shift
@@ -422,3 +423,46 @@ block content
         li It reads IndianOil (SERVO) distributor invoices and Tally-style tax invoices. For other formats, enter the invoice by hand on the same screen.
         li Figures read from the PDF are locked, so the invoice in PetroMath matches the paper exactly.
         li PetroMath warns if the same invoice number has already been entered.
+
+    section#accounting
+      h2 11. Create the accounts and read the Profit &amp; Loss
+      +howVideo('accounting', 'create the accounts and read the Profit & Loss')
+      p Turn a month's shifts, bills, invoices and bank lines into accounting entries, then see your profit and what makes it up.
+      ol.help-steps
+        li
+          | Open
+          strong  Accounting → GL Control
+          | . (Only the owner, Admin, can run the steps below.)
+        li
+          | On
+          strong  Generate Events
+          | , choose the period (for example
+          strong  Last Month
+          | ) and click
+          strong  Generate Missing Events
+          | . Every sale, receipt, invoice and bank line of that period is queued for the accounts.
+        li
+          | On
+          strong  Events Monitor
+          | , click
+          strong  View
+          |  to see the queue. The eye button shows the transaction behind any event.
+        li
+          | On
+          strong  Create Accounting
+          | , choose the same period and click
+          strong  Run Create Accounting
+          | . PetroMath writes the vouchers and shows how many were created.
+        li
+          | Open
+          strong  Accounting → Profit &amp; Loss
+          | , choose the period and click
+          strong  View
+          | : income, expenses and net profit.
+        li Click any ledger name to open its Ledger Report: every entry behind that figure, with date, voucher and description.
+      h3 Good to know
+      ul
+        li Both steps are safe to run again: events already queued and vouchers already created are not repeated.
+        li Dates with a shift still in draft are skipped. Close the shift, then run Create Accounting again.
+        li If an event shows Error, open it with the eye button, fix the cause (usually a missing ledger), then Retry.
+        li A wrong figure in the P&amp;L usually comes from a wrongly tagged bank or SAP line: open the ledger, find the line, and correct its tag.
