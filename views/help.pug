@@ -1,0 +1,164 @@
+extends layout
+
+mixin howVideo(name, label)
+  figure.help-video
+    video(src=`/videos/${name}.mp4?v=${videoV[name + '.mp4'] || ''}` poster=`/videos/${name}.jpg?v=${videoV[name + '.jpg'] || ''}` controls playsinline preload="none")
+    figcaption
+      strong Watch how: #{label}
+      a(href='https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + name + '.mp4') target='_blank' rel='noopener')
+        i.bi.bi-whatsapp.me-1
+        | Share on WhatsApp
+
+block content
+  style.
+    .help-page { max-width: 980px; }
+    .help-page .help-toc ol { margin-bottom: 0; }
+    .help-page section { margin-bottom: 2rem; }
+    .help-page h2 { font-size: 1.35rem; margin-bottom: .75rem; }
+    .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+    .help-video { margin: 0 0 1.25rem; }
+    .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; display: block; }
+    .help-video figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 2px; font-size: .95rem; }
+    .help-steps > li { margin-bottom: .6rem; }
+    .help-steps dt { font-weight: 600; }
+    .help-steps dd { margin-left: 1.25rem; }
+
+  .container-fluid.help-page
+    h3.mb-1
+      i.bi.bi-question-circle.me-2
+      | Help
+    p.text-muted How to use PetroMath, step by step. Each topic has a short video.
+
+    .card.help-toc.mb-4
+      .card-body
+        strong Contents
+        ol.mt-2
+          li: a(href='#shift') Enter and close a shift
+          li: a(href='#bank-upload') Upload a bank statement
+          li: a(href='#sap-upload') Upload the oil company (SAP) statement
+
+    section#shift
+      h2 1. Enter and close a shift
+      +howVideo('shift-closing', 'enter and close a shift')
+      p
+        | A shift is entered on one screen with a tab for each part. Work through the tabs left to right with
+        strong  Next
+        | . PetroMath saves the shift as a draft each time you move to the next tab, so you can stop and come back to it from
+        strong  Edit
+        |  on the Cashier Shift list.
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Cashier Shift
+          |  and click
+          strong  Add New
+          | .
+        li
+          strong Closing:
+          |  choose the cashier, the shift date and the opening cash given. Check the selling rates (they come from the last shift).
+        li
+          strong Attendance:
+          |  click
+          strong  Add
+          |  for each person who worked: person, shift, in and out time.
+        li
+          strong Reading:
+          |  choose the closing reading time, click
+          strong  Add All Nozzles
+          | , then type each nozzle's closing meter reading. Enter testing litres, if any. Sale and amount are worked out for you.
+        li
+          strong Lube Sales:
+          |  oils and other products sold for cash: product and quantity.
+        li
+          strong Credit Sales:
+          |  click
+          strong  Add credits
+          |  for each credit bill: product, bill number, company, vehicle and quantity, then
+          strong  Save
+          | .
+        li
+          strong Digital Sales:
+          |  UPI, card and fleet card payments received: vendor and amount.
+        li
+          strong Expenses:
+          |  money paid out of the cash during the shift. The usual amount fills in; change it if needed.
+        li
+          strong Cash Count:
+          |  how many of each note and coin are handed over. The total is worked out.
+        li
+          strong Summary:
+          |  check the whole shift, especially
+          strong  Excess/Shortage
+          |  (cash counted against cash due). Then click
+          strong  CLOSE
+          |  and confirm with
+          strong  OK
+          | .
+      h3 Good to know
+      ul
+        li Your station may show extra tabs, such as 2T Sales, Collections or Employee Advance. They work the same way.
+        li A closed shift can no longer be edited. Its closing readings become the next shift's opening readings.
+        li If Close says the credit quantity is more than the meter sale, check the product on the credit bills (for example, HSD entered as MS).
+
+    section#bank-upload
+      h2 2. Upload a bank statement
+      +howVideo('bank-upload', 'upload a bank statement')
+      p Bring every credit and debit in your bank account into PetroMath. Download the statement from your internet banking as an Excel file (some banks also work as PDF).
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Upload Transactions
+          | .
+        li
+          strong Step 1:
+          |  choose the bank account, choose the statement file and click
+          strong  Next: Preview Transactions
+          | . If the file has a password, PetroMath asks for it.
+        li
+          strong Step 2:
+          |  choose a ledger for each line: the customer who paid, the UPI or card vendor, Cash for cash deposits, your SAP account for payments to the oil company, or an expense such as Bank Charges.
+        li
+          strong Step 3:
+          |  check the number of lines and the account, then click
+          strong  Save All Transactions
+          |  and confirm with
+          strong  OK
+          | .
+      h3 Good to know
+      ul
+        li Lines you uploaded before are marked as duplicates and skipped, so an overlapping statement is safe to upload.
+        li After the first few uploads, PetroMath suggests the ledger from what you chose before. Check the suggestions.
+        li The saved lines are in
+          strong  Bank Transactions
+          | . If a ledger was chosen wrongly, ask your Admin to change it there.
+
+    section#sap-upload
+      h2 3. Upload the oil company (SAP) statement
+      +howVideo('sap-upload', 'upload the oil company (SAP) statement')
+      p The account statement from your oil company portal is uploaded the same way, on the same screen. Download it as an Excel file.
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Upload Transactions
+          |  and choose your oil company (SAP) account.
+        li Choose the statement file and click
+          strong  Next: Preview Transactions
+          | .
+        li
+          | Choose a ledger for each line: product invoices go to
+          strong  Purchase Invoice
+          | , your payments to your bank account, fleet card and loyalty credits to their own ledgers, and fees to the matching charge ledger.
+        li
+          | Click
+          strong  Next
+          | , then
+          strong  Save All Transactions
+          |  and confirm with
+          strong  OK
+          | .
+      h3 Good to know
+      ul
+        li The saved lines are in
+          strong  SAP Transactions
+          | .
+        li Upload both statements regularly: a payment to the oil company appears in both, as a debit in the bank and a credit in SAP.

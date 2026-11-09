@@ -1,0 +1,571 @@
+// Records PetroMath's how-to videos on beta in a desktop browser window (ticket #471).
+// Each video is a short script: captions, a mouse pointer, clicks and typing at a natural speed.
+// Re-run after a screen changes.
+//
+//   node demo-location.js              (reset the DEMO location first; needs pm-tunnel beta db)
+//   node record.js shift-closing       (one video)
+//   node record.js --list
+//
+// Signs in as the DEMO manager (made-up data only). Writes out/<name>/ (raw frames) and
+// ../../public/videos/<name>.mp4 + .jpg (what the Help page plays).
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const mysql = require('mysql2/promise');
+const { chromium } = require('playwright');
+const ffmpeg = require('ffmpeg-static');
+const { makeSamples } = require('./samples');
+
+const BASE = process.env.BASE_URL || 'https://beta.petromath.co.in';
+const OUT = path.join(__dirname, 'out');
+const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
+const VIEW = { width: 1280, height: 720 };
+const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
+
+// Runs in every page: hides beta-only markers, draws the caption bar, the mouse pointer and the click ring.
+// Caption text and pointer position survive page loads via sessionStorage.
+function overlayScript() {
+  const store = {
+    get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
+    set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* ignore */ } },
+  };
+  const css = `
+    body { padding-bottom: 180px !important; } /* lets buttons at the end of a page scroll clear of the caption */
+    #__vcap { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: 860px; z-index: 2147483647;
+      background: rgba(15, 23, 42, 0.92); color: #fff; border-radius: 12px; padding: 12px 22px; pointer-events: none;
+      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center;
+      box-shadow: 0 6px 24px rgba(0,0,0,.35); transition: opacity .25s; }
+    #__vptr { position: fixed; left: 0; top: 0; width: 26px; height: 26px; z-index: 2147483647; pointer-events: none;
+      transition: transform .55s cubic-bezier(.4,0,.2,1); }
+    .__vring { position: fixed; width: 40px; height: 40px; margin: -20px 0 0 -20px; border-radius: 50%; pointer-events: none;
+      z-index: 2147483646; background: rgba(250, 204, 21, 0.45); border: 3px solid rgba(234, 179, 8, 0.95); }
+    #__vconfirm { position: fixed; inset: 0; z-index: 2147483645; background: rgba(0,0,0,.25); display: flex; justify-content: center; align-items: flex-start; }
+    #__vconfirm > div { margin-top: 18px; width: 440px; background: #fff; border-radius: 10px; box-shadow: 0 10px 40px rgba(0,0,0,.35);
+      padding: 20px 22px 16px; font: 14px/1.45 system-ui, "Segoe UI", sans-serif; color: #202124; }
+    #__vconfirm .t { font-size: 13px; color: #5f6368; margin-bottom: 8px; }
+    #__vconfirm .b { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+    #__vconfirm button { border-radius: 16px; padding: 6px 18px; font: 600 14px system-ui, "Segoe UI", sans-serif; border: 1px solid #dadce0; background: #fff; color: #1a73e8; }
+    #__vconfirm button.ok { background: #1a73e8; color: #fff; border-color: #1a73e8; }`;
+  const POINTER = '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15.5 L12.5 22.5 L15.5 21 L12 14 L19 14 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+
+  function ready() {
+    const style = document.createElement('style');
+    style.textContent = css;
+    document.head.appendChild(style);
+    // Beta-only markers: the blue sidebar header (prod's is yellow), the "Development Environment" banner, the CANARY badge.
+    document.querySelectorAll('.canary-instance').forEach((e) => e.classList.remove('canary-instance'));
+    document.querySelectorAll('.alert').forEach((a) => { if (/Development Environment/.test(a.textContent)) a.remove(); });
+    document.querySelectorAll('.sidebar-user span').forEach((s) => {
+      if (s.textContent.trim() === 'CANARY') { if (s.previousElementSibling && s.previousElementSibling.tagName === 'BR') s.previousElementSibling.remove(); s.remove(); }
+    });
+    const ptr = document.createElement('div');
+    ptr.id = '__vptr';
+    ptr.innerHTML = POINTER;
+    document.documentElement.appendChild(ptr);
+    const [x, y] = (store.get('__vptr') || '640,400').split(',').map(Number);
+    ptr.style.transition = 'none';
+    ptr.style.transform = `translate(${x}px, ${y}px)`;
+    window.__vSay(store.get('__vcap') || '');
+  }
+  window.__vSay = (text) => {
+    store.set('__vcap', text || '');
+    let el = document.getElementById('__vcap');
+    if (!el) { el = document.createElement('div'); el.id = '__vcap'; document.documentElement.appendChild(el); }
+    el.textContent = text || '';
+    el.style.opacity = text ? '1' : '0';
+  };
+  window.__vMove = (x, y) => {
+    store.set('__vptr', `${x},${y}`);
+    const p = document.getElementById('__vptr');
+    if (!p) return;
+    p.style.transition = '';
+    p.style.transform = `translate(${x}px, ${y}px)`;
+  };
+  window.__vRing = (x, y) => {
+    const r = document.createElement('div');
+    r.className = '__vring';
+    r.style.left = `${x}px`;
+    r.style.top = `${y}px`;
+    document.documentElement.appendChild(r);
+    r.animate([{ transform: 'scale(0.5)', opacity: 1 }, { transform: 'scale(1.6)', opacity: 0 }], { duration: 650 });
+    setTimeout(() => r.remove(), 650);
+  };
+  // Look-alike of the browser's confirm box: a screencast can't capture the real one.
+  window.__vConfirm = (msg, host, okOnly) => {
+    const d = document.createElement('div');
+    d.id = '__vconfirm';
+    d.innerHTML = `<div><div class="t">${host} says</div><div>${msg}</div><div class="b">${okOnly ? '' : '<button>Cancel</button>'}<button class="ok">OK</button></div></div>`;
+    document.documentElement.appendChild(d);
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
+}
+
+function makeHelpers(page, t0) {
+  const marks = { start: 0 };
+  const now = () => (Date.now() - t0) / 1000;
+  const pause = (ms) => page.waitForTimeout(ms);
+  const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
+  const h = {
+    marks,
+    pause,
+    async go(url) { await page.goto(BASE + url, { waitUntil: 'networkidle' }); },
+    async begin() { marks.start = now(); },
+    async say(text, ms = 1800) {
+      await page.evaluate((t) => window.__vSay(t), text);
+      if (ms) await pause(ms);
+    },
+    async show(l, ms = 500) {
+      const el = loc(l);
+      await el.evaluate((e) => e.scrollIntoView({ behavior: 'smooth', block: 'center' }));
+      await pause(ms);
+      return el;
+    },
+    // Glide the pointer to the element's centre.
+    async point(l, ms = 650) {
+      const el = await h.show(l, 350);
+      const b = await el.boundingBox();
+      const x = b.x + Math.min(b.width / 2, 60);
+      const y = b.y + b.height / 2;
+      await page.evaluate(([px, py]) => window.__vMove(px, py), [x, y]);
+      await pause(ms);
+      return { el, x, y };
+    },
+    async tap(l, ms = 700, opts = {}) {
+      const { el, x, y } = await h.point(l);
+      await page.evaluate(([px, py]) => window.__vRing(px, py), [x, y]);
+      await pause(250);
+      if (!opts.noClick) await el.click();
+      await pause(ms);
+    },
+    async type(l, text, delay = 70) {
+      const { el } = await h.point(l, 450);
+      await el.click();
+      await el.press('Control+A');
+      await el.pressSequentially(String(text), { delay });
+      await pause(350);
+    },
+    async pick(l, label, ms = 700) {
+      const { el, x, y } = await h.point(l, 450);
+      await page.evaluate(([px, py]) => window.__vRing(px, py), [x, y]);
+      await pause(250);
+      await el.selectOption({ label });
+      await pause(ms);
+    },
+    async scrollBy(px, ms = 1200) {
+      await page.evaluate((y) => window.scrollBy({ top: y, behavior: 'smooth' }), px);
+      await pause(ms);
+    },
+    async top(ms = 600) {
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'smooth' }));
+      await pause(ms);
+    },
+    // Show the look-alike browser dialog and click its OK (a screencast can't capture the real one).
+    async dialog(message, caption, okOnly = false) {
+      await page.evaluate(([m, o]) => window.__vConfirm(m, location.host.replace(/^beta\./, ''), o), [message, okOnly]);
+      if (caption) await h.say(caption, 1600); else await h.pause(1200);
+      await h.tap('#__vconfirm button.ok', 300, { noClick: true });
+      await page.evaluate(() => document.getElementById('__vconfirm').remove());
+    },
+    // Click a Next / tab button and wait for the draft to save.
+    async next(paneSel, ms = 900) {
+      await h.say('', 0); // the next tab brings its own caption
+      await h.tap(page.locator(`${paneSel} button.btn-primary`, { hasText: 'Next' }), 0);
+      await page.waitForLoadState('networkidle');
+      await pause(ms);
+    },
+  };
+  return h;
+}
+
+// Beta DB (through pm-tunnel), for figures the video needs to look right, e.g. how much cash to count.
+async function betaDb() {
+  if (Number(process.env.BETA_DB_PORT) === 33307) throw new Error('BETA_DB_PORT points at the prod tunnel.');
+  return mysql.createConnection({
+    host: process.env.BETA_DB_HOST, port: Number(process.env.BETA_DB_PORT), user: process.env.BETA_DB_USER,
+    password: process.env.BETA_DB_PASSWORD, database: process.env.BETA_DB_NAME,
+  });
+}
+
+// A believable cash bundle for an amount: mostly 500s, some 200s/100s/50s, the rest in small notes and coins.
+function cashInNotes(amount) {
+  const notes = { 500: 0, 200: 0, 100: 0, 50: 0, 20: 0, 10: 0, 5: 0, 2: 0, 1: 0 };
+  let left = amount;
+  for (const [n, share] of [[500, 0.72], [200, 0.12], [100, 0.09], [50, 0.04]]) {
+    notes[n] = Math.floor((amount * share) / n);
+    left -= notes[n] * n;
+  }
+  for (const n of [500, 200, 100, 50, 20, 10, 5, 2, 1]) { const c = Math.floor(left / n); notes[n] += c; left -= c * n; }
+  return notes;
+}
+
+// DEMO bank_id by bank name (ids differ between databases).
+async function bankId(name) {
+  const db = await betaDb();
+  try {
+    const [[row]] = await db.query("SELECT bank_id FROM m_bank WHERE location_code = 'DEMO' AND bank_name = ?", [name]);
+    return row.bank_id;
+  } finally { await db.end(); }
+}
+
+// Today in IST as yyyy-mm-dd (the shift date the page defaults to).
+const todayIST = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+
+// Upload Transactions walkthrough, shared by the bank and SAP videos.
+// v: { bankLabel, file, intro[], ledgers[] (one per statement line, in order), listUrl, listCaption }
+async function uploadWalkthrough(h, page, v) {
+  await h.go('/home');
+  await h.begin();
+  for (const line of v.intro) await h.say(line, 2400);
+  await h.say('Open Daily Operations, then Upload Transactions.', 700);
+  await h.tap('.sidebar a[href="/transaction-upload"]', 0);
+  await page.waitForURL(/\/transaction-upload/);
+  await page.waitForLoadState('networkidle');
+  await h.pause(500);
+
+  // Step 1
+  await h.say('Step 1: choose the account this statement belongs to.', 500);
+  await h.pick('#bank_id', v.bankLabel, 900);
+  await h.say('Then choose the statement file (Excel or PDF).', 500);
+  await h.tap('#transactionFile', 300, { noClick: true });
+  await page.setInputFiles('#transactionFile', v.file);
+  await h.pause(1400);
+  await h.say('Click Next: Preview Transactions.', 500);
+  await h.tap('#btnUpload', 0);
+  await page.locator('#step2-summary').waitFor({ state: 'visible', timeout: 60000 });
+  await page.waitForLoadState('networkidle');
+  await h.pause(600);
+
+  // Step 2
+  await h.top(300);
+  await h.say('Step 2: PetroMath reads every line of the statement.', 600);
+  await h.point('#step2-summary', 2000);
+  await h.say('Lines already uploaded before are marked as duplicates and skipped.', 2400);
+  await h.say('Choose a ledger for each line: who paid, or what the money was for.', 600);
+  for (let i = 0; i < v.ledgers.length; i++) {
+    const sel = page.locator(`.ledger-select[data-index="${i}"]`);
+    await page.waitForFunction((n) => document.querySelector(`.ledger-select[data-index="${n}"]`)?.options.length > 1, i);
+    if (i === 2) await h.say('The ledger list shows only what is allowed for this account.', 300);
+    if (i === 4) await h.say(v.midCaption, 300);
+    await h.pick(sel, v.ledgers[i], i < 3 ? 700 : 350);
+  }
+  await h.say('Next time, PetroMath suggests the ledger from what you chose before.', 2600);
+  await h.say('When every line has a ledger, click Next.', 500);
+  await h.tap('#btnProceedToStep3', 900);
+
+  // Step 3
+  await h.top(300);
+  await h.say('Step 3: check the count and the account, then Save All Transactions.', 600);
+  await h.point('#step3-summary', 1800);
+  const save = page.locator('#btnFinalSave');
+  await h.tap(save, 300, { noClick: true });
+  await page.evaluate(() => {
+    window.confirm = () => true;
+    window.alert = (m) => { try { sessionStorage.setItem('__valert', m); } catch (e) { /* ignore */ } };
+  });
+  await h.dialog(`Save ${v.ledgers.length} transactions?`, 'Confirm with OK.');
+  await Promise.all([page.waitForEvent('load', { timeout: 60000 }), save.click()]);
+  await page.waitForLoadState('networkidle');
+  const saved = await page.evaluate(() => sessionStorage.getItem('__valert'));
+  if (!/^Success/.test(saved || '')) throw new Error(`Save did not succeed: ${saved}`);
+  await h.dialog(saved, 'Saved.', true);
+
+  // Where the lines are now
+  await h.say(v.listCaption, 600);
+  await h.go(v.listUrl);
+  await h.pause(800);
+  await h.point(page.locator('table tbody tr').first(), 2600);
+  await h.say('From here they are used for reconciliation and the accounts.', 2600);
+}
+
+const weekAgoIST = () => new Date(Date.now() + 5.5 * 3600e3 - 7 * 864e5).toISOString().slice(0, 10);
+
+const VIDEOS = {
+  'bank-upload': {
+    title: 'Upload a bank statement',
+    async run(h, page) {
+      await uploadWalkthrough(h, page, {
+        bankLabel: 'IOB - IOB CA 1234',
+        file: makeSamples().iob,
+        intro: ['Upload your bank statement to bring every bank credit and debit into PetroMath.',
+          'First download the statement from your internet banking as an Excel file.'],
+        ledgers: ['CARD SWIPE', 'UPI QR', 'CASH', 'SRI LAKSHMI TRANSPORTS', 'IOCL-SOA (SAP-001234)',
+          'KAVERI ROADWAYS', 'ELECTRICITY EXPENSES', 'BANK CHARGES'],
+        midCaption: 'A payment to IOCL goes to your SAP account.',
+        listCaption: 'The lines are now in Bank Transactions.',
+        listUrl: `/bank-statement?tbankfromDate=${weekAgoIST()}&tbanktoDate=${todayIST()}&bank_id=${await bankId('IOB')}`,
+      });
+    },
+  },
+
+  'sap-upload': {
+    title: 'Upload the oil company (SAP) statement',
+    async run(h, page) {
+      await uploadWalkthrough(h, page, {
+        bankLabel: 'IOCL-SOA - SAP-001234',
+        file: makeSamples().sap,
+        intro: ['The oil company statement (SAP) is uploaded the same way as a bank statement.',
+          'Download your account statement from the oil company portal as an Excel file.'],
+        ledgers: ['PURCHASE INVOICE', 'IOB (IOB CA 1234)', 'FLEET CARD', 'IOCL LICENSE FEE RECOVERY', 'PURCHASE INVOICE'],
+        midCaption: 'Product invoices go to Purchase Invoice.',
+        listCaption: 'The lines are now in SAP Transactions.',
+        listUrl: `/oil-company-statement?fromDate=${weekAgoIST()}&toDate=${todayIST()}&bank_id=${await bankId('IOCL-SOA')}`,
+      });
+    },
+  },
+
+  'shift-closing': {
+    title: 'Enter and close a shift',
+    async run(h, page) {
+      const day = todayIST();
+      await h.go('/home');
+      await h.begin();
+      await h.say('This is the Cashier Shift screen. Every shift is listed here.', 2600);
+      await h.say('To start a new shift, click Add New.', 900);
+      await h.tap(page.getByRole('button', { name: 'Add New' }), 0);
+      await page.waitForURL(/\/new-closing/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      // ── Closing ──
+      await h.say('The shift has a tab for each part. Start with Closing.', 2400);
+      await h.say('Choose the cashier for this shift.', 500);
+      await h.pick('#cashierId', 'ARUN KUMAR');
+      await h.say('The date is today. You can pick an earlier day if needed.', 500);
+      await h.point('#cashierDate', 1600);
+      await h.say('Enter the opening cash given to the cashier.', 500);
+      await h.type('#cashGiven', '2000');
+      await h.say("Today's selling rates are filled in from the last shift. Check them.", 600);
+      await h.point('#gasoline-prices', 2400);
+      await h.say('Click Next. PetroMath saves the shift as a draft.', 700);
+      await h.next('#new_closing');
+
+      // ── Attendance ──
+      await h.say('Attendance: add everyone who worked this shift.', 800);
+      await h.tap(page.locator('#new_attendance button', { hasText: 'Add' }).first(), 600);
+      await h.pick('#attendance-personId-0', 'ARUN KUMAR', 400);
+      await h.say('Choose the shift, then the in and out time.', 400);
+      await h.pick('#attendance-shift-0', 'Morning', 300);
+      await h.point('#attendance-INtime-0', 300);
+      await page.fill('#attendance-INtime-0', `${day}T06:00`);
+      await h.pause(500);
+      await h.point('#attendance-OUTtime-0', 300);
+      await page.fill('#attendance-OUTtime-0', `${day}T14:00`);
+      await h.pause(700);
+      await h.say('Click Add for each person.', 400);
+      await h.tap(page.locator('#new_attendance button', { hasText: 'Add' }).first(), 500);
+      await h.pick('#attendance-personId-1', 'SELVI M', 300);
+      await h.pick('#attendance-shift-1', 'Morning', 300);
+      await page.fill('#attendance-INtime-1', `${day}T06:00`);
+      await page.fill('#attendance-OUTtime-1', `${day}T14:00`);
+      await h.pause(800);
+      await h.next('#new_attendance');
+
+      // ── Reading ──
+      await h.say('Reading: first choose the time the meter readings were taken.', 500);
+      await h.pick('#closeReadingTime', '2:00 PM');
+      await h.say('Click Add All Nozzles. Opening readings come from the last shift.', 600);
+      await h.tap(page.getByRole('button', { name: 'Add All Nozzles' }), 1600);
+      await h.say('Type the closing meter reading of each nozzle.', 500);
+      const closing = { 'MS-1': '246155.700', 'MS-2': '188254.600', 'HSD-1': '414026.250', 'HSD-2': '299393.000', 'XP-1': '56386.700' };
+      for (const [nozzle, reading] of Object.entries(closing)) {
+        await h.type(`#f_${nozzle}pump_closing`, reading, 55);
+        await page.keyboard.press('Tab');
+        await h.pause(300);
+        if (nozzle === 'MS-2') await h.say('Sale (litres) and Amount work themselves out.', 400);
+      }
+      await h.say('Enter testing litres, if any, so they are not counted as sale.', 500);
+      await h.type('#f_MS-1pump_testing', '5');
+      await page.keyboard.press('Tab');
+      await h.point('#f_MS-1pump_sale', 1800);
+      await h.next('#new_readings');
+
+      // ── Lube Sales ──
+      await h.say('Lube Sales: oils and other products sold for cash.', 600);
+      await h.tap(page.getByRole('button', { name: 'Add Lube Sales' }), 500);
+      await h.pick('#cash-sale-product-0', 'ENGINE OIL 4T 1 LTR', 400);
+      await h.say('Pick the product and enter the quantity. The price comes from the product list.', 400);
+      await h.type('#cash-sale-qty-0', '2');
+      await page.keyboard.press('Tab');
+      await h.pause(1200);
+      await h.next('#new_cash_sales');
+
+      // ── Credit Sales ──
+      await h.say('Credit Sales: one entry for each credit bill.', 600);
+      await h.tap(page.getByRole('button', { name: 'Add credits' }), 900);
+      await h.say('Enter the product, bill number, company and vehicle.', 300);
+      await h.pick('#credit-product-0', 'HSD', 300);
+      await h.type('#credit-billno-0', '1201');
+      await h.pick('#credit-creditparty-0', 'SRI LAKSHMI TRANSPORTS', 500);
+      await h.tap(page.locator('#credit-vehicle-0 + .select2 .select2-selection'), 400);
+      await page.locator('.select2-search__field').pressSequentially('1234', { delay: 90 });
+      await h.pause(500);
+      await page.keyboard.press('Enter');
+      await h.pause(600);
+      await h.say('Enter the quantity in litres. The amount is calculated.', 300);
+      await h.type('#credit-qty-0', '120');
+      await page.keyboard.press('Tab');
+      await h.pause(800);
+      await h.tap(page.locator('.modal.show').getByRole('button', { name: 'Save' }), 1200);
+      await h.say('The bill is added to the list. Add the next bill the same way.', 2400);
+      await h.next('#new_credit_sales');
+
+      // ── Digital Sales ──
+      await h.say('Digital Sales: UPI, card and fleet card payments.', 600);
+      await h.tap(page.getByRole('button', { name: 'Add Digital Sales' }), 500);
+      await h.pick('#digital-sales-vendor-0', 'UPI QR', 300);
+      await h.type('#digital-sales-amt-0', '18450');
+      await page.keyboard.press('Tab');
+      await h.tap(page.getByRole('button', { name: 'Add Digital Sales' }), 500);
+      await h.pick('#digital-sales-vendor-1', 'CARD SWIPE', 300);
+      await h.type('#digital-sales-amt-1', '6200');
+      await page.keyboard.press('Tab');
+      await h.say('The total is shown below the list.', 1600);
+      await h.next('#new_digital_sales');
+
+      // ── Expenses ──
+      await h.say('Expenses: money paid out of the cash during the shift.', 600);
+      await h.tap(page.getByRole('button', { name: 'Add new expense' }), 500);
+      await h.pick('#exp-expense-0', 'Tea', 400);
+      await h.say('The usual amount is filled in. Change it if needed.', 1800);
+      await h.next('#new_expenses');
+
+      // ── Cash Count ──
+      // The draft is saved by now, so the DB knows how much cash the shift should hand over.
+      const closingId = await page.inputValue('#closing_hiddenId');
+      const db = await betaDb();
+      const [[{ x }]] = await db.query('SELECT calculate_exshortage(?) AS x', [closingId]);
+      await db.end();
+      const notes = cashInNotes(Math.max(0, Math.floor(-Number(x))));
+      await h.say('Cash Count: count the cash being handed over.', 600);
+      await h.say('Enter how many of each note and coin.', 300);
+      for (const [n, cnt] of Object.entries(notes).sort((a, b) => b[0] - a[0])) {
+        if (!cnt) continue;
+        await h.type(`#denom-${n}-cnt`, String(cnt), 90);
+        await page.keyboard.press('Tab');
+        await h.pause(200);
+      }
+      await h.say('The total is worked out for you.', 400);
+      await h.point('#denominations_total', 1600);
+      await h.next('#new_denoms');
+
+      // ── Summary and Close ──
+      await h.top(300);
+      await h.say('Summary: the whole shift on one page. Check it before closing.', 2600);
+      await h.say('Excess / Shortage compares the cash counted with what was due.', 600);
+      await h.point('#excess_storage', 2600);
+      await h.scrollBy(420, 1400);
+      await h.say('Sales, credit, digital, expenses and cash, all in one place.', 2200);
+      await h.scrollBy(900, 1400);
+      await h.say('When everything is right, click CLOSE.', 600);
+      const close = page.getByRole('button', { name: /CLOSE/ });
+      await h.tap(close, 300, { noClick: true });
+      await page.evaluate(() => window.__vConfirm('Please confirm if you want to freeze the closing?', location.host.replace(/^beta\./, '')));
+      await h.say('Confirm with OK. A closed shift can no longer be edited.', 1600);
+      await h.tap('#__vconfirm button.ok', 300, { noClick: true });
+      await page.evaluate(() => { document.getElementById('__vconfirm').remove(); window.confirm = () => true; });
+      await close.click();
+      await page.waitForURL(/\/home/, { timeout: 30000 });
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.say('Done. The shift is listed as Closed, with its shortage or excess.', 600);
+      await h.point(page.locator('tr', { hasText: 'ARUN KUMAR' }).first(), 2400);
+      await h.say("Its closing readings become the next shift's opening readings.", 3000);
+      await h.say('PetroMath: every shift, accounted for.', 2200);
+    },
+  },
+};
+
+// Screencast frames -> MP4. Chrome sends a frame only when the screen changes, so each frame is held until the next one.
+function toMp4(dir, frames, mp4, marks, total) {
+  const list = [];
+  frames.forEach((f, i) => {
+    const next = i + 1 < frames.length ? frames[i + 1].t : total;
+    list.push(`file '${f.file}'`, `duration ${Math.max(0.001, next - f.t).toFixed(3)}`);
+  });
+  list.push(`file '${frames[frames.length - 1].file}'`);
+  fs.writeFileSync(path.join(dir, 'frames.txt'), list.join('\n'));
+  const start = Math.max(0, marks.start - frames[0].t);
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'frames.txt'),
+    '-vf', `fps=30,trim=start=${start.toFixed(3)},setpts=PTS-STARTPTS,scale=${VIEW.width}:-2:flags=lanczos,setsar=1`, '-r', '30',
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4]);
+  // Poster frame for the Help page (shown before playing).
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-ss', '6', '-i', mp4, '-frames:v', '1', '-vf', 'scale=640:-2',
+    '-q:v', '4', mp4.replace(/\.mp4$/, '.jpg')]);
+}
+
+async function record(browser, name) {
+  const v = VIDEOS[name];
+  const ctxOpts = { viewport: VIEW, deviceScaleFactor: SCALE, locale: 'en-IN', timezoneId: 'Asia/Kolkata' };
+
+  // Sign in outside the recording.
+  const login = await browser.newContext(ctxOpts);
+  const lp = await login.newPage();
+  await lp.goto(`${BASE}/login`);
+  await lp.fill('#username', process.env.DEMO_USER);
+  await lp.fill('#pw', process.env.DEMO_PASSWORD);
+  await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
+  if (lp.url().includes('/login')) throw new Error('Demo sign-in failed. Run node demo-location.js first.');
+  const state = await login.storageState();
+  await login.close();
+
+  const ctx = await browser.newContext({ ...ctxOpts, storageState: state });
+  await ctx.addInitScript(overlayScript);
+  const page = await ctx.newPage();
+  page.on('dialog', async (d) => { console.log(`  ${d.type()}: ${d.message()}`); await d.accept(); });
+  page.on('pageerror', (e) => console.log('  page error:', e.message));
+
+  const dir = path.join(OUT, name);
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const frames = [];
+  const cdp = await ctx.newCDPSession(page);
+  const t0 = Date.now();
+  cdp.on('Page.screencastFrame', ({ data, sessionId }) => {
+    const file = `f${String(frames.length).padStart(5, '0')}.jpg`;
+    fs.writeFileSync(path.join(dir, file), Buffer.from(data, 'base64'));
+    frames.push({ file, t: (Date.now() - t0) / 1000 });
+    cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+  });
+  await cdp.send('Page.startScreencast', {
+    format: 'jpeg', quality: 90, maxWidth: VIEW.width * SCALE, maxHeight: VIEW.height * SCALE,
+  });
+  const h = makeHelpers(page, t0);
+  let ok = false;
+  try {
+    await v.run(h, page);
+    await h.pause(500);
+    ok = true;
+  } finally {
+    const total = (Date.now() - t0) / 1000;
+    await cdp.send('Page.stopScreencast').catch(() => {});
+    if (!ok) await page.screenshot({ path: path.join(OUT, `${name}-failed.png`) }).catch(() => {});
+    await ctx.close();
+    if (ok && frames.length) {
+      const mp4 = path.join(PUBLIC, `${name}.mp4`);
+      toMp4(dir, frames, mp4, h.marks, total);
+      const kb = Math.round(fs.statSync(mp4).size / 1024);
+      console.log(`${name}: ${mp4} (${kb} KB, ${Math.round(total - h.marks.start)} s, ${frames.length} frames)`);
+    }
+  }
+}
+
+(async () => {
+  const args = process.argv.slice(2);
+  if (!args.length || args[0] === '--list') {
+    Object.entries(VIDEOS).forEach(([k, v]) => console.log(`${k}  ${v.title}`));
+    return;
+  }
+  for (const a of args) if (!VIDEOS[a]) throw new Error(`Unknown video: ${a}`);
+  fs.mkdirSync(OUT, { recursive: true });
+  fs.mkdirSync(PUBLIC, { recursive: true });
+  const browser = await chromium.launch();
+  try {
+    for (const a of args) await record(browser, a);
+  } finally {
+    await browser.close();
+  }
+})().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
