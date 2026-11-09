@@ -49,6 +49,22 @@ function overlayScript() {
     #__vconfirm button.ok { background: #1a73e8; color: #fff; border-color: #1a73e8; }`;
   const POINTER = '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15.5 L12.5 22.5 L15.5 21 L12 14 L19 14 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
+  // Beta-only markers hidden by CSS from the very first paint (the clean-up in ready() runs only after the
+  // page has loaded, and the screencast can catch a frame before that): prod's sidebar header is yellow,
+  // and the CANARY badge and "Development Environment" banner don't exist there.
+  const early = document.createElement('style');
+  early.textContent = `
+    .sidebar-header.canary-instance { background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%) !important; }
+    .sidebar-user span[style*="orange"] { display: none !important; }
+    .alert-warning[style*="ff9800"] { display: none !important; }`;
+  if (document.documentElement) document.documentElement.appendChild(early);
+  else {
+    const mo = new MutationObserver(() => {
+      if (document.documentElement) { document.documentElement.appendChild(early); mo.disconnect(); }
+    });
+    mo.observe(document, { childList: true });
+  }
+
   function ready() {
     const style = document.createElement('style');
     style.textContent = css;
