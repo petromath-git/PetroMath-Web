@@ -658,6 +658,7 @@ app.use('/documents', documentRoutes);
 app.use('/gl', glRoutes);
 app.use('/dev-db-refresh', devDbRefreshRoutes);
 app.use('/dev-version-routing', devVersionRoutingRoutes);
+app.use('/help', require('./routes/help-routes'));
 app.use('/bowser', bowserRoutes);
 app.use('/onboard', onboardingRoutes);
 app.use('/admin/onboarding', onboardingAdminRoutes);
