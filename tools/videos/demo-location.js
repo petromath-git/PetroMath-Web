@@ -48,7 +48,7 @@ const CUSTOMERS = [
   ['GREEN VALLEY SCHOOL', ['TN33 BZ 0909']],
   ['ERODE TEXTILE TRADERS', ['TN33 Q 7777']],
 ];
-const DIGITAL = ['UPI QR', 'CARD SWIPE', 'FLEET CARD'];
+const DIGITAL = ['PAYTM', 'CARD SWIPE', 'FLEET CARD'];
 // The station's bank account for the bank-upload video. bank_name 'IOB' picks the "IOB New Portal 2026" statement template.
 // The oil company (SAP) account is created by the m_location insert trigger; it is only renamed below.
 const BANK = { bank_name: 'IOB', account_number: '123402000001234', account_nickname: 'IOB CA 1234', ledger_name: 'INDIAN OVERSEAS BANK CA 1234',
@@ -84,6 +84,12 @@ async function main() {
                        AND effective_start_date <= NOW() AND (effective_end_date IS NULL OR effective_end_date > NOW())`, [LOC]))) {
       await q(`INSERT INTO m_version_routing (location_code, app_version, effective_start_date, effective_end_date, updated_by)
                VALUES (?, 'canary', NOW(), NULL, 'video-demo')`, [LOC]);
+    }
+
+    // Managers see Digital Reconciliation only where it is granted per location (as at MC, MUE, MME, MC2).
+    if (!(await one("SELECT access_id FROM m_menu_access_override WHERE role = 'Manager' AND location_code = ? AND menu_code = 'REPORT_DIGITAL_RECON'", [LOC]))) {
+      await q(`INSERT INTO m_menu_access_override (role, location_code, menu_code, allowed, effective_start_date, created_by, updated_by)
+               VALUES ('Manager', ?, 'REPORT_DIGITAL_RECON', 1, '2026-01-01', 'video-demo', 'video-demo')`, [LOC]);
     }
 
     for (const [name, value] of Object.entries(CONFIG)) {
@@ -181,6 +187,8 @@ async function main() {
         }
       }
     }
+    // The UPI vendor was first called 'UPI QR'; it is PAYTM now (the Paytm reconciliation video).
+    await q("UPDATE m_credit_list SET Company_Name = 'PAYTM', short_name = 'PAYTM' WHERE location_code = ? AND Company_Name = 'UPI QR'", [LOC]);
     for (const name of DIGITAL) {
       if (!(await one('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name = ?', [LOC, name]))) {
         await q(`INSERT INTO m_credit_list (Company_Name, location_code, card_flag, Opening_Balance, type, short_name,
@@ -227,7 +235,7 @@ async function main() {
     };
     const party = async (name) => (await one('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name = ?', [LOC, name])).creditlist_id;
     for (const [name] of CUSTOMERS) await addRule(bank.bank_id, 'Credit', await party(name), 'CREDIT');
-    for (const name of ['UPI QR', 'CARD SWIPE']) await addRule(bank.bank_id, 'Credit', await party(name), 'CREDIT');
+    for (const name of ['PAYTM', 'CARD SWIPE']) await addRule(bank.bank_id, 'Credit', await party(name), 'CREDIT');
     await addRule(sap.bank_id, 'Credit', await party('FLEET CARD'), 'CREDIT');
     await addRule(bank.bank_id, 'Bank', sap.bank_id, 'DEBIT');
     await addRule(sap.bank_id, 'Bank', bank.bank_id, 'CREDIT');
@@ -324,6 +332,12 @@ async function seedHistory(q, one, closerId) {
     });
   }
 
+  // Paytm: its own random sequence, so adding it didn't change the credit-statement figures.
+  let pseed = 2026;
+  const prnd = () => { pseed = (pseed * 1103515245 + 12345) % 2147483648; return pseed / 2147483648; };
+  const paytm = (await one("SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name = 'PAYTM'", [LOC])).creditlist_id;
+  const paytmSales = [];
+
   let billNo = 1001;
   let receiptNo = 5001;
   let shifts = 0;
@@ -371,8 +385,41 @@ async function seedHistory(q, one, closerId) {
         receipts++;
       }
     }
+    // Paytm collected in the shift (entered on the Digital Sales tab).
+    const paytmAmt = Math.round((12000 + prnd() * 16000) * 100) / 100;
+    await q(`INSERT INTO t_digital_sales (closing_id, vendor_id, amount, transaction_date, created_by, updated_by)
+             VALUES (?, ?, ?, ?, 'video-demo', 'video-demo')`, [closingId, paytm, paytmAmt, day]);
+    paytmSales.push({ day, dow: d.getUTCDay(), amount: paytmAmt });
   }
-  return `${shifts} closed shifts, ${bills} credit bills, ${receipts} receipts from ${ymd(start)}`;
+
+  // Paytm settles each day's collection to the bank the next day (auto-match looks back 1 day). In the month
+  // before this one, two things the reconciliation video fixes by hand: one Thursday and Friday paid together
+  // on Saturday, and one Wednesday's payment ₹47 short (a refund).
+  const lastMonth = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - 1, 1));
+  const firstFrom = (dom, dow) => {
+    for (let d = new Date(Date.UTC(lastMonth.getUTCFullYear(), lastMonth.getUTCMonth(), dom)); ; d.setUTCDate(d.getUTCDate() + 1)) {
+      if (d.getUTCDay() === dow) return ymd(d);
+    }
+  };
+  const shortDay = firstFrom(10, 3); // first Wednesday from the 10th
+  const heldDay = firstFrom(20, 4); // first Thursday from the 20th: paid with Friday's
+  let pending = [];
+  let settlements = 0;
+  const addDays = (s, n) => { const x = new Date(`${s}T00:00:00Z`); x.setUTCDate(x.getUTCDate() + n); return ymd(x); };
+  for (const s of paytmSales) {
+    pending.push(s);
+    if (s.day === heldDay) continue;
+    const total = Math.round(pending.reduce((a, p) => a + p.amount, 0) * 100) / 100;
+    const payDay = addDays(s.day, 1);
+    const amount = pending.some((p) => p.day === shortDay) ? Math.round((total - 47) * 100) / 100 : total;
+    const ref = `NEFT-YESB${String(Math.floor(prnd() * 1e10)).padStart(10, '0')}-PAYTM PAYMENTS SERVICES LTD`;
+    await q(`INSERT INTO t_receipts (receipt_no, creditlist_id, receipt_type, amount, notes, receipt_date, location_code, created_by, updated_by)
+             VALUES (?, ?, 'Bank Deposit', ?, ?, ?, ?, 'video-demo', 'video-demo')`,
+    [String(receiptNo++), paytm, amount, `Auto from Bank - ${ref}`, payDay, LOC]);
+    settlements++;
+    pending = [];
+  }
+  return `${shifts} closed shifts, ${bills} credit bills, ${receipts} receipts, ${paytmSales.length} Paytm sales / ${settlements} settlements (short ${shortDay}, held ${heldDay}) from ${ymd(start)}`;
 }
 
 main().catch((err) => {

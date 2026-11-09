@@ -5,7 +5,7 @@
   "scripts": {
     "reset": "node demo-location.js",
     "record": "node record.js",
-    "all": "node demo-location.js && node record.js shift-closing bank-upload sap-upload"
+    "all": "node demo-location.js && node record.js shift-closing bank-upload sap-upload customer-statement paytm-recon"
   },
   "dependencies": {
     "bcryptjs": "2.4.3",

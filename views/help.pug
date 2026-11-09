@@ -37,6 +37,7 @@ block content
           li: a(href='#bank-upload') Upload a bank statement
           li: a(href='#sap-upload') Upload the oil company (SAP) statement
           li: a(href='#customer-statement') Run a customer's credit statement
+          li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
 
     section#shift
       h2 1. Enter and close a shift
@@ -203,3 +204,42 @@ block content
         li For a shorter statement with one line per bill or payment, use
           strong  Customer Ledger Report
           | .
+
+    section#paytm-recon
+      h2 5. Reconcile Paytm (digital reconciliation)
+      +howVideo('paytm-recon', 'reconcile Paytm')
+      p
+        | Check that every rupee your cashiers collected through Paytm (or any card, UPI or fleet card vendor) was paid into your bank.
+        | PetroMath compares the
+        strong  Digital Sales
+        |  entered in your shifts with the vendor's payments from your uploaded bank statement, and matches them for you.
+      ol.help-steps
+        li
+          | Open
+          strong  Reports → Digital Reconciliation
+          | .
+        li
+          | Choose the period and the
+          strong  Digital Vendor
+          | , then click
+          strong  Go
+          | .
+        li
+          | Debits are the sales from your shifts; credits are the vendor's payments. Matched lines share a
+          strong  Match ID
+          | : green when paid the next day, orange when paid a few days later (for example weekend sales paid on Monday).
+        li
+          | Tick
+          strong  Show Only Unreconciled
+          |  to see what is left.
+        li
+          | To match lines by hand, tick them and click
+          strong  Manual Match
+          | . If the amounts differ, enter a note explaining the difference and click
+          strong  Save & Match
+          | .
+      h3 Good to know
+      ul
+        li Upload your bank statement first and tag the vendor's payments to the vendor (for example PAYTM), or they won't appear as credits.
+        li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
+        li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
