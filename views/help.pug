@@ -40,6 +40,8 @@ block content
           li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
           li: a(href='#add-customer') Add a credit customer, with opening balance and login
           li: a(href='#add-product') Add a product, with opening stock
+          li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
+          li: a(href='#lube-invoice') Upload a lube purchase invoice PDF
 
     section#shift
       h2 1. Enter and close a shift
@@ -325,3 +327,67 @@ block content
       ul
         li Purchases add to the stock and every sale takes from it, so the opening count matters.
         li To change a price, use the edit button on the product.
+
+    section#fuel-invoice
+      h2 8. Upload a fuel (tanker) invoice PDF
+      +howVideo('fuel-invoice', 'upload a fuel invoice')
+      p Enter the oil company's tanker invoice from its PDF, without typing.
+      ol.help-steps
+        li
+          | Open
+          strong  Transactions → Purchase Invoice
+          | , click
+          strong  New Purchase
+          | , then
+          strong  Fuel Invoice
+          | .
+        li
+          | Click
+          strong  Choose File
+          |  and pick the invoice PDF you downloaded from the oil company portal.
+        li PetroMath reads it and fills in the invoice number, date, tanker number, delivery and seal numbers, the total, and each product with quantity, rate, density, HSN code and VAT.
+        li
+          | The first time only, pick which of your products each invoice product is (for example EBMS is MS). PetroMath remembers it.
+        li
+          | Check the figures against the paper invoice and click
+          strong  Save Mapping
+          | . The PDF is kept with the invoice (View PDF).
+      h3 Good to know
+      ul
+        li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
+
+    section#lube-invoice
+      h2 9. Upload a lube purchase invoice PDF
+      +howVideo('lube-invoice', 'upload a lube purchase invoice')
+      p Enter your lube distributor's invoice from its PDF.
+      ol.help-steps
+        li
+          | Open
+          strong  Transactions → Purchase Invoice
+          | , click
+          strong  New Purchase
+          | , then
+          strong  Lube Invoice
+          | .
+        li
+          | Click
+          strong  Fill from invoice PDF
+          |  and pick the invoice PDF.
+        li PetroMath fills in the supplier, invoice number and date, and every product line with quantity, rate, discount and GST.
+        li
+          | Each line shows
+          strong  Matched
+          | ,
+          strong  Suggested
+          |  or
+          strong  Pick
+          | . Check Suggested lines and choose the product for Pick lines; PetroMath remembers your choice for that supplier.
+        li
+          | Check that the total matches the invoice, then click
+          strong  Save & Close Invoice
+          |  and confirm. The stock of each product goes up and the PDF is attached.
+      h3 Good to know
+      ul
+        li It reads IndianOil (SERVO) distributor invoices and Tally-style tax invoices. For other formats, enter the invoice by hand on the same screen.
+        li Figures read from the PDF are locked, so the invoice in PetroMath matches the paper exactly.
+        li PetroMath warns if the same invoice number has already been entered.
