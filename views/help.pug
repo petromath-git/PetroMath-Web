@@ -1,7 +1,7 @@
 extends layout
 
-mixin howVideo(name, label)
-  figure.help-video
+mixin howVideo(name, label, phone)
+  figure.help-video(class=phone ? 'phone' : undefined)
     video(src=`/videos/${name}.mp4?v=${videoV[name + '.mp4'] || ''}` poster=`/videos/${name}.jpg?v=${videoV[name + '.jpg'] || ''}` controls playsinline preload="none")
     figcaption
       strong Watch how: #{label}
@@ -18,6 +18,8 @@ block content
     .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; }
     .help-video { margin: 0 0 1.25rem; }
     .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; display: block; }
+    .help-video.phone { max-width: 360px; }
+    .help-video.phone video { aspect-ratio: 720 / 1504; }
     .help-video figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 2px; font-size: .95rem; }
     .help-steps > li { margin-bottom: .6rem; }
     .help-steps dt { font-weight: 600; }
@@ -37,6 +39,7 @@ block content
           li: a(href='#bank-upload') Upload a bank statement
           li: a(href='#sap-upload') Upload the oil company (SAP) statement
           li: a(href='#customer-statement') Run a customer's credit statement
+          li: a(href='#customer-phone') Your customer sees their statement on their phone
           li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
           li: a(href='#add-customer') Add a credit customer, with opening balance and login
           li: a(href='#add-product') Add a product, with opening stock
@@ -209,8 +212,36 @@ block content
           strong  Customer Ledger Report
           | .
 
+    section#customer-phone
+      h2 5. Your customer sees their statement on their phone
+      +howVideo('customer-phone', 'see your statement on your phone', true)
+      p Each credit customer has their own login, so they can check what they owe any time, without calling you. Send them this video with their username and password.
+      ol.help-steps
+        li
+          | The customer opens
+          strong  petromath.co.in
+          |  on their phone and signs in with the username and password you sent them (see
+          a(href='#add-customer')  Add a credit customer
+          | ).
+        li Their statement opens straight away: opening balance, every bill (date, bill number, product, litres, vehicle) and every payment, with the balance after each line, and the closing balance at the end.
+        li
+          | To see another period, they pick a
+          strong  Date Range
+          |  (for example Last Month) and tap
+          strong  Go
+          | .
+        li The green button downloads the statement as a PDF; the blue one prints it.
+        li
+          | From the menu (☰) they can
+          strong  Change Password
+          | .
+      h3 Good to know
+      ul
+        li A customer sees only their own bills and payments.
+        li If they forget the password, use Reset Password next to their login in Masters → Customers.
+
     section#paytm-recon
-      h2 5. Reconcile Paytm (digital reconciliation)
+      h2 6. Reconcile Paytm (digital reconciliation)
       +howVideo('paytm-recon', 'reconcile Paytm')
       p
         | Check that every rupee your cashiers collected through Paytm (or any card, UPI or fleet card vendor) was paid into your bank.
@@ -249,7 +280,7 @@ block content
         li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
 
     section#add-customer
-      h2 6. Add a credit customer, with opening balance and login
+      h2 7. Add a credit customer, with opening balance and login
       +howVideo('add-customer', 'add a credit customer')
       p Customers are added by the owner (Admin login).
       ol.help-steps
@@ -291,7 +322,7 @@ block content
         li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
 
     section#add-product
-      h2 7. Add a product, with opening stock
+      h2 8. Add a product, with opening stock
       +howVideo('add-product', 'add a product')
       p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
       ol.help-steps
@@ -329,7 +360,7 @@ block content
         li To change a price, use the edit button on the product.
 
     section#fuel-invoice
-      h2 8. Upload a fuel (tanker) invoice PDF
+      h2 9. Upload a fuel (tanker) invoice PDF
       +howVideo('fuel-invoice', 'upload a fuel invoice')
       p Enter the oil company's tanker invoice from its PDF, without typing.
       ol.help-steps
@@ -357,7 +388,7 @@ block content
         li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
 
     section#lube-invoice
-      h2 9. Upload a lube purchase invoice PDF
+      h2 10. Upload a lube purchase invoice PDF
       +howVideo('lube-invoice', 'upload a lube purchase invoice')
       p Enter your lube distributor's invoice from its PDF.
       ol.help-steps

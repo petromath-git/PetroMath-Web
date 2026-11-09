@@ -301,6 +301,19 @@ async function main() {
       await q('DELETE FROM m_product WHERE location_code = ? AND product_id IN (?)', [LOC, extraProducts]);
     }
 
+    // ── Portal login for SRI LAKSHMI TRANSPORTS (the customer-phone video), named as PetroMath names them ──
+    const sl = await one("SELECT creditlist_id, Company_Name FROM m_credit_list WHERE location_code = ? AND Company_Name = 'SRI LAKSHMI TRANSPORTS'", [LOC]);
+    const custUser = `${LOC}${sl.creditlist_id}`;
+    const cu = await one('SELECT Person_id FROM m_persons WHERE User_Name = ?', [custUser]);
+    if (cu) {
+      await q("UPDATE m_persons SET Password = ?, Role = 'Customer', creditlist_id = ?, effective_end_date = '2099-12-31' WHERE Person_id = ?", [hash, sl.creditlist_id, cu.Person_id]);
+    } else {
+      await q(`INSERT INTO m_persons (Person_Name, User_Name, Password, Role, location_code, creditlist_id, effective_start_date, effective_end_date,
+                 created_by, updated_by, creation_date)
+               VALUES (?, ?, ?, 'Customer', ?, ?, '2026-01-01', '2099-12-31', 'video-demo', 'video-demo', NOW())`,
+      [sl.Company_Name, custUser, hash, LOC, sl.creditlist_id]);
+    }
+
     // ── Reset: customers added in a video (anything not in CUSTOMERS/DIGITAL), with their login and opening balance ──
     const keep = [...CUSTOMERS.map(([n]) => n), ...DIGITAL];
     const extra = (await q('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name NOT IN (?)', [LOC, keep]))

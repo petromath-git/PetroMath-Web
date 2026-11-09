@@ -22,10 +22,15 @@ const OUT = path.join(__dirname, 'out');
 const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
 const VIEW = { width: 1280, height: 720 };
 const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
+// Phone videos (VIDEOS entry phone: true): an Android phone screen, saved 720 px wide.
+const PHONE = {
+  view: { width: 412, height: 860 }, scale: 2, outWidth: 720,
+  ua: 'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+};
 
 // Runs in every page: hides beta-only markers, draws the caption bar, the mouse pointer and the click ring.
 // Caption text and pointer position survive page loads via sessionStorage.
-function overlayScript() {
+function overlayScript(phone) {
   const store = {
     get(k) { try { return sessionStorage.getItem(k); } catch (e) { return null; } },
     set(k, v) { try { sessionStorage.setItem(k, v); } catch (e) { /* ignore */ } },
@@ -49,8 +54,8 @@ function overlayScript() {
     #__vconfirm button.ok { background: #1a73e8; color: #fff; border-color: #1a73e8; }
     #__vdoc { position: fixed; inset: 0; z-index: 2147483644; background: rgba(32,33,36,.82); display: flex; flex-direction: column; align-items: center; }
     #__vdoc .bar { color: #fff; font: 600 15px system-ui, "Segoe UI", sans-serif; padding: 10px 0 8px; }
-    #__vdoc .page { width: 620px; height: 600px; overflow: hidden; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
-    #__vdoc img { width: 620px; display: block; transition: transform 5s ease-in-out; }
+    #__vdoc .page { width: min(620px, 94vw); height: min(600px, 78vh); overflow: hidden; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
+    #__vdoc img { width: 100%; display: block; transition: transform 5s ease-in-out; }
     #__vpick { position: fixed; inset: 0; z-index: 2147483643; background: rgba(0,0,0,.18); display: flex; justify-content: center; align-items: center;
       font: 13px "Segoe UI", system-ui, sans-serif; color: #1b1b1b; }
     #__vpick .win { width: 820px; height: 500px; background: #fff; border: 1px solid #b9b9b9; border-radius: 8px; box-shadow: 0 16px 48px rgba(0,0,0,.35);
@@ -85,7 +90,10 @@ function overlayScript() {
     .sidebar-header.canary-instance { background: linear-gradient(135deg, #f4d03f 0%, #f7dc6f 100%) !important; }
     .sidebar-user span[style*="orange"] { display: none !important; }
     .alert-warning[style*="ff9800"] { display: none !important; }
-    #loginInfoPassword { filter: blur(6px) !important; } /* never show a default password in a shared video */`;
+    #loginInfoPassword { filter: blur(6px) !important; } /* never show a default password in a shared video */`
+    + (phone ? `
+    #__vptr { display: none !important; } /* fingers, not a mouse */
+    #__vcap { font-size: 17px !important; max-width: 92vw !important; width: max-content; bottom: 18px !important; padding: 10px 14px !important; }` : "");
   if (document.documentElement) document.documentElement.appendChild(early);
   else {
     const mo = new MutationObserver(() => {
@@ -265,7 +273,7 @@ function makeHelpers(page, t0) {
       await h.say(captions[0], 2600);
       await page.evaluate(() => {
         const img = document.querySelector('#__vdoc img');
-        img.style.transform = `translateY(-${Math.max(0, img.offsetHeight - 600)}px)`;
+        img.style.transform = `translateY(-${Math.max(0, img.offsetHeight - img.parentElement.clientHeight)}px)`;
       });
       await h.say(captions[1], 5400);
       await page.evaluate(() => document.getElementById('__vdoc').remove());
@@ -742,6 +750,65 @@ const VIDEOS = {
     },
   },
 
+  'customer-phone': {
+    title: 'Your customer sees their statement on their phone',
+    phone: true,
+    user: 'none', // the video shows the customer signing in
+    async run(h, page) {
+      const db = await betaDb();
+      const [[cu]] = await db.query("SELECT User_Name FROM m_persons WHERE location_code = 'DEMO' AND Role = 'Customer' AND Person_Name = 'SRI LAKSHMI TRANSPORTS'");
+      await db.end();
+      await h.go('/login');
+      await h.begin();
+      await h.say('Your credit customers can see their own statement on their phone.', 2800);
+      await h.say('They open petromath.co.in and sign in with the username and password you sent them.', 600);
+      await h.type('#username', cu.User_Name, 110);
+      await h.type('#pw', process.env.DEMO_PASSWORD, 90);
+      await h.say('Tap Login.', 400);
+      await Promise.all([page.waitForURL(/reports-indiv-customer/, { timeout: 30000 }), h.tap('button[type=submit]', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(800);
+
+      await h.say('Their statement opens straight away, for the last few weeks.', 600);
+      await h.point(page.locator('h5:visible').first(), 2000);
+      await h.say('It starts with the opening balance.', 400);
+      await h.point(page.locator(':text("Opening Balance"):visible').first(), 2000);
+      await h.scrollBy(380, 1200);
+      await h.say('Every bill: date, bill number, product, litres and vehicle, with the balance after it.', 3200);
+      const receipt = page.locator(':text("By Receipt No"):visible').first();
+      if (await receipt.count()) {
+        await h.say('Payments show in green and bring the balance down.', 400);
+        await h.show(receipt, 2600);
+      }
+      await h.scrollBy(2400, 1600);
+      await h.say('At the end, the closing balance: what they owe you today.', 2800);
+      await h.top(900);
+
+      await h.say('They can pick another period, for example last month, and tap Go.', 500);
+      await h.pick('#dateRange', 'Last Month', 600);
+      await Promise.all([page.waitForNavigation(), h.tap('#goButton', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(800);
+
+      await h.say('The green button downloads the statement as a PDF.', 500);
+      const btn = page.locator('button[title="Download PDF"]');
+      const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 120000 }), h.tap(btn, 300)]);
+      const dir = path.join(OUT, 'customer-phone-pdf');
+      fs.mkdirSync(dir, { recursive: true });
+      const pdf = path.join(dir, 'statement.pdf');
+      await dl.saveAs(pdf);
+      execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
+      await h.showDoc(path.join(dir, 'page1.png'), 'Statement PDF', [
+        'Your station name on top, every bill and payment below.',
+        'They can keep it, or forward it to their accounts person.']);
+
+      await h.say('From the menu they can change their password.', 400);
+      await h.tap('button.navbar-toggler', 1000);
+      await h.show(page.locator('a.nav-link[href="/password/self"]'), 2400);
+      await h.say('No more calls asking "how much do I owe?"', 2600);
+    },
+  },
+
   'paytm-recon': {
     title: 'Reconcile Paytm (digital reconciliation)',
     async run(h, page) {
@@ -988,7 +1055,7 @@ const VIDEOS = {
 };
 
 // Screencast frames -> MP4. Chrome sends a frame only when the screen changes, so each frame is held until the next one.
-function toMp4(dir, frames, mp4, marks, total) {
+function toMp4(dir, frames, mp4, marks, total, outWidth = VIEW.width) {
   const list = [];
   frames.forEach((f, i) => {
     const next = i + 1 < frames.length ? frames[i + 1].t : total;
@@ -998,7 +1065,7 @@ function toMp4(dir, frames, mp4, marks, total) {
   fs.writeFileSync(path.join(dir, 'frames.txt'), list.join('\n'));
   const start = Math.max(0, marks.start - frames[0].t);
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'frames.txt'),
-    '-vf', `fps=30,trim=start=${start.toFixed(3)},setpts=PTS-STARTPTS,scale=${VIEW.width}:-2:flags=lanczos,setsar=1`, '-r', '30',
+    '-vf', `fps=30,trim=start=${start.toFixed(3)},setpts=PTS-STARTPTS,scale=${outWidth}:-2:flags=lanczos,setsar=1`, '-r', '30',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4]);
   // Poster frame for the Help page (shown before playing).
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-ss', '6', '-i', mp4, '-frames:v', '1', '-vf', 'scale=640:-2',
@@ -1007,21 +1074,27 @@ function toMp4(dir, frames, mp4, marks, total) {
 
 async function record(browser, name) {
   const v = VIDEOS[name];
-  const ctxOpts = { viewport: VIEW, deviceScaleFactor: SCALE, locale: 'en-IN', timezoneId: 'Asia/Kolkata', acceptDownloads: true };
+  const view = v.phone ? PHONE.view : VIEW;
+  const scale = v.phone ? PHONE.scale : SCALE;
+  const ctxOpts = { viewport: view, deviceScaleFactor: scale, locale: 'en-IN', timezoneId: 'Asia/Kolkata', acceptDownloads: true,
+    ...(v.phone ? { isMobile: true, hasTouch: true, userAgent: PHONE.ua } : {}) };
 
-  // Sign in outside the recording.
-  const login = await browser.newContext(ctxOpts);
-  const lp = await login.newPage();
-  await lp.goto(`${BASE}/login`);
-  await lp.fill('#username', v.user === 'admin' ? process.env.DEMO_ADMIN_USER : process.env.DEMO_USER);
-  await lp.fill('#pw', process.env.DEMO_PASSWORD);
-  await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
-  if (lp.url().includes('/login')) throw new Error('Demo sign-in failed. Run node demo-location.js first.');
-  const state = await login.storageState();
-  await login.close();
+  // Sign in outside the recording, unless the video shows the sign-in itself (user: 'none').
+  let state;
+  if (v.user !== 'none') {
+    const login = await browser.newContext(ctxOpts);
+    const lp = await login.newPage();
+    await lp.goto(`${BASE}/login`);
+    await lp.fill('#username', v.user === 'admin' ? process.env.DEMO_ADMIN_USER : process.env.DEMO_USER);
+    await lp.fill('#pw', process.env.DEMO_PASSWORD);
+    await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
+    if (lp.url().includes('/login')) throw new Error('Demo sign-in failed. Run node demo-location.js first.');
+    state = await login.storageState();
+    await login.close();
+  }
 
-  const ctx = await browser.newContext({ ...ctxOpts, storageState: state });
-  await ctx.addInitScript(overlayScript);
+  const ctx = await browser.newContext({ ...ctxOpts, ...(state ? { storageState: state } : {}) });
+  await ctx.addInitScript(overlayScript, !!v.phone);
   const page = await ctx.newPage();
   page.on('dialog', async (d) => { console.log(`  ${d.type()}: ${d.message()}`); await d.accept(); });
   page.on('pageerror', (e) => console.log('  page error:', e.message));
@@ -1039,7 +1112,7 @@ async function record(browser, name) {
     cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
   });
   await cdp.send('Page.startScreencast', {
-    format: 'jpeg', quality: 90, maxWidth: VIEW.width * SCALE, maxHeight: VIEW.height * SCALE,
+    format: 'jpeg', quality: 90, maxWidth: view.width * scale, maxHeight: view.height * scale,
   });
   const h = makeHelpers(page, t0);
   let ok = false;
@@ -1054,7 +1127,7 @@ async function record(browser, name) {
     await ctx.close();
     if (ok && frames.length) {
       const mp4 = path.join(PUBLIC, `${name}.mp4`);
-      toMp4(dir, frames, mp4, h.marks, total);
+      toMp4(dir, frames, mp4, h.marks, total, v.phone ? PHONE.outWidth : VIEW.width);
       const kb = Math.round(fs.statSync(mp4).size / 1024);
       console.log(`${name}: ${mp4} (${kb} KB, ${Math.round(total - h.marks.start)} s, ${frames.length} frames)`);
     }
