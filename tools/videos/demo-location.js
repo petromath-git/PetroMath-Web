@@ -161,6 +161,18 @@ async function main() {
                VALUES (?, ?, ?, ?, ?, '2026-01-01', '9999-12-31', 'video-demo', 'video-demo', NOW())`,
       [MANAGER.name, userName, hash, MANAGER.role, LOC]);
     }
+    // The owner's login (Admin): only Admins can add customers. Same password as the Manager's.
+    const adminUser = process.env.DEMO_ADMIN_USER || 'DEMO-ADMIN';
+    const adm = await one('SELECT Person_id, location_code FROM m_persons WHERE User_Name = ?', [adminUser]);
+    if (adm && adm.location_code !== LOC) throw new Error(`User name ${adminUser} already belongs to ${adm.location_code}`);
+    if (adm) {
+      await q("UPDATE m_persons SET Person_Name = 'DEMO OWNER', Password = ?, Role = 'Admin', effective_end_date = '9999-12-31' WHERE Person_id = ?",
+        [hash, adm.Person_id]);
+    } else {
+      await q(`INSERT INTO m_persons (Person_Name, User_Name, Password, Role, location_code, effective_start_date, effective_end_date,
+                 created_by, updated_by, creation_date)
+               VALUES ('DEMO OWNER', ?, ?, 'Admin', ?, '2026-01-01', '9999-12-31', 'video-demo', 'video-demo', NOW())`, [adminUser, hash, LOC]);
+    }
     for (const [name, role] of STAFF) {
       if (!(await one('SELECT Person_id FROM m_persons WHERE location_code = ? AND Person_Name = ?', [LOC, name]))) {
         await q(`INSERT INTO m_persons (Person_Name, Role, location_code, effective_start_date, effective_end_date, created_by, updated_by, creation_date)
@@ -239,6 +251,25 @@ async function main() {
     await addRule(sap.bank_id, 'Credit', await party('FLEET CARD'), 'CREDIT');
     await addRule(bank.bank_id, 'Bank', sap.bank_id, 'DEBIT');
     await addRule(sap.bank_id, 'Bank', bank.bank_id, 'CREDIT');
+
+    // ── Reset: customers added in a video (anything not in CUSTOMERS/DIGITAL), with their login and opening balance ──
+    const keep = [...CUSTOMERS.map(([n]) => n), ...DIGITAL];
+    const extra = (await q('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name NOT IN (?)', [LOC, keep]))
+      .map((r) => r.creditlist_id);
+    if (extra.length) {
+      const adj = (await q("SELECT adjustment_id FROM t_adjustments WHERE location_code = ? AND external_source = 'CUSTOMER' AND external_id IN (?)",
+        [LOC, extra])).map((r) => r.adjustment_id);
+      if (adj.length) {
+        await q('DELETE FROM t_adjustments_history WHERE adjustment_id IN (?)', [adj]);
+        await q('DELETE FROM t_adjustments WHERE adjustment_id IN (?)', [adj]);
+      }
+      await q("DELETE FROM m_persons WHERE location_code = ? AND Role = 'Customer' AND creditlist_id IN (?)", [LOC, extra]);
+      await q("DELETE FROM m_ledger_rules WHERE location_code = ? AND source_type = 'Credit' AND external_id IN (?)", [LOC, extra]);
+      await q("DELETE FROM gl_ledgers WHERE location_code = ? AND source_type = 'CREDIT' AND source_id IN (?)", [LOC, extra]);
+      await q('DELETE FROM m_creditlist_vehicles WHERE creditlist_id IN (?)', [extra]);
+      await q('DELETE FROM r_credit_open_bal WHERE creditlist_id IN (?)', [extra]);
+      await q('DELETE FROM m_credit_list WHERE location_code = ? AND creditlist_id IN (?)', [LOC, extra]);
+    }
 
     // ── Reset: uploaded bank/SAP statement lines (and the ledger suggestions learnt from them) ──
     const bankIds = (await q('SELECT bank_id FROM m_bank WHERE location_code = ?', [LOC])).map((r) => r.bank_id);
