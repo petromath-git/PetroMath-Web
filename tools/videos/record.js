@@ -50,7 +50,31 @@ function overlayScript() {
     #__vdoc { position: fixed; inset: 0; z-index: 2147483644; background: rgba(32,33,36,.82); display: flex; flex-direction: column; align-items: center; }
     #__vdoc .bar { color: #fff; font: 600 15px system-ui, "Segoe UI", sans-serif; padding: 10px 0 8px; }
     #__vdoc .page { width: 620px; height: 600px; overflow: hidden; background: #fff; box-shadow: 0 8px 30px rgba(0,0,0,.5); }
-    #__vdoc img { width: 620px; display: block; transition: transform 5s ease-in-out; }`;
+    #__vdoc img { width: 620px; display: block; transition: transform 5s ease-in-out; }
+    #__vpick { position: fixed; inset: 0; z-index: 2147483643; background: rgba(0,0,0,.18); display: flex; justify-content: center; align-items: center;
+      font: 13px "Segoe UI", system-ui, sans-serif; color: #1b1b1b; }
+    #__vpick .win { width: 820px; height: 500px; background: #fff; border: 1px solid #b9b9b9; border-radius: 8px; box-shadow: 0 16px 48px rgba(0,0,0,.35);
+      display: flex; flex-direction: column; overflow: hidden; }
+    #__vpick .tb { height: 34px; display: flex; align-items: center; padding: 0 12px; background: #f3f3f3; font-size: 12px; }
+    #__vpick .tb .x { margin-left: auto; letter-spacing: 18px; color: #555; }
+    #__vpick .addr { display: flex; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #e5e5e5; background: #f9f9f9; }
+    #__vpick .addr .path { flex: 1; border: 1px solid #d4d4d4; border-radius: 4px; padding: 4px 8px; background: #fff; }
+    #__vpick .addr .search { width: 200px; border: 1px solid #d4d4d4; border-radius: 4px; padding: 4px 8px; color: #888; background: #fff; }
+    #__vpick .body { flex: 1; display: flex; min-height: 0; }
+    #__vpick .nav { width: 170px; border-right: 1px solid #e5e5e5; padding: 8px 0; }
+    #__vpick .nav div { padding: 5px 16px; }
+    #__vpick .nav .on { background: #cce4f7; }
+    #__vpick .list { flex: 1; padding: 4px 0; }
+    #__vpick .hd, #__vpick .f { display: grid; grid-template-columns: 1fr 150px 120px 70px; padding: 5px 14px; }
+    #__vpick .hd { color: #555; border-bottom: 1px solid #eee; font-size: 12px; }
+    #__vpick .f .n::before { content: 'PDF'; display: inline-block; width: 26px; margin-right: 8px; font: 700 8px/14px sans-serif; text-align: center;
+      color: #fff; background: #d93025; border-radius: 2px; vertical-align: 1px; }
+    #__vpick .f.sel { background: #cce4f7; }
+    #__vpick .ft { border-top: 1px solid #e5e5e5; padding: 10px 14px; display: flex; align-items: center; gap: 8px; background: #f9f9f9; }
+    #__vpick .ft .name { flex: 1; border: 1px solid #d4d4d4; border-radius: 4px; padding: 5px 8px; background: #fff; min-height: 28px; }
+    #__vpick .ft .type { width: 160px; border: 1px solid #d4d4d4; border-radius: 4px; padding: 5px 8px; background: #fff; }
+    #__vpick .ft button { width: 90px; padding: 5px 0; border-radius: 4px; border: 1px solid #c4c4c4; background: #fff; font: 13px "Segoe UI", sans-serif; }
+    #__vpick .ft button.open { background: #0067c0; color: #fff; border-color: #0067c0; }`;
   const POINTER = '<svg viewBox="0 0 24 24" width="26" height="26"><path d="M4 2 L4 20 L9 15.5 L12.5 22.5 L15.5 21 L12 14 L19 14 Z" fill="#111" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
 
   // Beta-only markers hidden by CSS from the very first paint (the clean-up in ready() runs only after the
@@ -118,6 +142,24 @@ function overlayScript() {
     d.id = '__vconfirm';
     d.innerHTML = `<div><div class="t">${host} says</div><div>${msg}</div><div class="b">${okOnly ? '' : '<button>Cancel</button>'}<button class="ok">OK</button></div></div>`;
     document.documentElement.appendChild(d);
+  };
+  // Look-alike of the computer's "Open" file window (a screencast can't capture the real one).
+  // files: [{ name, date, size }]
+  window.__vPicker = (files) => {
+    const d = document.createElement('div');
+    d.id = '__vpick';
+    const rows = files.map((f, i) => `<div class="f" data-i="${i}"><span class="n">${f.name}</span><span>${f.date}</span><span>PDF Document</span><span>${f.size}</span></div>`).join('');
+    d.innerHTML = `<div class="win"><div class="tb">Open<span class="x">–▢✕</span></div>
+      <div class="addr"><div class="path">This PC  ›  Downloads</div><div class="search">Search Downloads</div></div>
+      <div class="body"><div class="nav"><div>Home</div><div>Desktop</div><div class="on">Downloads</div><div>Documents</div><div>Pictures</div><div>This PC</div></div>
+      <div class="list"><div class="hd"><span>Name</span><span>Date modified</span><span>Type</span><span>Size</span></div>${rows}</div></div>
+      <div class="ft"><span>File name:</span><div class="name"></div><div class="type">PDF files (*.pdf)</div><button class="open">Open</button><button>Cancel</button></div></div>`;
+    document.documentElement.appendChild(d);
+  };
+  window.__vPickerSelect = (i) => {
+    document.querySelectorAll('#__vpick .f').forEach((r) => r.classList.toggle('sel', r.dataset.i === String(i)));
+    const r = document.querySelector(`#__vpick .f[data-i="${i}"] .n`);
+    document.querySelector('#__vpick .name').textContent = r ? r.textContent : '';
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
 }
@@ -188,6 +230,29 @@ function makeHelpers(page, t0) {
       await h.tap('#__vconfirm button.ok', 300, { noClick: true });
       await page.evaluate(() => document.getElementById('__vconfirm').remove());
     },
+    // Click something that opens the computer's file window, show the look-alike, pick the file, click Open.
+    async choosePdf(trigger, file, caption) {
+      const name = path.basename(file);
+      const kb = `${Math.max(1, Math.round(fs.statSync(file).size / 1024))} KB`;
+      const day = new Date(Date.now() + 5.5 * 3600e3);
+      const stamp = (n) => { const x = new Date(day - n * 864e5); return `${String(x.getUTCDate()).padStart(2, '0')}-${String(x.getUTCMonth() + 1).padStart(2, '0')}-${x.getUTCFullYear()} 10:2${n}`; };
+      const files = [
+        { name: 'Bank_Statement_Oct.pdf', date: stamp(6), size: '84 KB' },
+        { name, date: stamp(0), size: kb },
+        { name: 'EB_Bill_Oct.pdf', date: stamp(9), size: '61 KB' },
+        { name: 'GST_Return_Sep.pdf', date: stamp(12), size: '132 KB' },
+      ];
+      const [chooser] = await Promise.all([page.waitForEvent('filechooser'), h.tap(trigger, 0)]);
+      await page.evaluate((f) => window.__vPicker(f), files);
+      await h.say(caption, 900);
+      const row = page.locator('#__vpick .f[data-i="1"]');
+      await h.tap(row, 300, { noClick: true });
+      await page.evaluate(() => window.__vPickerSelect(1));
+      await h.pause(900);
+      await h.tap('#__vpick button.open', 300, { noClick: true });
+      await page.evaluate(() => document.getElementById('__vpick').remove());
+      await chooser.setFiles(file);
+    },
     // Show a document page (an image) as if opened, pan down it, then close it.
     async showDoc(png, title, captions) {
       const src = `data:image/png;base64,${fs.readFileSync(png).toString('base64')}`;
@@ -238,6 +303,53 @@ function cashInNotes(amount) {
 }
 
 // DEMO bank_id by bank name (ids differ between databases).
+// A real purchase invoice PDF the station already has in PetroMath (the owner chose real invoices for these
+// videos). Copied from the beta DB into out/real/ at record time and never committed. kind: 'fuel' | 'lube'.
+async function realInvoicePdf(kind) {
+  const loc = process.env.REAL_SOURCE_LOC;
+  const number = kind === 'fuel' ? process.env.REAL_FUEL_INVOICE : process.env.REAL_LUBE_INVOICE;
+  const sql = kind === 'fuel'
+    ? `SELECT d.file_name, d.file_data FROM t_document_store d JOIN t_tank_invoice t ON t.id = d.entity_id
+        WHERE d.entity_type = 'TANK_INVOICE' AND d.location_code = ? AND t.invoice_number = ? ORDER BY d.doc_id DESC LIMIT 1`
+    : `SELECT d.file_name, d.file_data FROM t_document_store d JOIN t_lubes_inv_hdr h ON h.lubes_hdr_id = d.entity_id
+        WHERE d.entity_type = 'LUBE_INVOICE' AND d.location_code = ? AND h.location_code = ? AND h.invoice_number = ? ORDER BY d.doc_id DESC LIMIT 1`;
+  const db = await betaDb();
+  try {
+    const [[row]] = await db.query(sql, kind === 'fuel' ? [loc, number] : [loc, loc, number]);
+    if (!row) throw new Error(`No ${kind} invoice ${number} with a PDF at ${loc} on the beta DB`);
+    const dir = path.join(OUT, 'real');
+    fs.mkdirSync(dir, { recursive: true });
+    const file = path.join(dir, row.file_name.replace(/[^\w.-]+/g, '_'));
+    fs.writeFileSync(file, row.file_data);
+    return { file, number };
+  } finally { await db.end(); }
+}
+
+// Areas blurred on the real SERVO distributor invoice (fractions of page 1): supplier phone/GSTIN line,
+// Bill To + Place of Supply (buyer address, customer ID, GSTIN, phone), order/salesman/vehicle details,
+// bank details, IRN/Ack numbers, QR code.
+const LUBE_INVOICE_BLUR = [[0.1978, 0.0653, 0.5934, 0.0186], [0.0242, 0.1166, 0.4868, 0.1678], [0.511, 0.1305, 0.1978, 0.0746],
+  [0.2143, 0.5361, 0.2912, 0.0715], [0.0242, 0.6247, 0.5165, 0.0404], [0.756, 0.6076, 0.2154, 0.1461]];
+
+// Page 1 of a PDF as a PNG with the given areas blurred (x, y, w, h as fractions of the page).
+function blurredPage(pdf, areas, out) {
+  const raw = out.replace(/\.png$/, '-raw');
+  execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, raw]);
+  const ihdr = fs.readFileSync(`${raw}.png`); // PNG width/height live at bytes 16-23
+  const W = ihdr.readUInt32BE(16);
+  const H = ihdr.readUInt32BE(20);
+  const px = ([x, y, w, h]) => [x * W, y * H, w * W, h * H].map((v) => Math.round(v / 2) * 2);
+  // Mosaic (shrink 10x, enlarge in blocks) then a light blur: unreadable at any size.
+  const parts = areas.map((a, i) => {
+    const [x, y, w, h] = px(a);
+    return `[0:v]crop=${w}:${h}:${x}:${y},scale=${Math.max(2, Math.round(w / 10))}:${Math.max(2, Math.round(h / 10))},scale=${w}:${h}:flags=neighbor,boxblur=2:1[b${i}]`;
+  });
+  let chain = '[0:v]';
+  const lays = areas.map((a, i) => { const [x, y] = px(a); const outL = i === areas.length - 1 ? '' : `[o${i}]`; const s = `${chain}[b${i}]overlay=${x}:${y}${outL}`; chain = `[o${i}]`; return s; });
+  execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', `${raw}.png`, '-filter_complex', [...parts, ...lays].join(';'), out]);
+  return out;
+}
+
 async function bankId(name) {
   const db = await betaDb();
   try {
@@ -464,6 +576,107 @@ const VIDEOS = {
       await h.tap(page.locator('#loginInfoModal .modal-footer button.btn-secondary'), 900);
       await h.say("Add their vehicles with the truck button. They're ready for credit bills.", 600);
       await h.point(row.locator('a[title="Manage Vehicles"]'), 2600);
+    },
+  },
+
+  'fuel-invoice': {
+    title: 'Upload a fuel (tanker) invoice PDF',
+    async run(h, page) {
+      const fuel = await realInvoicePdf('fuel');
+      await h.go('/home');
+      await h.begin();
+      await h.say("When a tanker arrives, enter the oil company's invoice from its PDF. No typing.", 2800);
+      await h.say('Open Transactions, then Purchase Invoice.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /transactions/i }).first(), 700);
+      await h.tap('.sidebar a[href="/lubes-invoice-home"]', 0);
+      await page.waitForURL(/lubes-invoice-home/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Click New Purchase, then Fuel Invoice.', 500);
+      await h.tap(page.getByRole('button', { name: 'New Purchase' }), 700);
+      await h.tap(page.locator('.dropdown-menu a[href="/purchases/fuel-invoice/new"]'), 0);
+      await page.waitForURL(/fuel-invoice\/new/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await h.say('Click Choose File and pick the invoice PDF you downloaded.', 400);
+      await h.choosePdf('#fuelInvoicePdfUpload', fuel.file, 'Your Downloads folder: select the invoice PDF and click Open.');
+      await h.say('PetroMath reads the invoice…', 0);
+      await page.waitForFunction(() => /read successfully/i.test(document.getElementById('fuelParseStatus').textContent), null, { timeout: 60000 });
+      await h.pause(800);
+
+      await h.say('Everything is filled in from the PDF: invoice number, date, tanker number and total.', 600);
+      await h.point('#fi_invoice_number', 1500);
+      await h.point('#fi_truck_number', 1300);
+      await h.point('#fi_total_amount', 1800);
+      await h.say('And each product: quantity, rate, density and HSN code, with the VAT charges below.', 600);
+      await h.point('#fi_lines_body tr >> nth=0', 2800);
+      await h.say('The first time only, tell PetroMath which of your products each invoice product is.', 600);
+      await h.pick(page.locator('#fi_lines_body .fi-product-id').nth(0), 'MS', 600);
+      await h.pick(page.locator('#fi_lines_body .fi-product-id').nth(1), 'HSD', 600);
+      await h.say('PetroMath remembers this, so next time it is picked for you.', 2400);
+      await h.say('Check the figures against the paper invoice, then click Save Mapping.', 600);
+      await Promise.all([page.waitForURL(/fuel-invoice\/\d+/, { timeout: 60000 }), h.tap(page.locator('button[onclick="fuelInvoiceSave()"]'), 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(700);
+      await h.say('Saved. The PDF is kept with the invoice, so you can open it any time.', 2800);
+      await h.say('Purchases, stock and accounts now include this tanker.', 2400);
+    },
+  },
+
+  'lube-invoice': {
+    title: 'Upload a lube purchase invoice PDF',
+    async run(h, page) {
+      const lube = await realInvoicePdf('lube');
+      await h.go('/home');
+      await h.begin();
+      await h.say("Lube purchases are entered the same way: from the distributor's invoice PDF.", 2800);
+      await h.say('Open Transactions, then Purchase Invoice.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /transactions/i }).first(), 700);
+      await h.tap('.sidebar a[href="/lubes-invoice-home"]', 0);
+      await page.waitForURL(/lubes-invoice-home/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Click New Purchase, then Lube Invoice.', 500);
+      await h.tap(page.getByRole('button', { name: 'New Purchase' }), 700);
+      await h.tap(page.locator('.dropdown-menu a[href="/lubes-invoice/new"]'), 0);
+      await page.waitForURL(/lubes-invoice\/new/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+
+      await page.evaluate(() => { window.confirm = () => true; }); // "replace the empty line?" on a new invoice
+      await h.say('Click Fill from invoice PDF.', 400);
+      await h.choosePdf('#pi-pdf-btn', lube.file, 'Select the invoice PDF and click Open.');
+      await h.say('PetroMath reads the invoice…', 0);
+      await page.waitForFunction(() => document.getElementById('invoice_number').value.length > 0, null, { timeout: 60000 });
+      await page.waitForLoadState('networkidle');
+      await h.pause(900);
+
+      await h.say('The supplier, invoice number and date are filled in.', 600);
+      await h.point('#supplier_id', 1400);
+      await h.point('#invoice_number', 1400);
+      await h.say('Every product line too: quantity, rate, discount and GST.', 600);
+      await h.point(page.locator('.pi-src').first(), 2400);
+      await h.say('Each line is linked to your product: Matched. Check any marked Suggested or Pick.', 2800);
+      // The invoice it read, with the buyer's and supplier's private details blurred (owner's choice).
+      const page1 = blurredPage(lube.file, LUBE_INVOICE_BLUR, path.join(OUT, 'real', 'lube-page1.png'));
+      await h.showDoc(page1, 'The invoice PDF it read', [
+        'Here is the invoice PDF. Private details are blurred in this video.',
+        'Same products, quantities and amounts as the screen.']);
+      await h.say('The figures from the PDF are locked, so they match the invoice exactly.', 2400);
+      await h.scrollBy(500, 1200);
+      await h.say('The total matches the invoice total.', 400);
+      await h.point('#close-btn', 1600);
+      await h.say('When it is right, click Save & Close Invoice.', 500);
+      const closeBtn = page.locator('#close-btn');
+      await page.waitForFunction(() => !document.getElementById('close-btn').disabled, null, { timeout: 30000 });
+      await h.tap(closeBtn, 300, { noClick: true });
+      await h.dialog('Close this invoice? Stock and accounts will use it, and it cannot be changed afterwards.', 'Confirm with OK.');
+      await Promise.all([page.waitForURL(/lubes-invoice-home/, { timeout: 60000 }), closeBtn.click()]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(700);
+      await h.say('Saved. The stock of each product goes up, and the invoice PDF is attached.', 600);
+      await h.point(page.locator('tr', { hasText: lube.number }).first(), 2800);
     },
   },
 
