@@ -252,6 +252,16 @@ async function main() {
     await addRule(bank.bank_id, 'Bank', sap.bank_id, 'DEBIT');
     await addRule(sap.bank_id, 'Bank', bank.bank_id, 'CREDIT');
 
+    // ── Reset: products added in a video (anything not in FUELS/LUBES), with their opening stock ──
+    const keepProducts = [...FUELS.map(([n]) => n), ...LUBES.map(([n]) => n)];
+    const extraProducts = (await q('SELECT product_id FROM m_product WHERE location_code = ? AND product_name NOT IN (?)', [LOC, keepProducts]))
+      .map((r) => r.product_id);
+    if (extraProducts.length) {
+      await q('DELETE FROM t_lubes_stock_adjustment_history WHERE product_id IN (?)', [extraProducts]).catch(() => {});
+      await q('DELETE FROM t_lubes_stock_adjustment WHERE location_code = ? AND product_id IN (?)', [LOC, extraProducts]);
+      await q('DELETE FROM m_product WHERE location_code = ? AND product_id IN (?)', [LOC, extraProducts]);
+    }
+
     // ── Reset: customers added in a video (anything not in CUSTOMERS/DIGITAL), with their login and opening balance ──
     const keep = [...CUSTOMERS.map(([n]) => n), ...DIGITAL];
     const extra = (await q('SELECT creditlist_id FROM m_credit_list WHERE location_code = ? AND Company_Name NOT IN (?)', [LOC, keep]))
