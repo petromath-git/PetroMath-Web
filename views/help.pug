@@ -1,11 +1,16 @@
 extends layout
 
+//- Each video can have a Tamil copy (<name>.ta.mp4, Tamil voice + captions); the language switch picks it.
 mixin howVideo(name, label, phone)
-  figure.help-video(class=phone ? 'phone' : undefined)
-    video(src=`/videos/${name}.mp4?v=${videoV[name + '.mp4'] || ''}` poster=`/videos/${name}.jpg?v=${videoV[name + '.jpg'] || ''}` controls playsinline preload="none")
+  - const src = (lang) => { const f = name + (lang === 'en' ? '' : '.' + lang); return { mp4: `/videos/${f}.mp4?v=${videoV[f + '.mp4'] || ''}`, jpg: `/videos/${f}.jpg?v=${videoV[f + '.jpg'] || ''}`, share: 'https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + f + '.mp4') }; }
+  - const en = src('en'), ta = videoV[name + '.ta.mp4'] ? src('ta') : null;
+  figure.help-video(class=phone ? 'phone' : undefined data-en=JSON.stringify(en) data-ta=ta ? JSON.stringify(ta) : undefined)
+    video(src=en.mp4 poster=en.jpg controls playsinline preload="none")
     figcaption
-      strong Watch how: #{label}
-      a(href='https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + name + '.mp4') target='_blank' rel='noopener')
+      span
+        strong Watch how: #{label}
+        span.badge.badge-light.border.ml-2.help-en-only(hidden) English only
+      a.help-share(href=en.share target='_blank' rel='noopener')
         i.bi.bi-whatsapp.me-1
         | Share on WhatsApp
 
@@ -36,6 +41,11 @@ block content
       i.bi.bi-question-circle.me-2
       | Help
     p.text-muted How to use PetroMath, step by step. Each topic has a short video.
+    .d-flex.align-items-center.flex-wrap.mb-3.help-lang
+      span.mr-2 Video language:
+      .btn-group.btn-group-sm(role='group' aria-label='Video language')
+        button.btn.btn-outline-primary(type='button' data-lang='en') English
+        button.btn.btn-outline-primary(type='button' data-lang='ta') தமிழ்
 
     section#intro
       h2 Start here: a quick tour of PetroMath
@@ -589,3 +599,41 @@ block content
       ul
         li A day can be closed only after the day before it is closed.
         li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.
+
+  script.
+    // Video language switch: Tamil where a Tamil copy exists, English otherwise. Remembered per browser; ?lang=ta in a link sets it.
+    (function () {
+      var KEY = 'helpVideoLang';
+      var q = new URLSearchParams(location.search).get('lang');
+      var lang = q === 'ta' || q === 'en' ? q : null;
+      if (!lang) { try { lang = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ } }
+      if (lang !== 'ta') lang = 'en';
+      function apply(l) {
+        document.querySelectorAll('.help-lang button').forEach(function (b) {
+          var on = b.getAttribute('data-lang') === l;
+          b.classList.toggle('active', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+        });
+        document.querySelectorAll('figure.help-video').forEach(function (fig) {
+          var ta = fig.getAttribute('data-ta');
+          var s = JSON.parse(l === 'ta' && ta ? ta : fig.getAttribute('data-en'));
+          var v = fig.querySelector('video');
+          if (v.getAttribute('src') !== s.mp4) {
+            v.pause();
+            v.setAttribute('src', s.mp4);
+            v.setAttribute('poster', s.jpg);
+            v.load();
+          }
+          fig.querySelector('.help-share').setAttribute('href', s.share);
+          fig.querySelector('.help-en-only').hidden = !(l === 'ta' && !ta);
+        });
+      }
+      document.querySelectorAll('.help-lang button').forEach(function (b) {
+        b.addEventListener('click', function () {
+          lang = b.getAttribute('data-lang');
+          try { localStorage.setItem(KEY, lang); } catch (e) { /* storage blocked */ }
+          apply(lang);
+        });
+      });
+      apply(lang);
+    })();

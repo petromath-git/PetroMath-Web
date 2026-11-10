@@ -27,6 +27,9 @@ const CONFIG = {
   // The two optional shift tabs (on at about ten stations): customer payments taken in the shift, and staff advances.
   ALLOW_CREDIT_RECEIPTS_IN_CLOSING: 'Y',
   ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING: 'Y',
+  // Every real station with those tabs has cashflow on. With it off (the '*' default), a receipt saved by autosave
+  // and then again by Next is refused as "already part of a cashflow/day close" (txn-write-dao saveCreditReceipts).
+  CASHFLOW_ENABLED: 'true',
 };
 // Employees (Employee Advance tab): code, name, designation
 const EMPLOYEES = [['E001', 'ARUN KUMAR', 'Cashier'], ['E002', 'SELVI M', 'Cashier'], ['E003', 'RAJESH P', 'Pump Attendant'],

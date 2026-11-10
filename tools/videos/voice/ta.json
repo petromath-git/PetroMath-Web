@@ -1,0 +1,103 @@
+{
+  "_note": "English caption -> Tamil. A plain string is both shown and spoken. {show, say}: show is the caption, say is what the voice reads. English terms stay English in say (owner: Tamil-script spellings are mispronounced, e.g. PetroMath, Transactions). The voice drops an English word with Tamil joined to it (account-க்கு, accountக்கு), so in say write the ending as a separate word (account க்கு) or use என்பதை / பட்டனை / பகுதியில்.",
+  "The oil company statement (SAP) is uploaded the same way as a bank statement.": "Oil company statement (SAP) கூட, bank statement போலவே upload செய்யலாம்.",
+  "Download your account statement from the oil company portal as an Excel file.": {
+    "show": "முதலில் oil company portal-இல் இருந்து உங்கள் account statement-ஐ Excel file-ஆக download செய்யுங்கள்.",
+    "say": "முதலில், oil company portal இல் இருந்து, உங்கள் account statement ஐ Excel file ஆக download செய்யுங்கள்."
+  },
+  "Open Daily Operations, then Upload Transactions.": {
+    "show": "Daily Operations-ஐ திறந்து, Upload Transactions-ஐ click செய்யுங்கள்.",
+    "say": "Daily Operations மெனுவைத் திறந்து, Upload Transactions என்பதை click செய்யுங்கள்."
+  },
+  "Step 1: choose the account this statement belongs to.": {
+    "show": "Step 1: இந்த statement எந்த account-உடையது என்று தேர்ந்தெடுங்கள்.",
+    "say": "Step 1: இந்த statement எந்த account உடையது என்று தேர்ந்தெடுங்கள்."
+  },
+  "Then choose the statement file (Excel or PDF).": {
+    "show": "பிறகு statement file-ஐ தேர்ந்தெடுங்கள். Excel அல்லது PDF.",
+    "say": "பிறகு statement file ஐ தேர்ந்தெடுங்கள். Excel அல்லது PDF."
+  },
+  "Click Next: Preview Transactions.": {
+    "show": "Next: Preview Transactions-ஐ click செய்யுங்கள்.",
+    "say": "Next, Preview Transactions பட்டனை click செய்யுங்கள்."
+  },
+  "Step 2: PetroMath reads every line of the statement.": {
+    "show": "Step 2: PetroMath, statement-இன் ஒவ்வொரு வரியையும் படிக்கிறது.",
+    "say": "Step 2: PetroMath, statement இல் உள்ள ஒவ்வொரு வரியையும் படிக்கிறது."
+  },
+  "Lines already uploaded before are marked as duplicates and skipped.": "ஏற்கனவே upload செய்த வரிகள் duplicate என்று குறிக்கப்பட்டு விடப்படும்.",
+  "Choose a ledger for each line: who paid, or what the money was for.": "ஒவ்வொரு வரிக்கும் ஒரு ledger தேர்ந்தெடுங்கள்: யார் பணம் கட்டினார்கள், அல்லது பணம் எதற்காக.",
+  "The ledger list shows only what is allowed for this account.": {
+    "show": "இந்த account-க்கு அனுமதிக்கப்பட்ட ledger-கள் மட்டுமே பட்டியலில் வரும்.",
+    "say": "இந்த account க்கு அனுமதி உள்ள ledger மட்டுமே list இல் வரும்."
+  },
+  "Product invoices go to Purchase Invoice.": {
+    "show": "Product invoice எல்லாம் Purchase Invoice ledger-க்கு போகும்.",
+    "say": "Product invoice எல்லாம், Purchase Invoice என்ற ledger க்கு போகும்."
+  },
+  "Next time, PetroMath suggests the ledger from what you chose before.": {
+    "show": "அடுத்த முறை, நீங்கள் முன்பு தேர்ந்தெடுத்ததை வைத்து PetroMath தானாகவே ledger-ஐ காட்டும்.",
+    "say": "அடுத்த முறை, நீங்கள் முன்பு தேர்ந்தெடுத்ததை வைத்து, PetroMath தானாகவே ledger ஐ காட்டும்."
+  },
+  "When every line has a ledger, click Next.": {
+    "show": "எல்லா வரிகளுக்கும் ledger போட்ட பிறகு, Next-ஐ click செய்யுங்கள்.",
+    "say": "எல்லா வரிகளுக்கும் ledger போட்ட பிறகு, Next பட்டனை click செய்யுங்கள்."
+  },
+  "Step 3: check the count and the account, then Save All Transactions.": {
+    "show": "Step 3: எண்ணிக்கையையும் account-ஐயும் சரிபார்த்து, Save All Transactions-ஐ click செய்யுங்கள்.",
+    "say": "Step 3: எண்ணிக்கையையும் account ஐயும் சரிபார்த்து, Save All Transactions பட்டனை click செய்யுங்கள்."
+  },
+  "Confirm with OK.": "OK கொடுத்து உறுதி செய்யுங்கள்.",
+  "Saved.": "Save ஆகிவிட்டது.",
+  "The lines are now in SAP Transactions.": {
+    "show": "இப்போது இந்த வரிகள் SAP Transactions-இல் இருக்கும்.",
+    "say": "இப்போது இந்த வரிகள் SAP Transactions பகுதியில் இருக்கும்."
+  },
+  "From here they are used for reconciliation and the accounts.": {
+    "show": "இங்கிருந்து இவை reconciliation-க்கும் கணக்குகளுக்கும் பயன்படும்.",
+    "say": "இங்கிருந்து இவை reconciliation க்கும், கணக்குகளுக்கும் பயன்படும்."
+  },
+  "This is the Cashier Shift screen. Every shift is listed here.": "இது Cashier Shift screen. எல்லா shift விவரங்களும் இங்கே இருக்கும்.",
+  "To start a new shift, click Add New.": "புதிய shift தொடங்க, Add New பட்டனை click செய்யுங்கள்.",
+  "The shift has a tab for each part. Start with Closing.": "Shift இல் ஒவ்வொரு பகுதிக்கும் ஒரு tab உள்ளது. முதலில் Closing tab.",
+  "Choose the cashier for this shift.": "Cashier பெயரைத் தேர்ந்தெடுங்கள்.",
+  "The date is today. You can pick an earlier day if needed.": "தேதி இன்றைய தேதியாக இருக்கும். தேவைப்பட்டால் முந்தைய நாளைத் தேர்ந்தெடுக்கலாம்.",
+  "Enter the opening cash given to the cashier.": "Cashier இடம் கொடுத்த opening cash தொகையை உள்ளிடுங்கள்.",
+  "Today's selling rates are filled in from the last shift. Check them.": "இன்றைய விற்பனை rate, கடைசி shift இல் இருந்து தானாக வரும். சரிபார்த்துக் கொள்ளுங்கள்.",
+  "Click Next. PetroMath saves the shift as a draft.": "Next பட்டனை click செய்யுங்கள். PetroMath இந்த shift ஐ draft ஆக save செய்யும்.",
+  "Attendance: add everyone who worked this shift.": "Attendance: இந்த shift இல் வேலை செய்த எல்லோரையும் சேர்க்கவும்.",
+  "Choose the shift, then the in and out time.": "Shift ஐ தேர்ந்தெடுத்து, in time மற்றும் out time கொடுங்கள்.",
+  "Click Add for each person.": "ஒவ்வொருவருக்கும் Add பட்டனை click செய்யுங்கள்.",
+  "Reading: first choose the time the meter readings were taken.": "Reading: முதலில் meter reading எடுத்த நேரத்தைத் தேர்ந்தெடுங்கள்.",
+  "Click Add All Nozzles. Opening readings come from the last shift.": "Add All Nozzles பட்டனை click செய்யுங்கள். Opening reading, கடைசி shift இல் இருந்து தானாக வரும்.",
+  "Type the closing meter reading of each nozzle.": "ஒவ்வொரு nozzle இன் closing meter reading ஐ type செய்யுங்கள்.",
+  "Sale (litres) and Amount work themselves out.": "Sale லிட்டர், Amount இரண்டும் தானாகக் கணக்கிடப்படும்.",
+  "Enter testing litres, if any, so they are not counted as sale.": "Testing லிட்டர் இருந்தால் உள்ளிடுங்கள். அது sale ஆகக் கணக்கில் வராது.",
+  "Lube Sales: oils and other products sold for cash.": "Lube Sales: பணத்துக்கு விற்ற oil மற்றும் மற்ற பொருட்கள்.",
+  "Pick the product and enter the quantity. The price comes from the product list.": "Product ஐ தேர்ந்தெடுத்து, அளவை உள்ளிடுங்கள். விலை product list இல் இருந்து வரும்.",
+  "Credit Sales: one entry for each credit bill.": "Credit Sales: ஒவ்வொரு credit bill க்கும் ஒரு entry.",
+  "Enter the product, bill number, company and vehicle.": "Product, bill number, company, vehicle எல்லாம் கொடுங்கள்.",
+  "Enter the quantity in litres. The amount is calculated.": "லிட்டர் அளவை உள்ளிடுங்கள். Amount தானாகக் கணக்கிடப்படும்.",
+  "The bill is added to the list. Add the next bill the same way.": "Bill, list இல் சேர்ந்துவிடும். அடுத்த bill ஐயும் இதே போல் சேர்க்கவும்.",
+  "Digital Sales: UPI, card and fleet card payments.": "Digital Sales: UPI, card, fleet card மூலம் வந்த பணம்.",
+  "The total is shown below the list.": "மொத்தத் தொகை list க்குக் கீழே தெரியும்.",
+  "Collections and Employee Advance are optional tabs: you see them only if they are switched on for your station.": "Collections, Employee Advance இரண்டும் optional tab கள். உங்கள் station இல் on செய்திருந்தால் மட்டுமே தெரியும்.",
+  "Collections: payments from credit customers received during the shift.": "Collections: shift நேரத்தில் credit customer கள் கட்டிய பணம்.",
+  "Cash or digital, the customer and the amount.": "Cash ஆ, digital ஆ, customer பெயர், தொகை.",
+  "It is added to the shift's cash, and the customer's balance comes down.": "இது shift cash இல் சேரும். Customer இன் balance குறையும்.",
+  "Employee Advance: cash given to staff from the shift: salary advance or salary paid.": "Employee Advance: shift cash இல் இருந்து staff க்குக் கொடுத்த பணம். Salary advance அல்லது salary.",
+  "It is taken out of the shift's cash and goes to the employee's ledger.": "இது shift cash இல் இருந்து கழிக்கப்பட்டு, employee ledger இல் பதிவாகும்.",
+  "Expenses: money paid out of the cash during the shift.": "Expenses: shift நேரத்தில் cash இல் இருந்து செலவு செய்த பணம்.",
+  "The usual amount is filled in. Change it if needed.": "வழக்கமான தொகை தானாக வரும். தேவைப்பட்டால் மாற்றலாம்.",
+  "Cash Count: count the cash being handed over.": "Cash Count: ஒப்படைக்கும் பணத்தை எண்ணுங்கள்.",
+  "Enter how many of each note and coin.": "ஒவ்வொரு note, coin எத்தனை என்று உள்ளிடுங்கள்.",
+  "The total is worked out for you.": "மொத்தம் தானாகக் கணக்கிடப்படும்.",
+  "Summary: the whole shift on one page. Check it before closing.": "Summary: முழு shift உம் ஒரே பக்கத்தில். Close செய்வதற்கு முன் சரிபார்க்கவும்.",
+  "Excess / Shortage compares the cash counted with what was due.": "Excess / Shortage: எண்ணிய பணத்தையும், வர வேண்டிய பணத்தையும் ஒப்பிடுகிறது.",
+  "Sales, credit, digital, expenses and cash, all in one place.": "Sales, credit, digital, expenses, cash எல்லாம் ஒரே இடத்தில்.",
+  "When everything is right, click CLOSE.": "எல்லாம் சரியாக இருந்தால், CLOSE பட்டனை click செய்யுங்கள்.",
+  "Confirm with OK. A closed shift can no longer be edited.": "OK கொடுத்து உறுதி செய்யுங்கள். Close ஆன shift ஐ மாற்ற முடியாது.",
+  "Done. The shift is listed as Closed, with its shortage or excess.": "முடிந்தது. Shift, Closed என்று பட்டியலில் வரும், shortage அல்லது excess உடன்.",
+  "Its closing readings become the next shift's opening readings.": "இதன் closing reading, அடுத்த shift இன் opening reading ஆக வரும்.",
+  "PetroMath: every shift, accounted for.": "PetroMath: ஒவ்வொரு shift உம், சரியான கணக்கில்."
+}

@@ -22,6 +22,59 @@ const OUT = path.join(__dirname, 'out');
 const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
 const VIEW = { width: 1280, height: 720 };
 const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
+
+// Voiceover (node record.js --lang=ta sap-upload): captions are swapped for voice/<lang>.json and spoken by a
+// free Microsoft Edge neural voice (python -m pip install edge-tts). Writes <name>.<lang>.mp4 beside the English one.
+const LANG = (process.argv.find((a) => a.startsWith('--lang=')) || '').slice(7) || null;
+const VOICES = { ta: 'ta-IN-PallaviNeural' };
+const ENGLISH_VOICE = 'en-IN-NeerjaNeural';
+// Word in a Tamil line -> how the English voice is told to say it (owner picked "Pet-ro-math": short e, as in petrol).
+const ENGLISH_WORDS = { PetroMath: 'Pet-ro-math' };
+const SCRIPT = LANG ? JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}.json`), 'utf8')) : null;
+
+// The caption in the video's language, and its spoken clip (cached in out/voice/<lang>/ by text).
+// A line is a string (shown and spoken) or { show, say }. `said` is the caption shown; `speech` is what the voice reads.
+function speak(text) {
+  const line = SCRIPT[text];
+  if (!line) throw new Error(`No ${LANG} line in voice/${LANG}.json for: ${JSON.stringify(text)}`);
+  const said = typeof line === 'string' ? line : line.show;
+  const speech = typeof line === 'string' ? line : line.say;
+  // The Tamil voice silently drops an English word with Tamil joined to it (account-க்கு, accountக்கு).
+  if (/[A-Za-z]-?[஀-௿]/.test(speech)) {
+    throw new Error(`voice/${LANG}.json: English word joined to Tamil is not spoken; add a "say" with it in Tamil script: ${speech}`);
+  }
+  const dir = path.join(OUT, 'voice', LANG);
+  fs.mkdirSync(dir, { recursive: true });
+  const hash = (s) => require('crypto').createHash('sha1').update(s).digest('hex').slice(0, 16);
+  const tts = (voice, words) => {
+    const f = path.join(dir, `${hash(`${voice}|${words}`)}.mp3`);
+    if (!fs.existsSync(f)) {
+      execFileSync(process.env.PYTHON || 'python', ['-m', 'edge_tts', '--voice', voice, '--rate', process.env.VOICE_RATE || '+0%',
+        '--text', words, '--write-media', f]);
+    }
+    return f;
+  };
+  // Words the Tamil voice says wrongly (PetroMath came out "Paytromath") are read by the Indian-English voice
+  // and joined into the sentence.
+  const parts = speech.split(new RegExp(`(${Object.keys(ENGLISH_WORDS).join('|')})`)).map((p) => p.trim()).filter(Boolean);
+  let file;
+  if (parts.length === 1) file = tts(VOICES[LANG], speech);
+  else {
+    file = path.join(dir, `${hash(`mix|${VOICES[LANG]}|${speech}`)}.mp3`);
+    if (!fs.existsSync(file)) {
+      const clips = parts.map((p) => (ENGLISH_WORDS[p] ? tts(ENGLISH_VOICE, ENGLISH_WORDS[p]) : tts(VOICES[LANG], p)));
+      execFileSync(ffmpeg, ['-y', '-loglevel', 'error', ...clips.flatMap((c) => ['-i', c]), '-filter_complex',
+        `${clips.map((c, i) => `[${i}:a]aresample=24000[p${i}]`).join(';')};${clips.map((c, i) => `[p${i}]`).join('')}concat=n=${clips.length}:v=0:a=1[a]`,
+        '-map', '[a]', '-ac', '1', '-b:a', '64k', file]);
+    }
+  }
+  // ffmpeg prints the clip length when asked to read it with no output (and exits 1).
+  let info = '';
+  try { execFileSync(ffmpeg, ['-i', file], { stdio: 'pipe' }); } catch (e) { info = String(e.stderr); }
+  const m = info.match(/Duration: (\d+):(\d+):([\d.]+)/);
+  const dur = m ? (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]) : 3;
+  return { said, file, dur };
+}
 // Phone videos (VIDEOS entry phone: true): an Android phone screen, saved 720 px wide.
 const PHONE = {
   view: { width: 412, height: 860 }, scale: 2, outWidth: 720,
@@ -39,7 +92,7 @@ function overlayScript(phone) {
     body { padding-bottom: 180px !important; } /* lets buttons at the end of a page scroll clear of the caption */
     #__vcap { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: 860px; z-index: 2147483647;
       background: rgba(15, 23, 42, 0.92); color: #fff; border-radius: 12px; padding: 12px 22px; pointer-events: none;
-      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center;
+      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Nirmala UI", "Noto Sans Tamil", sans-serif; text-align: center;
       box-shadow: 0 6px 24px rgba(0,0,0,.35); transition: opacity .25s; }
     #__vptr { position: fixed; left: 0; top: 0; width: 26px; height: 26px; z-index: 2147483647; pointer-events: none;
       transition: transform .55s cubic-bezier(.4,0,.2,1); }
@@ -287,7 +340,7 @@ function overlayScript(phone) {
 }
 
 function makeHelpers(page, t0) {
-  const marks = { start: 0, cuts: [] };
+  const marks = { start: 0, cuts: [], voice: [] };
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
@@ -297,6 +350,14 @@ function makeHelpers(page, t0) {
     async go(url) { await page.goto(BASE + url, { waitUntil: 'networkidle' }); },
     async begin() { marks.start = now(); },
     async say(text, ms = 1800) {
+      if (LANG && text) {
+        // Voiceover: show the translated caption, start its clip here, and let it finish before the next step.
+        const clip = speak(text);
+        await page.evaluate((t) => window.__vSay(t), clip.said);
+        marks.voice.push({ t: now(), file: clip.file });
+        await pause(Math.max(ms, Math.round(clip.dur * 1000) + 300));
+        return;
+      }
       await page.evaluate((t) => window.__vSay(t), text);
       if (ms) await pause(ms);
     },
@@ -1684,9 +1745,19 @@ function toMp4(dir, frames, mp4, marks, total, outWidth = VIEW.width) {
   list.push(`file '${frames[frames.length - 1].file}'`);
   fs.writeFileSync(path.join(dir, 'frames.txt'), list.join('\n'));
   const start = Math.max(0, marks.start - frames[0].t);
+  const voice = (marks.voice || []).map((c) => ({ ...c, at: cutTime(c.t) - frames[0].t - start })).filter((c) => c.at >= 0);
+  const silent = voice.length ? path.join(dir, 'silent.mp4') : mp4;
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'frames.txt'),
     '-vf', `fps=30,trim=start=${start.toFixed(3)},setpts=PTS-STARTPTS,scale=${outWidth}:-2:flags=lanczos,setsar=1`, '-r', '30',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4]);
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', silent]);
+  if (voice.length) {
+    // Lay each spoken clip at the moment its caption appeared.
+    const delays = voice.map((c, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(c.at * 1000)}:all=1[a${i}]`);
+    const mix = `${voice.map((c, i) => `[a${i}]`).join('')}amix=inputs=${voice.length}:normalize=0:dropout_transition=0[a]`;
+    execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', silent, ...voice.flatMap((c) => ['-i', c.file]),
+      '-filter_complex', [...delays, mix].join(';'), '-map', '0:v', '-map', '[a]',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', mp4]);
+  }
   // Poster frame for the Help page (shown before playing).
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-ss', '6', '-i', mp4, '-frames:v', '1', '-vf', 'scale=640:-2',
     '-q:v', '4', mp4.replace(/\.mp4$/, '.jpg')]);
@@ -1750,7 +1821,7 @@ async function record(browser, name) {
     if (!ok) await page.screenshot({ path: path.join(OUT, `${name}-failed.png`) }).catch(() => {});
     await ctx.close();
     if (ok && frames.length) {
-      const mp4 = path.join(PUBLIC, `${name}.mp4`);
+      const mp4 = path.join(PUBLIC, LANG ? `${name}.${LANG}.mp4` : `${name}.mp4`);
       toMp4(dir, frames, mp4, h.marks, total, v.phone ? PHONE.outWidth : VIEW.width);
       const kb = Math.round(fs.statSync(mp4).size / 1024);
       console.log(`${name}: ${mp4} (${kb} KB, ${Math.round(total - h.marks.start)} s, ${frames.length} frames)`);
@@ -1759,12 +1830,14 @@ async function record(browser, name) {
 }
 
 (async () => {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter((a) => !a.startsWith('--lang='));
   if (!args.length || args[0] === '--list') {
     Object.entries(VIDEOS).forEach(([k, v]) => console.log(`${k}  ${v.title}`));
     return;
   }
   for (const a of args) if (!VIDEOS[a]) throw new Error(`Unknown video: ${a}`);
+  // Make every spoken clip first: generating one mid-recording leaves seconds of dead air in the video.
+  if (LANG) Object.keys(SCRIPT).filter((k) => !k.startsWith('_')).forEach(speak);
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(PUBLIC, { recursive: true });
   const browser = await chromium.launch();
