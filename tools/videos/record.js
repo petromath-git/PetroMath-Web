@@ -907,7 +907,15 @@ const VIDEOS = {
       const tour = async (re, intro, items) => {
         const title = sectionTitle(re);
         await h.say(intro, 300);
-        await h.tap(title, 700);
+        // The section of the current page is already open; clicking its title would close it.
+        const first = page.locator(`.sidebar a[href="${items[0][0]}"]`).first();
+        const isOpen = () => first.evaluate((e) => {
+          const sub = e.closest('.menu-submenu');
+          return !sub || (sub.style.maxHeight !== '' && sub.style.maxHeight !== '0px');
+        });
+        if (await isOpen()) await h.point(title, 700);
+        else await h.tap(title, 700);
+        if (!(await isOpen())) throw new Error(`Menu section ${re} did not open`);
         for (const [href, caption, ms = 2000] of items) {
           const link = page.locator(`.sidebar a[href="${href}"]`).first();
           await hl(link, true);
