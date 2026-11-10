@@ -761,6 +761,103 @@ const VIDEOS = {
     },
   },
 
+  // Sign in and tour the menu as the owner (Admin), at the beta training station: it has every Admin menu
+  // (Accounting, Accounting Setup, Bank Reconciliation, Support Tickets). Run node training-login.js first.
+  intro: {
+    title: 'A quick tour of PetroMath',
+    user: 'none', // the video shows the sign-in
+    async run(h, page) {
+      const hl = (l, on) => l.evaluate((e, o) => {
+        e.style.transition = 'background .2s';
+        e.style.background = o ? 'rgba(255, 193, 7, .45)' : '';
+        e.style.borderRadius = o ? '4px' : '';
+      }, on);
+      const sectionTitle = (re) => page.locator('.sidebar .menu-section-title', { hasText: re }).first();
+      // Open a menu section, point at the main items with a caption each, close it again.
+      const tour = async (re, intro, items) => {
+        const title = sectionTitle(re);
+        await h.say(intro, 300);
+        await h.tap(title, 700);
+        for (const [href, caption, ms = 2000] of items) {
+          const link = page.locator(`.sidebar a[href="${href}"]`).first();
+          await hl(link, true);
+          if (caption) await h.say(caption, 0);
+          await h.point(link, ms);
+          await hl(link, false);
+        }
+        await h.tap(title, 500);
+      };
+
+      await h.go('/login');
+      await h.begin();
+      await h.say('Welcome to PetroMath. A quick tour for the owner of the station.', 2800);
+      await h.say('Go to petromath.co.in and sign in with your username and password.', 600);
+      await h.type('#username', process.env.TRAINING_USER || 'TRAINING-OWNER', 90);
+      await h.type('#pw', process.env.DEMO_PASSWORD, 70);
+      await h.say('Click Login.', 400);
+      await Promise.all([page.waitForURL(/\/home/, { timeout: 30000 }), h.tap('button[type=submit]', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(800);
+
+      await h.say('You land on Cashier Shift: every shift, with its sales and shortage or excess.', 600);
+      await h.point(page.locator('table tbody tr').first(), 2600);
+      await h.say('Your name and station are at the top left. Everything else is in this menu.', 600);
+      await h.point('.sidebar-user', 2600);
+
+      await tour(/daily operations/i, 'Daily Operations: the work of every day.', [
+        ['/home', 'Cashier Shift: enter and close each shift.'],
+        ['/day-bill', 'Day Bill: the GST bill for the day\'s cash and digital sales.'],
+        ['/cashflowhome', 'Day Close: cash in hand, deposits and expenses for the day.'],
+        ['/reports-dsr', 'Day-Close Report: the whole day on one page.'],
+        ['/transaction-upload', 'Upload Transactions: your bank and oil company statements.'],
+        ['/bank-statement', 'Bank and SAP Transactions: the uploaded lines.', 1600],
+      ]);
+      await tour(/^\s*transactions\s*$/i, 'Transactions: money and stock that come in.', [
+        ['/creditreceipts', 'Credit Receipts: payments from credit customers.'],
+        ['/lubes-invoice-home', 'Purchase Invoice: fuel and lube invoices, straight from the PDF.'],
+        ['/tankreceipts', 'Tank Receipts: each tanker load into your tanks.'],
+        ['/tank-dip/search', 'Tank Dip Entry: the daily dip readings.'],
+        ['/deadline', 'Deadlines & Renewals: licences, stamping and other due dates.'],
+      ]);
+      await tour(/^\s*reports\s*$/i, 'Reports.', [
+        ['/reports-creditsummary', 'Customer Balances: who owes you how much.'],
+        ['/reports', 'Customer Detailed Report: a customer\'s full statement.'],
+        ['/reports-digital-recon', 'Digital Reconciliation: Paytm, card and fleet card money received.'],
+        ['/reports-bank-recon', 'Bank Reconciliation: your books against the bank.'],
+        ['/reports-gst-summary', 'GST Summary and GST Returns: ready for filing.'],
+        ['/reports/stock/summary', 'Stock Summary and Stock Ledger: product stock.'],
+      ]);
+      await tour(/^\s*masters\s*$/i, 'Masters: your set-up. Done once, changed when needed.', [
+        ['/users', 'Users: logins for your managers and staff.'],
+        ['/products', 'Products: fuels, lubes and prices.'],
+        ['/credit-master', 'Customers: credit customers, their vehicles and logins.'],
+        ['/digital-vendors', 'Digital: Paytm, card and fleet card.'],
+        ['/bank-master', 'Bank Master: your bank accounts.'],
+        ['/employees', 'Employees: staff and their salary.'],
+      ]);
+      await tour(/^\s*accounting\s*$/i, 'Accounting: your books, written from your daily work.', [
+        ['/gl/control', 'GL Control: create the accounts each month.'],
+        ['/gl/day-book', 'Day Book and Ledger Report: every entry.'],
+        ['/gl/trial-balance', 'Trial Balance.', 1400],
+        ['/gl/profit-loss', 'Profit & Loss: your profit for any month.'],
+        ['/gl/balance-sheet', 'Balance Sheet.', 1400],
+        ['/gl/health-check', 'Health Check: finds entries that need attention.'],
+      ]);
+      await tour(/administration/i, 'Administration.', [
+        ['/dev-tracker', 'Support Tickets: raise a question or problem with the PetroMath team.'],
+        ['/password', 'Password Reset: reset a staff member\'s password.'],
+      ]);
+
+      await h.say('Stuck? Click Help at the top for step-by-step videos like this one.', 300);
+      await h.tap('a[href="/help"]', 0);
+      await page.waitForURL(/\/help/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.point('.help-toc', 2800);
+      await h.say('PetroMath: your whole station, in one place.', 2600);
+    },
+  },
+
   'customer-phone': {
     title: 'Your customer sees their statement on their phone',
     phone: true,
