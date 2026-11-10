@@ -1467,6 +1467,28 @@ const VIDEOS = {
       await h.say('The total is shown below the list.', 1600);
       await h.next('#new_digital_sales');
 
+      // ── Collections (optional tab) ──
+      await h.say('Collections and Employee Advance are optional tabs: you see them only if they are switched on for your station.', 3200);
+      await h.say('Collections: payments from credit customers received during the shift.', 500);
+      await h.tap(page.getByRole('button', { name: 'Add Collection' }), 500);
+      await h.say('Cash or digital, the customer and the amount.', 300);
+      await h.point('#credit-receipts-type-0', 700);
+      await h.pick('#credit-receipts-creditparty-0', 'KAVERI ROADWAYS', 400);
+      await h.type('#credit-receipts-amt-0', '15000');
+      await page.keyboard.press('Tab');
+      await h.say("It is added to the shift's cash, and the customer's balance comes down.", 2600);
+      await h.next('#new_credit_receipts');
+
+      // ── Employee Advance (optional tab) ──
+      await h.say('Employee Advance: cash given to staff from the shift: salary advance or salary paid.', 500);
+      await h.tap(page.getByRole('button', { name: 'Add Advance' }), 500);
+      await h.point('#employee-advance-type-0', 900);
+      await h.pick('#employee-advance-employee-0', 'RAJESH P', 400);
+      await h.type('#employee-advance-amt-0', '500');
+      await page.keyboard.press('Tab');
+      await h.say("It is taken out of the shift's cash and goes to the employee's ledger.", 2600);
+      await h.next('#new_employee_advance');
+
       // ── Expenses ──
       await h.say('Expenses: money paid out of the cash during the shift.', 600);
       await h.tap(page.getByRole('button', { name: 'Add new expense' }), 500);

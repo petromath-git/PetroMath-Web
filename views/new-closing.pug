@@ -464,7 +464,9 @@ block content
                         div.col &nbsp;
                     div.row.closing-next(align="center")
                         div.col
-                            button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+                            //- Next goes through the optional tabs when this station has them switched on
+                            - var afterDigitalTab = allowCreditReceiptsInClosing ? 'credit_receipts_tab' : (allowEmployeeAdvanceInClosing ? 'employee_advance_tab' : 'expenses_tab')
+                            button.btn.btn-primary(type="button", onClick=`trackMenuWithName('${afterDigitalTab}')`) Next &raquo;
 
                 if allowCreditReceiptsInClosing
                     div.tab-pane.fade#new_credit_receipts
@@ -504,7 +506,7 @@ block content
                             div.col &nbsp;
                         div.row.closing-next(align="center")
                             div.col
-                                button.btn.btn-primary(type="button", onClick="trackMenuWithName('expenses_tab')") Next &raquo;
+                                button.btn.btn-primary(type="button", onClick=`trackMenuWithName('${allowEmployeeAdvanceInClosing ? 'employee_advance_tab' : 'expenses_tab'}')`) Next &raquo;
 
                 if allowEmployeeAdvanceInClosing
                     div.tab-pane.fade#new_employee_advance
