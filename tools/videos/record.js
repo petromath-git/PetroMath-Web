@@ -120,6 +120,7 @@ function overlayScript(phone) {
     ptr.style.transition = 'none';
     ptr.style.transform = `translate(${x}px, ${y}px)`;
     window.__vSay(store.get('__vcap') || '');
+    if (window.__vBarRefresh) window.__vBarRefresh(); // page title is known now
   }
   window.__vSay = (text) => {
     store.set('__vcap', text || '');
@@ -169,6 +170,119 @@ function overlayScript(phone) {
     const r = document.querySelector(`#__vpick .f[data-i="${i}"] .n`);
     document.querySelector('#__vpick .name').textContent = r ? r.textContent : '';
   };
+  // ── Look-alike browser (the screencast shows only the page, not the browser around it) ──
+  // A toolbar with the address, shown while sessionStorage __vbar is 'desktop' or 'phone'. The page is pushed
+  // down under it (body transform, so the page's own fixed bars move with it).
+  const BAR_H = { desktop: 74, phone: 56 };
+  const LOCK = '<svg viewBox="0 0 16 16" width="13" height="13"><path fill="#5f6368" d="M8 1a3 3 0 0 0-3 3v2H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-1V4a3 3 0 0 0-3-3zm-2 5V4a2 2 0 1 1 4 0v2H6z"/></svg>';
+  const shownUrl = (mode) => {
+    const host = location.host.replace(/^beta\./, '');
+    const p = location.pathname === '/' ? '' : location.pathname;
+    return mode === 'phone' ? host : host + p;
+  };
+  function barShow(mode) {
+    if (!mode || !BAR_H[mode] || !document.documentElement) return;
+    let css = document.getElementById('__vbarcss');
+    if (!css) { css = document.createElement('style'); css.id = '__vbarcss'; document.documentElement.appendChild(css); }
+    const H = BAR_H[mode];
+    css.textContent = `
+      body { transform: translateY(${H}px); min-height: calc(100vh - ${H}px); }
+      #__vbar { position: fixed; left: 0; right: 0; top: 0; z-index: 2147483640; font: 14px system-ui, "Segoe UI", Roboto, sans-serif; color: #202124; }
+      #__vbar .omni { flex: 1; display: flex; align-items: center; gap: 8px; background: #f1f3f4; color: #202124; white-space: nowrap; overflow: hidden; }
+      #__vbar .omni .ph { color: #80868b; }
+      #__vbar .omni .caret { display: inline-block; width: 1.5px; height: 1.1em; background: #1a73e8; margin-left: -6px; animation: __vblink 1s steps(1) infinite; }
+      @keyframes __vblink { 50% { opacity: 0; } }
+      #__vbar.d .tabs { height: 34px; background: #dee1e6; display: flex; align-items: flex-end; padding-left: 8px; }
+      #__vbar.d .tab { height: 28px; width: 230px; background: #fff; border-radius: 8px 8px 0 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; font-size: 12px; }
+      #__vbar.d .tab img { width: 16px; height: 16px; border-radius: 3px; }
+      #__vbar.d .tool { height: 40px; background: #fff; display: flex; align-items: center; gap: 16px; padding: 0 14px; border-bottom: 1px solid #dadce0; color: #5f6368; font-size: 17px; }
+      #__vbar.d .omni { height: 30px; border-radius: 15px; padding: 0 14px; font-size: 14px; }
+      #__vbar.p { height: 56px; background: #fff; display: flex; align-items: center; gap: 12px; padding: 0 12px; border-bottom: 1px solid #e0e0e0; color: #444; font-size: 20px; }
+      #__vbar.p .omni { height: 40px; border-radius: 20px; padding: 0 14px; font-size: 15px; }
+      #__vbar.p .n { width: 20px; height: 20px; border: 2px solid #444; border-radius: 4px; font: 700 11px/16px system-ui; text-align: center; }
+      #__vnewtab { position: fixed; left: 0; right: 0; bottom: 0; top: ${H}px; background: #fff; z-index: 2147483639; }`;
+    let bar = document.getElementById('__vbar');
+    if (!bar) { bar = document.createElement('div'); bar.id = '__vbar'; document.documentElement.appendChild(bar); }
+    const title = (document.title || 'New tab').replace(/^PetroMath:?\s*/, 'PetroMath ').trim() || 'PetroMath';
+    const omni = `<div class="omni">${LOCK}<span class="u">${shownUrl(mode)}</span></div>`;
+    bar.className = mode === 'phone' ? 'p' : 'd';
+    bar.innerHTML = mode === 'phone'
+      ? `<span>⌂</span>${omni}<span class="n">1</span><span>⋮</span>`
+      : `<div class="tabs"><div class="tab"><img src="/images/app-icons/icon-192.png" alt="">${title}</div></div>
+         <div class="tool"><span>←</span><span>→</span><span>↻</span>${omni}<span>⋮</span></div>`;
+  }
+  window.__vBarShow = (mode) => { store.set('__vbar', mode); barShow(mode); };
+  window.__vBarHide = () => {
+    store.set('__vbar', '');
+    ['__vbar', '__vbarcss', '__vnewtab'].forEach((id) => { const e = document.getElementById(id); if (e) e.remove(); });
+  };
+  // A blank new tab with an empty address box; __vOmni types into it; __vGo reveals the page underneath.
+  window.__vNewTab = () => {
+    const d = document.createElement('div');
+    d.id = '__vnewtab';
+    document.documentElement.appendChild(d);
+    const tab = document.querySelector('#__vbar .tab');
+    if (tab) tab.innerHTML = 'New tab';
+    window.__vOmni('');
+  };
+  window.__vOmni = (text) => {
+    const u = document.querySelector('#__vbar .u');
+    if (!u) return;
+    u.innerHTML = text ? `${text}<span class="caret"></span>` : '<span class="caret"></span><span class="ph">Search or type web address</span>';
+    const lock = document.querySelector('#__vbar .omni svg');
+    if (lock) lock.style.display = 'none';
+  };
+  window.__vGo = () => {
+    const n = document.getElementById('__vnewtab');
+    if (n) n.remove();
+    barShow(store.get('__vbar'));
+  };
+  // Android Chrome's "Install app" dialog.
+  window.__vInstallDialog = () => {
+    const d = document.createElement('div');
+    d.id = '__vinst';
+    d.style.cssText = 'position:fixed;inset:0;z-index:2147483645;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;font-family:system-ui,Roboto,sans-serif';
+    d.innerHTML = `<div style="width:calc(100% - 32px);margin-bottom:24px;background:#fff;border-radius:28px;padding:24px 24px 18px;color:#1f1f1f">
+      <div style="font-size:22px;margin-bottom:18px">Install app</div>
+      <div style="display:flex;align-items:center;gap:14px"><img src="/images/app-icons/icon-192.png" style="width:48px;height:48px;border-radius:12px">
+      <div><div style="font-size:16px;font-weight:600">PetroMath</div><div style="font-size:13px;color:#5f6368">petromath.co.in</div></div></div>
+      <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px">
+      <button class="no" style="border:0;background:none;color:#0b57d0;font:600 15px system-ui;padding:10px 14px">Cancel</button>
+      <button class="ok" style="border:0;background:#0b57d0;color:#fff;border-radius:20px;font:600 15px system-ui;padding:10px 22px">Install</button></div></div>`;
+    document.documentElement.appendChild(d);
+  };
+  // The phone's home screen with the new PetroMath icon, and the app's launch splash.
+  window.__vHomeScreen = () => {
+    const apps = [['Phone', 'bi-telephone-fill', '#1e8e3e'], ['Messages', 'bi-chat-dots-fill', '#1a73e8'], ['Camera', 'bi-camera-fill', '#5f6368'],
+      ['Gallery', 'bi-images', '#e8710a'], ['Calendar', 'bi-calendar3', '#d93025'], ['Clock', 'bi-alarm-fill', '#3c4043'],
+      ['Settings', 'bi-gear-fill', '#607d8b'], ['Browser', 'bi-globe2', '#1967d2']];
+    const icon = ([n, i, c]) => `<div style="display:flex;flex-direction:column;align-items:center;gap:6px"><div style="width:58px;height:58px;border-radius:50%;background:${c};display:flex;align-items:center;justify-content:center;color:#fff;font-size:26px"><i class="bi ${i}"></i></div><span>${n}</span></div>`;
+    const d = document.createElement('div');
+    d.id = '__vhome';
+    d.style.cssText = 'position:fixed;inset:0;z-index:2147483642;background:linear-gradient(165deg,#0f2a5c 0%,#145a6b 55%,#1d6b52 100%);color:#fff;font-family:system-ui,Roboto,sans-serif;display:flex;flex-direction:column';
+    const now = new Date();
+    const time = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const day = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;padding:10px 18px;font-size:14px"><span>${time}</span><span>▲ ◢ ▮</span></div>
+      <div style="padding:34px 26px 0;font-size:24px">${day}</div>
+      <div style="flex:1"></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);row-gap:22px;padding:0 14px;font-size:12px">
+        ${apps.map(icon).join('')}
+        <div class="pm" style="display:flex;flex-direction:column;align-items:center;gap:6px;animation:__vpop .5s ease-out"><img src="/images/app-icons/icon-192.png" style="width:58px;height:58px;border-radius:50%"><span>PetroMath</span></div>
+      </div>
+      <div style="margin:26px 18px 26px;height:48px;border-radius:24px;background:rgba(255,255,255,.85)"></div>
+      <style>@keyframes __vpop { from { transform: scale(.2); opacity: 0 } to { transform: scale(1); opacity: 1 } }</style>`;
+    document.documentElement.appendChild(d);
+  };
+  window.__vSplash = () => {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:#212529;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;font:700 22px system-ui,Roboto,sans-serif';
+    d.innerHTML = '<img src="/images/app-icons/icon-192.png" style="width:110px;height:110px;border-radius:26px">PetroMath';
+    document.documentElement.appendChild(d);
+  };
+  window.__vBarRefresh = () => barShow(store.get('__vbar'));
+  barShow(store.get('__vbar'));
+
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready); else ready();
 }
 
@@ -277,6 +391,22 @@ function makeHelpers(page, t0) {
       });
       await h.say(captions[1], 5400);
       await page.evaluate(() => document.getElementById('__vdoc').remove());
+    },
+    // Show the look-alike browser toolbar on a blank new tab (the real page is already loaded underneath).
+    async newTab(mode) {
+      await page.evaluate((m) => { window.__vBarShow(m); window.__vNewTab(); }, mode);
+    },
+    // Type an address into the look-alike toolbar, then "press Enter" to reveal the page.
+    async typeUrl(text) {
+      const omni = page.locator('#__vbar .omni');
+      await h.point(omni, 500);
+      for (let i = 1; i <= text.length; i++) {
+        await page.evaluate((t) => window.__vOmni(t), text.slice(0, i));
+        await pause(85);
+      }
+      await pause(700);
+      await page.evaluate(() => window.__vGo());
+      await pause(900);
     },
     // Click a Next / tab button and wait for the draft to save.
     async next(paneSel, ms = 900) {
@@ -788,10 +918,17 @@ const VIDEOS = {
         await h.tap(title, 500);
       };
 
-      await h.go('/login');
+      await h.go('/'); // the website, hidden under a blank new tab until the address is typed
+      await h.newTab('desktop');
       await h.begin();
       await h.say('Welcome to PetroMath. A quick tour for the owner of the station.', 2800);
-      await h.say('Go to petromath.co.in and sign in with your username and password.', 600);
+      await h.say('Open your browser and type petromath.co.in.', 300);
+      await h.typeUrl('petromath.co.in');
+      await h.say('This is the PetroMath website. Click Sign in at the top right.', 600);
+      await Promise.all([page.waitForURL(/\/login/), h.tap(page.locator('a[href="/login"]').first(), 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Sign in with the username and password PetroMath gave you.', 600);
       await h.type('#username', process.env.TRAINING_USER || 'TRAINING-OWNER', 90);
       await h.type('#pw', process.env.DEMO_PASSWORD, 70);
       await h.say('Click Login.', 400);
@@ -855,6 +992,95 @@ const VIDEOS = {
       await h.pause(600);
       await h.point('.help-toc', 2800);
       await h.say('PetroMath: your whole station, in one place.', 2600);
+    },
+  },
+
+  // Open PetroMath on an Android phone, install it as an app, and look around its home screen (the phone menu).
+  // Chrome's install prompt can't fire in a recording, so the app's own install banner is fed a stand-in prompt
+  // that shows a look-alike of Chrome's dialog. Same login as the intro (run node training-login.js first).
+  'phone-app': {
+    title: 'Install PetroMath on your phone',
+    phone: true,
+    user: 'none',
+    async run(h, page) {
+      await h.go('/');
+      await h.newTab('phone');
+      await h.begin();
+      await h.say('PetroMath works on your phone too, and installs like an app.', 2600);
+      await h.say('Open Chrome on your phone and type petromath.co.in.', 300);
+      await h.typeUrl('petromath.co.in');
+      await h.say('Tap Sign in.', 500);
+      await Promise.all([page.waitForURL(/\/login/), h.tap(page.locator('a[href="/login"]:visible').first(), 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Sign in with your username and password.', 400);
+      await h.type('#username', process.env.TRAINING_USER || 'TRAINING-OWNER', 90);
+      await h.type('#pw', process.env.DEMO_PASSWORD, 70);
+      await Promise.all([page.waitForURL(/\/m\b/, { timeout: 30000 }), h.tap('button[type=submit]', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(700);
+
+      const notNow = page.locator('button:visible', { hasText: /^\s*Not now\s*$/ }).first();
+      if (await notNow.count()) {
+        await h.say('PetroMath can sign you in with your fingerprint next time. Turn it on now, or later.', 3000);
+        await h.tap(notNow, 600);
+      }
+
+      // Install: the app's own banner, with a stand-in for Chrome's install prompt
+      await page.evaluate(() => {
+        const e = new Event('beforeinstallprompt', { cancelable: true });
+        e.prompt = () => window.__vInstallDialog();
+        e.userChoice = new Promise((res) => { window.__vInstalled = res; });
+        window.dispatchEvent(e);
+      });
+      await h.top(300);
+      await h.say('Now install the app. Tap Install on the "Get the PetroMath app" banner.', 600);
+      await h.point('#pwaHint', 1200);
+      await h.tap('#pwaHintInstall', 900);
+      await h.say('Chrome asks to confirm. Tap Install.', 600);
+      await h.tap('#__vinst .ok', 400, { noClick: true });
+      await page.evaluate(() => { document.getElementById('__vinst').remove(); window.__vInstalled({ outcome: 'accepted' }); });
+      await h.pause(500);
+
+      await page.evaluate(() => window.__vHomeScreen());
+      await h.say('PetroMath is now on your home screen, like any other app.', 2800);
+      await h.say('Tap it to open.', 400);
+      await h.tap('#__vhome .pm', 300, { noClick: true });
+      await page.evaluate(() => { window.__vBarHide(); window.__vSplash(); });
+      await h.pause(1200);
+      await page.goto(`${BASE}/app`, { waitUntil: 'networkidle' }); // the installed app starts at /app
+      await h.pause(600);
+
+      // The app's home screen is the phone menu
+      await h.say('The app opens full screen, already signed in.', 2400);
+      const hint = page.locator('#pwaHint:visible');
+      await h.say('Your name and station are at the top.', 400);
+      await h.point('.mhome-who', 1800);
+      if (await hint.count()) await hint.evaluate((e) => { e.hidden = true; });
+      await h.say('Every screen is a tile, grouped like the menu on a computer.', 400);
+      await h.show(page.locator('.mhome-section').first(), 2600);
+      await h.say('Tap "more" to see the rest of a section.', 400);
+      await h.tap(page.locator('.mhome-section').first().locator('.mhome-more'), 1800);
+      for (const re of [/^\s*transactions\s*$/i, /^\s*reports\s*$/i, /^\s*masters\s*$/i, /^\s*accounting\s*$/i]) {
+        const sec = page.locator('.mhome-section', { has: page.locator('.mhome-section-title', { hasText: re }) }).first();
+        if (!(await sec.count())) continue;
+        const name = (await sec.locator('.mhome-section-title').textContent()).trim();
+        await h.say(`${name.charAt(0)}${name.slice(1).toLowerCase()}.`, 0);
+        await h.show(sec, 1800);
+      }
+      await h.top(500);
+      await h.say('Or search for any screen by name.', 300);
+      await h.type('#mhomeSearch', 'profit', 120);
+      await h.pause(1800);
+      await h.type('#mhomeSearch', 'bank', 120);
+      await h.pause(1800);
+      await page.locator('#mhomeSearch').fill('');
+      await page.locator('#mhomeSearch').dispatchEvent('input');
+      await h.say('Tap a tile to open it.', 400);
+      await h.tap(page.locator('.mhome-tile', { hasText: 'Cashier Shift' }).first(), 0);
+      await page.waitForLoadState('networkidle');
+      await h.pause(1600);
+      await h.say('PetroMath: your station, in your pocket.', 2600);
     },
   },
 
