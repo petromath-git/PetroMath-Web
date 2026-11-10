@@ -106,6 +106,7 @@ block content
           li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
           li: a(href='#lube-invoice') Upload a lube purchase invoice PDF
           li: a(href='#accounting') Create the accounts and read the Profit &amp; Loss
+          li: a(href='#day-close') Close the day, and read the Day-Close Report
 
     section#shift
       h2 1. Enter and close a shift
@@ -526,3 +527,53 @@ block content
         li Dates with a shift still in draft are skipped. Close the shift, then run Create Accounting again.
         li If an event shows Error, open it with the eye button, fix the cause (usually a missing ledger), then Retry.
         li A wrong figure in the P&amp;L usually comes from a wrongly tagged bank or SAP line: open the ledger, find the line, and correct its tag.
+
+    section#day-close
+      h2 12. Close the day, and read the Day-Close Report
+      +howVideo('day-close', 'close the day and read the Day-Close Report')
+      p Once all of a day's shifts are closed, close the day's cash. The Day-Close Report then gives a snapshot of the whole day.
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Day Close
+          | . The date to close is filled in; click
+          strong  Generate Day Close
+          |  (or
+          strong  Continue Day Close
+          |  for a day already started).
+        li
+          strong InFlow
+          |  (Balance B/F, shift collections, 2T oil, cashier excess) and
+          strong  OutFlow
+          |  (cashier shortage, shift expenses) are filled in from the shifts.
+        li
+          | Add what PetroMath can't know with
+          strong  +
+          | : cash deposited in the bank, a cash receipt from a customer, salary paid.
+        li
+          | Count the notes in the cash box under
+          strong  Denominations
+          | . The
+          strong  Difference
+          |  is the cash that should be there.
+        li
+          | Click
+          strong  SAVE
+          | , then
+          strong  CLOSE
+          |  and confirm. The Day-Close Report opens.
+      h3 What the Day-Close Report shows
+      ul
+        li Sales in litres and in rupees (cash, digital, credit), lubes, digital sales, credit bills and expenses.
+        li Each cashier shift with its excess or shortage; tanker loads received; payments from customers.
+        li
+          strong Credit Customer Balances
+          | : the top 3 customers who owe you the most, and a
+          strong  Total
+          |  row for all your credit customers together. On the 15th and the last day of the month, every customer is listed.
+        li Prices, fuel offtake this month vs last month and last year, nozzle readings, the day's cash flow and cash excess or shortage, bank and SAP lines, and deadlines.
+        li Pick any date and click Go; the green button downloads it as a PDF to share.
+      h3 Good to know
+      ul
+        li A day can be closed only after the day before it is closed.
+        li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.

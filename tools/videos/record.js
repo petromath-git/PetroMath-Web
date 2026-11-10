@@ -287,7 +287,7 @@ function overlayScript(phone) {
 }
 
 function makeHelpers(page, t0) {
-  const marks = { start: 0 };
+  const marks = { start: 0, cuts: [] };
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
@@ -391,6 +391,14 @@ function makeHelpers(page, t0) {
       });
       await h.say(captions[1], 5400);
       await page.evaluate(() => document.getElementById('__vdoc').remove());
+    },
+    // Wait for slow server work, and cut most of the wait out of the video (keeps `keep` s either side).
+    async skip(work, keep = 1.2) {
+      const a = now();
+      const r = await work;
+      const b = now();
+      if (b - a > keep * 2.5) marks.cuts.push([a + keep, b - keep / 2]);
+      return r;
     },
     // Show the look-alike browser toolbar on a blank new tab (the real page is already loaded underneath).
     async newTab(mode) {
@@ -565,6 +573,10 @@ async function uploadWalkthrough(h, page, v) {
   await h.point(page.locator('table tbody tr').first(), 2600);
   await h.say('From here they are used for reconciliation and the accounts.', 2600);
 }
+
+// The day the Day Close video continues and closes at MUE (must be MUE's latest day close; not the 15th or a month
+// end, so the report shows the Top 3 credit customers) and the bank deposit line the video types back in.
+const DAY_CLOSE = { day: '2026-11-09', bankType: 'To Bank CC246', bankAmount: 423880 };
 
 // The month the accounting video books and reports on.
 const ACCT_MONTH = { y: 2026, m: 1, label: 'January 2026' };
@@ -1000,6 +1012,118 @@ const VIDEOS = {
       await h.pause(600);
       await h.point('.help-toc', 2800);
       await h.say('PetroMath: your whole station, in one place.', 2600);
+    },
+  },
+
+  // Day Close and the Day-Close Report, at the beta training station (MUE) on DAY_CLOSE.day. Before recording, that
+  // day close is put back to DRAFT the way Reopen does (cashflow-closing-dao reopenCashflow) and its typed bank
+  // deposit line is removed, so the video can continue the day, add the deposit and close it again.
+  'day-close': {
+    title: 'Day Close and the Day-Close Report',
+    user: 'training',
+    async prepare() {
+      const db = await betaDb();
+      try {
+        const [[cf]] = await db.query("SELECT cashflow_id, closing_status FROM t_cashflow_closing WHERE location_code = 'MUE' AND cashflow_date = ?", [DAY_CLOSE.day]);
+        if (!cf) throw new Error(`No MUE day close on ${DAY_CLOSE.day}`);
+        const [[later]] = await db.query("SELECT COUNT(*) n FROM t_cashflow_closing WHERE location_code = 'MUE' AND cashflow_date > ? AND closing_status = 'CLOSED'", [DAY_CLOSE.day]);
+        if (later.n) throw new Error(`A later MUE day close is CLOSED; pick the latest day for DAY_CLOSE.day`);
+        if (cf.closing_status === 'CLOSED') {
+          await db.query("UPDATE t_cashflow_closing SET closing_status = 'DRAFT', updation_date = NOW() WHERE cashflow_id = ?", [cf.cashflow_id]);
+          await db.query(`UPDATE t_receipts tr JOIN t_cashflow_transaction tct ON tct.source_table = 't_receipts' AND tct.source_id = tr.treceipt_id
+                          SET tr.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [cf.cashflow_id]);
+          await db.query(`UPDATE t_employee_ledger el JOIN t_cashflow_transaction tct ON tct.source_table = 't_employee_ledger' AND tct.source_id = el.ledger_id
+                          SET el.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [cf.cashflow_id]);
+        }
+        const [del] = await db.query("DELETE FROM t_cashflow_transaction WHERE cashflow_id = ? AND calc_flag = 'N' AND type = ?", [cf.cashflow_id, DAY_CLOSE.bankType]);
+        console.log(`  day close ${cf.cashflow_id} (${DAY_CLOSE.day}) back to DRAFT; removed ${del.affectedRows} bank deposit line(s)`);
+      } finally { await db.end(); }
+    },
+    async run(h, page) {
+      const [y, m, d] = DAY_CLOSE.day.split('-');
+      await h.go('/home');
+      await h.begin();
+      await h.say('Day Close: once a day, after all of the day\'s shifts are closed, the cash for the whole day is closed.', 3200);
+      await h.say('Open Daily Operations, then Day Close.', 600);
+      await h.tap('.sidebar a[href="/cashflowhome"]', 0);
+      await page.waitForURL(/\/cashflowhome/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Each day you pick the date and click Generate Day Close. PetroMath brings in the day\'s shifts.', 600);
+      await h.point('.card.border-primary', 2800);
+      await h.say(`Here ${d}-${MONTH_SHORT[Number(m) - 1]} is already generated (Draft). Click Continue Day Close.`, 400);
+      const cont = page.locator('a', { hasText: 'Continue Day Close' });
+      await h.tap(cont, 0, { noClick: true });
+      await h.skip(Promise.all([page.waitForURL(/\/cashflow\?id=/, { timeout: 120000 }), cont.click()])
+        .then(() => page.waitForLoadState('networkidle')));
+      await h.pause(600);
+
+      await h.say("At the top: the day's closed shifts, and the cash each cashier handed over.", 600);
+      await h.point(page.locator('.card', { hasText: 'Cashier Shifts Contributing' }).first(), 3000);
+      await h.say("InFlow: yesterday's cash balance (Balance B/F), the shift collections, 2T oil and cashier excess.", 600);
+      await h.point('#cashflow-credit-table', 3600);
+      await h.say('OutFlow: cashier shortage and the expenses entered in the shifts. PetroMath fills all of these in.', 600);
+      await h.point('#cashflow-debit-table', 3400);
+
+      await h.say('Add what PetroMath cannot know. Here: the cash deposited in the bank. Click +.', 600);
+      await h.tap('#debit-add-new', 700);
+      const row = page.locator('#cashflow-debit-table tr:visible', { has: page.locator('select[id^="cashflow-debit-transaction-"]') }).first();
+      await h.pick(row.locator('select[id^="cashflow-debit-transaction-"]'), DAY_CLOSE.bankType, 600);
+      await h.type(row.locator('input[id^="cashflow-debit-remarks-"]'), 'BANK CHALLAN');
+      await h.type(row.locator('input[id^="cashflow-debit-amt-"]'), String(DAY_CLOSE.bankAmount));
+      await page.keyboard.press('Tab');
+      await h.pause(600);
+      await h.say('The Difference is the cash that should be in your cash box now.', 600);
+      await h.point('#cashflow-difference-total', 2800);
+      await h.say('Count the notes and enter how many of each. Here they were counted already: 33 rupees short.', 600);
+      await h.point('#denominations_total', 3200);
+
+      await h.say('Click SAVE, then CLOSE.', 400);
+      await h.tap(page.locator('.cashflow-actions button', { hasText: 'SAVE' }), 300);
+      const idle = () => page.waitForFunction(() => !/block/.test((document.getElementById('ajax-loading') || {}).className || ''), null, { timeout: 120000 });
+      await h.skip((async () => { await page.waitForLoadState('networkidle'); await idle(); })());
+      await h.pause(1200);
+      const close = page.locator('#cashflow-close');
+      await h.tap(close, 300, { noClick: true });
+      await page.evaluate(() => { window.confirm = () => true; });
+      await h.dialog('Please confirm if you want to freeze the closing?', 'Confirm with OK. A closed day can no longer be changed.');
+      await h.skip(Promise.all([page.waitForURL(/\/reports-dsr/, { timeout: 120000 }), close.click()])
+        .then(() => page.waitForLoadState('networkidle')));
+      await h.pause(1500);
+
+      // The Day-Close Report
+      const sec = async (id, caption, ms = 3000) => {
+        await h.say(caption, 0);
+        await h.show(`#${id}`, ms);
+      };
+      await h.top(300);
+      await h.say("Closing the day opens its Day-Close Report: the whole day's business on one page.", 3000);
+      await h.say('It is ready for any day: pick the date and click Go. The green button downloads it as a PDF to share.', 600);
+      await h.point('#fromClosingDate', 1600);
+      await h.point('#goButton', 1200);
+      await h.point('button.btn-success[onclick*="generatePDF"]', 1800);
+      await sec('salesSummary-table-container', 'Sales in litres for each product: meter flow, testing, credit sales and the rest (cash and digital).', 4000);
+      await sec('salesCollection-table-container', 'Sales in rupees: how much came as cash, digital and credit, and the total.', 3400);
+      await sec('cashsale-table-container', 'Lubes and other items sold.');
+      await sec('cardsale-table-container', 'Digital sales: Paytm, card and fleet card.');
+      await sec('creditsale-table-container', 'Every credit bill of the day.');
+      await sec('expense-table-container', 'The day\'s expenses.');
+      await sec('shiftsummary-table-container', 'Each cashier shift: litres sold of each product, and its excess or shortage.', 3600);
+      await sec('stockreceipt-table-container', 'Tanker loads received, with the invoice number and amount.', 3200);
+      await sec('creditreceipt-table-container', 'Payments received from credit customers.', 2400);
+      await sec('creditoutstanding-table-container', 'Credit customer balances: the top 3 customers who owe you the most, with the notional interest at 12% for the day.', 4800);
+      await h.say('The last row, Total, is the balance of ALL your credit customers together: your money in the market.', 0);
+      await h.point(page.locator('#creditoutstanding-table-container tr', { hasText: 'Total' }).last(), 4400);
+      await h.say('On the 15th and on the last day of the month, every customer with a balance is listed.', 3400);
+      await sec('product-price-table-container', "The day's selling prices.", 2400);
+      await sec('monthlyofftake-table-container', 'Fuel bought (offtake) in kilolitres: this month, last month and the same month last year.', 3800);
+      await sec('reading-table-container', 'Opening and closing meter readings of every nozzle, testing and sale.', 3600);
+      await sec('cashflow-table-container', 'The Day Close you just closed: cash in and cash out.', 3200);
+      await sec('denomresult-table-container', 'The cash balance against the notes counted: the day\'s cash excess or shortage.', 3600);
+      await sec('banktransaction-table-container', "The day's bank and oil company (SAP) statement lines, once uploaded.", 3400);
+      await sec('deadline-table-container', 'And what is due: renewals, rent and other deadlines.', 3000);
+      await h.say('A snapshot of the whole day. Read it every morning.', 2600);
+      await h.say('PetroMath: every day, closed and accounted for.', 2400);
     },
   },
 
@@ -1517,6 +1641,19 @@ const VIDEOS = {
 
 // Screencast frames -> MP4. Chrome sends a frame only when the screen changes, so each frame is held until the next one.
 function toMp4(dir, frames, mp4, marks, total, outWidth = VIEW.width) {
+  // Remove the cut spans (h.skip): later frames move earlier, frames inside a cut get no time.
+  const cuts = (marks.cuts || []).slice().sort((x, y) => x[0] - y[0]);
+  const cutTime = (t) => {
+    let shift = 0;
+    for (const [a, b] of cuts) {
+      if (t >= b) shift += b - a;
+      else if (t > a) return a - shift;
+    }
+    return t - shift;
+  };
+  frames = frames.map((f) => ({ ...f, t: cutTime(f.t) }));
+  total = cutTime(total);
+  marks = { ...marks, start: cutTime(marks.start) };
   const list = [];
   frames.forEach((f, i) => {
     const next = i + 1 < frames.length ? frames[i + 1].t : total;
@@ -1549,7 +1686,7 @@ async function record(browser, name) {
     const users = { admin: process.env.DEMO_ADMIN_USER, training: process.env.TRAINING_USER || 'TRAINING-OWNER' };
     await lp.fill('#username', users[v.user] || process.env.DEMO_USER);
     await lp.fill('#pw', process.env.DEMO_PASSWORD);
-    await Promise.all([lp.waitForNavigation(), lp.click('button[type=submit]')]);
+    await Promise.all([lp.waitForNavigation({ timeout: 90000 }), lp.click('button[type=submit]')]);
     if (lp.url().includes('/login')) {
       throw new Error(`Sign-in failed. Run node ${v.user === 'training' ? 'training-login.js' : 'demo-location.js'} first.`);
     }
