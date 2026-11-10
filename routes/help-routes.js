@@ -1,12 +1,11 @@
-// User guide with how-to videos (ticket #471): /help, for everyone who signs in.
-// The videos are recorded by tools/videos (made-up DEMO station on beta) into public/videos.
+// User guide with how-to videos (ticket #471): /help, open to everyone, no sign-in needed
+// (linked from the website and the Login page). Signed in, it shows inside the app's menu.
+// The videos are recorded by tools/videos (beta) into public/videos.
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
-const login = require('connect-ensure-login');
 
 const router = express.Router();
-const isLoginEnsured = login.ensureLoggedIn({});
 
 // Version tag per video file, so browsers and Cloudflare fetch a re-recorded video at once
 // (public/ is served with a 7-day cache).
@@ -18,10 +17,11 @@ if (fs.existsSync(VIDEO_DIR)) {
     }
 }
 
-router.get('/', isLoginEnsured, (req, res) => {
+router.get('/', (req, res) => {
     res.render('help', {
         title: 'Help',
         user: req.user,
+        messages: {}, // the signed-out layout reads messages.*
         origin: `${req.protocol}://${req.get('host')}`,
         videoV,
     });

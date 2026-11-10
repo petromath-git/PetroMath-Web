@@ -26,6 +26,12 @@ block content
     .help-steps dd { margin-left: 1.25rem; }
 
   .container-fluid.help-page
+    if !user
+      .d-flex.justify-content-end.mb-2
+        a.btn.btn-sm.btn-outline-secondary.mr-2(href='/') PetroMath website
+        a.btn.btn-sm.btn-warning(href='/login')
+          i.bi.bi-box-arrow-in-right.me-1
+          |  Sign in
     h3.mb-1
       i.bi.bi-question-circle.me-2
       | Help
@@ -150,6 +156,12 @@ block content
         li
           strong Digital Sales:
           |  UPI, card and fleet card payments received: vendor and amount.
+        li
+          strong Collections
+          |  (optional, only if switched on for your station): payments from credit customers received during the shift: cash or digital, customer and amount. The customer's balance comes down.
+        li
+          strong Employee Advance
+          |  (optional, only if switched on for your station): cash given to staff from the shift, as salary advance or salary paid. It goes to the employee's ledger.
         li
           strong Expenses:
           |  money paid out of the cash during the shift. The usual amount fills in; change it if needed.
