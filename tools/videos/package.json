@@ -1,0 +1,18 @@
+{
+  "name": "petromath-help-videos",
+  "private": true,
+  "description": "Records PetroMath's how-to videos for the Help page (ticket #471). Developer tool, not part of the app.",
+  "scripts": {
+    "reset": "node demo-location.js",
+    "record": "node record.js",
+    "all": "node demo-location.js && node training-login.js && node record.js intro phone-app shift-closing bank-upload sap-upload customer-statement customer-phone paytm-recon add-customer add-product fuel-invoice lube-invoice accounting day-close"
+  },
+  "dependencies": {
+    "bcryptjs": "2.4.3",
+    "dotenv": "16.6.1",
+    "ffmpeg-static": "5.3.0",
+    "mysql2": "3.11.0",
+    "playwright": "1.65.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -244,6 +244,9 @@ html
             .user-info
               small Logged in as 
               strong #{user.Person_Name}
+            a.btn.btn-sm.btn-outline-secondary(href='/help' title='How to use PetroMath')
+              i.bi.bi-question-circle.me-1
+              | Help
             a.logout-btn(href='/logout') Logout
 
         .content-wrapper
