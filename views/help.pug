@@ -26,6 +26,12 @@ block content
     .help-steps dd { margin-left: 1.25rem; }
 
   .container-fluid.help-page
+    if !user
+      .d-flex.justify-content-end.mb-2
+        a.btn.btn-sm.btn-outline-secondary.mr-2(href='/') PetroMath website
+        a.btn.btn-sm.btn-warning(href='/login')
+          i.bi.bi-box-arrow-in-right.me-1
+          |  Sign in
     h3.mb-1
       i.bi.bi-question-circle.me-2
       | Help
