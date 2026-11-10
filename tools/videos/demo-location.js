@@ -24,7 +24,13 @@ const CONFIG = {
   SHOW_2T_SALES_TAB: 'N',
   SHOW_EXSHORT_BREAKDOWN: 'Y',
   GOLIVE_DATE: '2026-01-01', // else bank lines dated before the first DEMO shift are skipped as "before go-live"
+  // The two optional shift tabs (on at about ten stations): customer payments taken in the shift, and staff advances.
+  ALLOW_CREDIT_RECEIPTS_IN_CLOSING: 'Y',
+  ALLOW_EMPLOYEE_ADVANCE_IN_CLOSING: 'Y',
 };
+// Employees (Employee Advance tab): code, name, designation
+const EMPLOYEES = [['E001', 'ARUN KUMAR', 'Cashier'], ['E002', 'SELVI M', 'Cashier'], ['E003', 'RAJESH P', 'Pump Attendant'],
+  ['E004', 'MURUGAN S', 'Cashier']];
 // name, price, colour
 const FUELS = [['MS', 100.80, '217,234,211'], ['HSD', 92.40, '172,197,220'], ['XP95', 108.50, '234,209,220']];
 // name, price, unit (default NOS). The last four are how MUE stocks the SERVO items on the real Sakthi Ganesh
@@ -185,6 +191,12 @@ async function main() {
       if (!(await one('SELECT Person_id FROM m_persons WHERE location_code = ? AND Person_Name = ?', [LOC, name]))) {
         await q(`INSERT INTO m_persons (Person_Name, Role, location_code, effective_start_date, effective_end_date, created_by, updated_by, creation_date)
                  VALUES (?, ?, ?, '2026-01-01', '9999-12-31', 'video-demo', 'video-demo', NOW())`, [name, role, LOC]);
+      }
+    }
+    for (const [code, name, designation] of EMPLOYEES) {
+      if (!(await one('SELECT employee_id FROM m_employee WHERE location_code = ? AND employee_code = ?', [LOC, code]))) {
+        await q(`INSERT INTO m_employee (employee_code, location_code, name, designation, joined_date, is_active, created_by, updated_by)
+                 VALUES (?, ?, ?, ?, '2026-01-01', 'Y', 'video-demo', 'video-demo')`, [code, LOC, name, designation]);
       }
     }
 
