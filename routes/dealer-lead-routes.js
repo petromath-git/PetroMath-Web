@@ -42,6 +42,11 @@ router.get('/admin/export', canManage, notTeleCaller, (req, res, next) => {
     dealerLeadController.exportCsv(req, res, next);
 });
 
+// GET /admin/report - Daily leads report (hot leads, team activity, WhatsApp text)
+router.get('/admin/report', canManage, notTeleCaller, (req, res, next) => {
+    dealerLeadController.getDailyReport(req, res, next);
+});
+
 // GET /admin/new - Add a lead by hand
 router.get('/admin/new', canManage, (req, res, next) => {
     dealerLeadController.getNewLeadForm(req, res, next);

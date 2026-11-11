@@ -1,0 +1,249 @@
+extends layout
+
+block content
+    style.
+        .rpt-tile { border-radius: 8px; padding: 10px 12px; color: #fff; height: 100%; }
+        .rpt-tile .num { font-size: 1.5rem; font-weight: 600; line-height: 1.1; }
+        .rpt-tile .lbl { font-size: .8rem; opacity: .95; }
+        .rpt-table td { vertical-align: middle; }
+        .rpt-table tr.overdue td:first-child { border-left: 4px solid #dc3545; }
+        .rpt-table tr.due-today td:first-child { border-left: 4px solid #fd7e14; }
+        .rpt-note { max-width: 360px; }
+        #shareText { font-family: monospace; font-size: .8rem; }
+        @media (max-width: 767px) {
+            .rpt-tile .num { font-size: 1.25rem; }
+            .rpt-note { max-width: none; }
+            body.mobile-ready .rpt-table.m-stack > tbody > tr.overdue { border-left: 4px solid #dc3545; }
+            body.mobile-ready .rpt-table.m-stack > tbody > tr.due-today { border-left: 4px solid #fd7e14; }
+            body.mobile-ready .rpt-table.m-stack > tbody > tr > td:first-child { border-left: 0 !important; }
+        }
+
+    - var fmt = function (d) { return d ? moment(d).format('DD-MMM-YYYY') : '-'; }
+    - var leadUrl = function (id) { return '/dealer-leads/admin/' + id; }
+    - var sinceText = function (n) { return n === null || n === undefined ? 'never' : (n === 0 ? 'today' : (n === 1 ? 'yesterday' : n + ' days ago')); }
+
+    .container-fluid.mt-3
+        .d-flex.justify-content-between.align-items-center.flex-wrap.mb-2
+            h4.mb-2
+                i.bi.bi-clipboard-data
+                |  Leads Report · #{fmt(today)}
+            div.mb-2
+                a.btn.btn-sm.btn-success.mr-2(href='https://wa.me/?text=' + encodeURIComponent(shareText) target='_blank' rel='noopener')
+                    i.bi.bi-whatsapp
+                    |  Send on WhatsApp
+                button.btn.btn-sm.btn-outline-secondary.mr-2(type='button' onclick='copyShareText()')
+                    i.bi.bi-clipboard
+                    |  Copy text
+                a.btn.btn-sm.btn-outline-primary(href='/dealer-leads/admin')
+                    i.bi.bi-list-ul
+                    |  All leads
+
+        //- ── Alerts: the things that should not happen ──
+        if counts.days_since_call === null || counts.days_since_call >= 2
+            .alert.alert-danger.py-2.mb-2
+                i.bi.bi-exclamation-octagon
+                if counts.last_call_at
+                    |  No call has been logged for #{counts.days_since_call} days (last on #{fmt(counts.last_call_at)}).
+                else
+                    |  No call has ever been logged with Log call.
+        if counts.days_since_lead !== null && counts.days_since_lead >= 3
+            .alert.alert-warning.py-2.mb-2
+                i.bi.bi-exclamation-triangle
+                |  No new lead added for #{counts.days_since_lead} days (last on #{fmt(counts.last_lead_at)}).
+
+        //- ── Headline tiles ──
+        .row.mb-3
+            .col-6.col-md-2.mb-2
+                .rpt-tile.bg-danger
+                    .num= dueHot.length
+                    .lbl Hot leads due / overdue
+            .col-6.col-md-2.mb-2
+                .rpt-tile.bg-primary
+                    .num= hot.length
+                    .lbl Hot leads open
+            .col-6.col-md-2.mb-2
+                .rpt-tile(style='background:#fd7e14')
+                    .num= counts.calls_yesterday || 0
+                    .lbl Calls logged yesterday (#{counts.calls_7d || 0} in 7 days)
+            .col-6.col-md-2.mb-2
+                .rpt-tile.bg-secondary
+                    .num= counts.added_7d || 0
+                    .lbl New leads, last 7 days
+            .col-6.col-md-2.mb-2
+                .rpt-tile.bg-dark
+                    .num= counts.overdue || 0
+                    .lbl All open leads overdue (of #{counts.open_leads || 0})
+            .col-6.col-md-2.mb-2
+                .rpt-tile.bg-success
+                    .num= counts.won_total || 0
+                    .lbl ROs won · last #{counts.last_won_at ? sinceText(counts.days_since_won) : 'never'}
+
+        //- ── Hot leads ──
+        .card.mb-3
+            .card-header
+                h5.mb-0 🔥 Hot leads (#{hot.length})
+                .small.text-muted Interested, Demo or Onboarding, or starred ★. Overdue ones first. Star a lead on its page to add it here.
+            .card-body.p-0
+                .table-responsive
+                    table.table.table-sm.table-bordered.table-hover.rpt-table.mb-0.m-stack
+                        thead.thead-dark
+                            tr
+                                th Lead
+                                th Phone
+                                th Place
+                                th Status
+                                th Owner
+                                th Follow-up
+                                th Last contact
+                                th Latest note
+                        tbody
+                            if hot.length === 0
+                                tr.m-static
+                                    td.text-center.text-muted.m-wide(colspan='8') No hot leads. Mark promising leads Interested or star them.
+                            each l in hot
+                                - var overdue = l.next_followup_date && l.days_overdue > 0
+                                - var dueToday = l.next_followup_date && l.days_overdue === 0
+                                tr(class=overdue ? 'overdue' : (dueToday ? 'due-today' : ''))
+                                    td.m-title
+                                        a(href=leadUrl(l.lead_id))
+                                            if l.is_priority === 'Y'
+                                                span.text-warning ★
+                                            strong= l.bunk_name
+                                        if l.contact_person_name
+                                            .small.text-muted= l.contact_person_name
+                                    td.text-nowrap(data-label='Phone')
+                                        if l.phone_number
+                                            a(href='tel:' + l.phone_number)= l.phone_number
+                                            if l.wa_number
+                                                a.ml-2.text-success(href='https://wa.me/' + l.wa_number target='_blank' rel='noopener' title='WhatsApp')
+                                                    i.bi.bi-whatsapp
+                                    td(data-label='Place')= l.place
+                                    td(data-label='Status')
+                                        span.badge(class=l.status === 'INTERESTED' ? 'badge-primary' : (l.status === 'NEW' || l.status === 'CONTACTED' ? 'badge-secondary' : 'badge-warning'))= l.status_label
+                                    td(data-label='Owner')= l.assigned_to_name || 'Unassigned'
+                                    td.text-nowrap(data-label='Follow-up')
+                                        if !l.next_followup_date
+                                            span.text-danger No date set
+                                        else if overdue
+                                            span.text-danger.font-weight-bold #{fmt(l.next_followup_date)}
+                                            .small.text-danger #{l.days_overdue} days overdue
+                                        else if dueToday
+                                            strong Today
+                                        else
+                                            = fmt(l.next_followup_date)
+                                    td.text-nowrap(data-label='Last contact')
+                                        span(class=l.days_since_contact > 7 ? 'text-danger' : '')= sinceText(l.days_since_contact)
+                                    td.small.rpt-note.m-wide(data-label='Latest note')= l.latest_note
+
+        //- ── Warm in the notes, but still New ──
+        if warmByNotes.length
+            .card.mb-3
+                .card-header
+                    h5.mb-0 👀 Sound warm in the notes, still New (#{warmByNotes.length})
+                    .small.text-muted The call notes mention a demo, a callback time, installing or interest. Open each one and mark it Interested or star it, so it moves into Hot leads.
+                .card-body.p-0
+                    .table-responsive
+                        table.table.table-sm.table-bordered.table-hover.rpt-table.mb-0.m-stack
+                            thead.thead-light
+                                tr
+                                    th Lead
+                                    th Phone
+                                    th Place
+                                    th Owner
+                                    th Added
+                                    th Notes
+                            tbody
+                                each l in warmByNotes
+                                    tr
+                                        td.m-title
+                                            a(href=leadUrl(l.lead_id))
+                                                strong= l.bunk_name
+                                            if l.contact_person_name
+                                                .small.text-muted= l.contact_person_name
+                                        td.text-nowrap(data-label='Phone')
+                                            if l.phone_number
+                                                a(href='tel:' + l.phone_number)= l.phone_number
+                                                if l.wa_number
+                                                    a.ml-2.text-success(href='https://wa.me/' + l.wa_number target='_blank' rel='noopener' title='WhatsApp')
+                                                        i.bi.bi-whatsapp
+                                        td(data-label='Place')= l.place
+                                        td(data-label='Owner')= l.assigned_to_name || 'Unassigned'
+                                        td.text-nowrap(data-label='Added')= fmt(l.creation_date)
+                                        td.small.rpt-note.m-wide(data-label='Notes')= l.notes
+
+        .row
+            //- ── Team activity ──
+            .col-lg-7.mb-3
+                .card.h-100
+                    .card-header
+                        h5.mb-0 Team activity, last 7 days
+                        .small.text-muted Calls = entries made with Log call. Notes typed only into the lead don't count.
+                    .card-body.p-0
+                        .table-responsive
+                            table.table.table-sm.table-bordered.mb-0
+                                thead.thead-light
+                                    tr
+                                        th Person
+                                        th.text-right Calls
+                                        th.text-right Yesterday
+                                        th.text-right Leads added
+                                        th.text-right Moved up
+                                        th.text-right Closed
+                                        th Last activity
+                                tbody
+                                    if team.length === 0
+                                        tr
+                                            td.text-center.text-danger(colspan='7') Nobody logged a call or added a lead in the last 7 days.
+                                    each t in team
+                                        tr
+                                            td= t.who
+                                            td.text-right(class=Number(t.calls) === 0 ? 'text-danger font-weight-bold' : '')= t.calls
+                                            td.text-right= Number(t.calls_yday) + Number(t.added_yday)
+                                            td.text-right= t.added
+                                            td.text-right= t.moved_up
+                                            td.text-right= t.closed
+                                            td.text-nowrap= fmt(t.last_at)
+            //- ── Backlog per owner ──
+            .col-lg-5.mb-3
+                .card.h-100
+                    .card-header
+                        h5.mb-0 Open leads by owner
+                    .card-body.p-0
+                        .table-responsive
+                            table.table.table-sm.table-bordered.mb-0
+                                thead.thead-light
+                                    tr
+                                        th Owner
+                                        th.text-right Open
+                                        th.text-right Overdue
+                                        th.text-right No date
+                                        th Oldest overdue
+                                tbody
+                                    each b in backlog
+                                        tr
+                                            td= b.owner
+                                            td.text-right= b.open_leads
+                                            td.text-right(class=Number(b.overdue) > 0 ? 'text-danger font-weight-bold' : '')= b.overdue || 0
+                                            td.text-right= b.no_date || 0
+                                            td.text-nowrap= fmt(b.oldest_overdue)
+
+        //- ── WhatsApp text ──
+        .card.mb-4
+            .card-header.d-flex.justify-content-between.align-items-center
+                h5.mb-0 Text to send
+                button.btn.btn-sm.btn-outline-secondary(type='button' onclick='copyShareText()')
+                    i.bi.bi-clipboard
+                    |  Copy
+            .card-body
+                textarea#shareText.form-control(rows='14' readonly)= shareText
+
+    script.
+        function copyShareText() {
+            var box = document.getElementById('shareText');
+            var done = function () { alert('Copied. Paste it into WhatsApp.'); };
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(box.value).then(done, function () { box.select(); document.execCommand('copy'); done(); });
+            } else {
+                box.select(); document.execCommand('copy'); done();
+            }
+        }
