@@ -23,51 +23,64 @@ const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
 const VIEW = { width: 1280, height: 720 };
 const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
 
-// Voiceover (node record.js --lang=ta sap-upload): captions are swapped for voice/<lang>.json and spoken by a
-// free Microsoft Edge neural voice (python -m pip install edge-tts). Writes <name>.<lang>.mp4 beside the English one.
+// Voiceover (node record.js --lang=ta sap-upload): captions are swapped for voice/<lang>.json. Writes
+// <name>.<lang>.mp4 beside the English one. Voice used for the real videos (owner, 2026-11-11): ElevenLabs "Mangai"
+// (v4), pasted on the ElevenLabs website and split per line by voice-import.js into out/voice/<lang>/manual/.
+// Lines without a manual clip are spoken by Sarvam AI's Bulbul (SARVAM_API_KEY in .env; bulbul:v3 "ishita",
+// temperature 0.8, pace 1.1): fine for a draft, but it sounds like a Hindi speaker speaking Tamil.
 const LANG = (process.argv.find((a) => a.startsWith('--lang=')) || '').slice(7) || null;
-const VOICES = { ta: 'ta-IN-PallaviNeural' };
-const ENGLISH_VOICE = 'en-IN-NeerjaNeural';
-// Word in a Tamil line -> how the English voice is told to say it (owner picked "Pet-ro-math": short e, as in petrol).
-const ENGLISH_WORDS = { PetroMath: 'Pet-ro-math' };
+const VOICE = { model: 'bulbul:v3', speaker: process.env.VOICE_SPEAKER || 'ishita', temperature: 0.8, pace: 1.1 };
 const SCRIPT = LANG ? JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}.json`), 'utf8')) : null;
-
-// The caption in the video's language, and its spoken clip (cached in out/voice/<lang>/ by text).
-// A line is a string (shown and spoken) or { show, say }. `said` is the caption shown; `speech` is what the voice reads.
-function speak(text) {
+const voiceFile = (speech) => path.join(OUT, 'voice', LANG,
+  `${require('crypto').createHash('sha1').update(`${JSON.stringify(VOICE)}|${speech}`).digest('hex').slice(0, 16)}.mp3`);
+const lineOf = (text) => {
   const line = SCRIPT[text];
   if (!line) throw new Error(`No ${LANG} line in voice/${LANG}.json for: ${JSON.stringify(text)}`);
-  const said = typeof line === 'string' ? line : line.show;
-  const speech = typeof line === 'string' ? line : line.say;
-  // The Tamil voice silently drops an English word with Tamil joined to it (account-க்கு, accountக்கு).
-  if (/[A-Za-z]-?[஀-௿]/.test(speech)) {
-    throw new Error(`voice/${LANG}.json: English word joined to Tamil is not spoken; add a "say" with it in Tamil script: ${speech}`);
-  }
-  const dir = path.join(OUT, 'voice', LANG);
-  fs.mkdirSync(dir, { recursive: true });
-  const hash = (s) => require('crypto').createHash('sha1').update(s).digest('hex').slice(0, 16);
-  const tts = (voice, words) => {
-    const f = path.join(dir, `${hash(`${voice}|${words}`)}.mp3`);
-    if (!fs.existsSync(f)) {
-      execFileSync(process.env.PYTHON || 'python', ['-m', 'edge_tts', '--voice', voice, '--rate', process.env.VOICE_RATE || '+0%',
-        '--text', words, '--write-media', f]);
+  const l = typeof line === 'string' ? { said: line, speech: line } : { said: line.show, speech: line.say };
+  // Spelling the voice says right: "PetroMath" came out "petromaaat"; owner picked "Petromath" (2026-11-11).
+  return { ...l, speech: l.speech.replace(/PetroMath/g, 'Petromath') };
+};
+
+// Make every clip before recording (cached in out/voice/<lang>/): waiting for one mid-recording leaves dead air.
+async function makeVoice() {
+  if (!process.env.SARVAM_API_KEY) throw new Error('SARVAM_API_KEY missing in tools/videos/.env');
+  fs.mkdirSync(path.join(OUT, 'voice', LANG), { recursive: true });
+  for (const text of Object.keys(SCRIPT).filter((k) => !k.startsWith('_'))) {
+    const { speech } = lineOf(text);
+    const f = voiceFile(speech);
+    if (fs.existsSync(f)) continue;
+    let r;
+    let j;
+    for (let attempt = 1; ; attempt++) {
+      r = await fetch('https://api.sarvam.ai/text-to-speech', {
+        method: 'POST',
+        headers: { 'api-subscription-key': process.env.SARVAM_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speech, language_code: `${LANG}-IN`, ...VOICE, output_audio_codec: 'mp3', speech_sample_rate: 24000 }),
+      });
+      j = await r.json();
+      if (r.status !== 429 || attempt === 6) break;
+      await new Promise((res) => setTimeout(res, attempt * 10000)); // rate limit: wait and try again
     }
-    return f;
-  };
-  // Words the Tamil voice says wrongly (PetroMath came out "Paytromath") are read by the Indian-English voice
-  // and joined into the sentence.
-  const parts = speech.split(new RegExp(`(${Object.keys(ENGLISH_WORDS).join('|')})`)).map((p) => p.trim()).filter(Boolean);
-  let file;
-  if (parts.length === 1) file = tts(VOICES[LANG], speech);
-  else {
-    file = path.join(dir, `${hash(`mix|${VOICES[LANG]}|${speech}`)}.mp3`);
-    if (!fs.existsSync(file)) {
-      const clips = parts.map((p) => (ENGLISH_WORDS[p] ? tts(ENGLISH_VOICE, ENGLISH_WORDS[p]) : tts(VOICES[LANG], p)));
-      execFileSync(ffmpeg, ['-y', '-loglevel', 'error', ...clips.flatMap((c) => ['-i', c]), '-filter_complex',
-        `${clips.map((c, i) => `[${i}:a]aresample=24000[p${i}]`).join(';')};${clips.map((c, i) => `[p${i}]`).join('')}concat=n=${clips.length}:v=0:a=1[a]`,
-        '-map', '[a]', '-ac', '1', '-b:a', '64k', file]);
-    }
+    if (!r.ok) throw new Error(`Sarvam ${r.status}: ${JSON.stringify(j.error || j).slice(0, 300)}`);
+    // Trim the silence the voice leaves before and after the words, so steps follow on naturally.
+    const raw = `${f}.raw.mp3`;
+    fs.writeFileSync(raw, Buffer.from(j.audios.join(''), 'base64'));
+    const trim = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05';
+    execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', raw, '-af', `${trim},areverse,${trim},areverse`, '-ac', '1', '-b:a', '64k', f]);
+    fs.unlinkSync(raw);
+    console.log(`voice: ${speech}`);
   }
+}
+
+// A clip made by hand (e.g. pasted into the ElevenLabs website, then split per line) wins over the generated one:
+// out/voice/<lang>/manual/<sha1 of the caption>.mp3, written by voice-import.js.
+const manualFile = (said) => path.join(OUT, 'voice', LANG, 'manual',
+  `${require('crypto').createHash('sha1').update(said).digest('hex').slice(0, 16)}.mp3`);
+
+// The caption in the video's language, and its spoken clip.
+function speak(text) {
+  const { said, speech } = lineOf(text);
+  const file = fs.existsSync(manualFile(said)) ? manualFile(said) : voiceFile(speech);
   // ffmpeg prints the clip length when asked to read it with no output (and exits 1).
   let info = '';
   try { execFileSync(ffmpeg, ['-i', file], { stdio: 'pipe' }); } catch (e) { info = String(e.stderr); }
@@ -340,7 +353,7 @@ function overlayScript(phone) {
 }
 
 function makeHelpers(page, t0) {
-  const marks = { start: 0, cuts: [], voice: [] };
+  const marks = { start: 0, cuts: [], voice: [], voiceEnd: 0 };
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
@@ -351,11 +364,15 @@ function makeHelpers(page, t0) {
     async begin() { marks.start = now(); },
     async say(text, ms = 1800) {
       if (LANG && text) {
-        // Voiceover: show the translated caption, start its clip here, and let it finish before the next step.
+        // Voiceover: the screen keeps moving while she talks, as a person would demo it. Only the next line waits
+        // for this one to finish (a short breath between lines), and the step pauses for part of the line.
         const clip = speak(text);
+        const wait = marks.voiceEnd - now();
+        if (wait > 0) await pause(Math.round(wait * 1000));
         await page.evaluate((t) => window.__vSay(t), clip.said);
         marks.voice.push({ t: now(), file: clip.file });
-        await pause(Math.max(ms, Math.round(clip.dur * 1000) + 300));
+        marks.voiceEnd = now() + clip.dur + 0.35;
+        await pause(Math.round(Math.max(Math.min(ms, clip.dur * 1000), clip.dur * 600)));
         return;
       }
       await page.evaluate((t) => window.__vSay(t), text);
@@ -458,7 +475,9 @@ function makeHelpers(page, t0) {
       const a = now();
       const r = await work;
       const b = now();
-      if (b - a > keep * 2.5) marks.cuts.push([a + keep, b - keep / 2]);
+      // Never cut while a voice line is still playing: its audio would run over the next one.
+      const from = Math.max(a + keep, marks.voiceEnd);
+      if (b - keep / 2 - from > keep) marks.cuts.push([from, b - keep / 2]);
       return r;
     },
     // Show the look-alike browser toolbar on a blank new tab (the real page is already loaded underneath).
@@ -1426,6 +1445,8 @@ const VIDEOS = {
       await h.go('/home');
       await h.begin();
       await h.say('This is the Cashier Shift screen. Every shift is listed here.', 2600);
+      // Dealers read "shift" as the station's 24-hour day (demo 2026-11-11), so say what it means here.
+      await h.say("In PetroMath, a shift is one cashier's duty: from taking the opening cash to handing over the cash. One 24-hour duty is one shift a day; if cashiers change, enter one shift per cashier.", 6500);
       await h.say('To start a new shift, click Add New.', 900);
       await h.tap(page.getByRole('button', { name: 'Add New' }), 0);
       await page.waitForURL(/\/new-closing/);
@@ -1813,7 +1834,8 @@ async function record(browser, name) {
   let ok = false;
   try {
     await v.run(h, page);
-    await h.pause(500);
+    // Let the last voice line finish before the video ends.
+    await h.pause(Math.max(500, Math.round((h.marks.voiceEnd - (Date.now() - t0) / 1000) * 1000) + 500));
     ok = true;
   } finally {
     const total = (Date.now() - t0) / 1000;
@@ -1836,8 +1858,7 @@ async function record(browser, name) {
     return;
   }
   for (const a of args) if (!VIDEOS[a]) throw new Error(`Unknown video: ${a}`);
-  // Make every spoken clip first: generating one mid-recording leaves seconds of dead air in the video.
-  if (LANG) Object.keys(SCRIPT).filter((k) => !k.startsWith('_')).forEach(speak);
+  if (LANG) await makeVoice();
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(PUBLIC, { recursive: true });
   const browser = await chromium.launch();

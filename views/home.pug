@@ -421,6 +421,8 @@ block content
                 if draftsCnt < maxAllowedDrafts && draftDaysCnt <= 0
                     form(method='GET' action='/new-closing' id='get-new-closing')
                         button.btn.btn-primary(type='button' onclick='getNewClosingPage()') Add New
+                        //- Dealers read "shift" as the station's 24-hour day; say what it means here.
+                        small.text-muted.ml-2 A shift is one cashier's duty, from opening cash to cash handover.
                 else if draftDaysCnt > 0
                     .alert.alert-warning.text-danger
                         div Note: These draft shifts are open for too long. Please close or delete them to add a new closing.
