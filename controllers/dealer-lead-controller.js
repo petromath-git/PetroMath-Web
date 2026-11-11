@@ -517,6 +517,106 @@ module.exports = {
     },
 
     // GET - CSV export of the currently filtered leads (MANAGE_DEALER_LEADS)
+    // GET - Daily leads report: hot leads to chase, who did what this week,
+    // and a WhatsApp-ready text to send to the team
+    getDailyReport: async (req, res, next) => {
+        try {
+            const today = moment().utcOffset('+05:30').format('YYYY-MM-DD');
+            const [hot, warmByNotes, counts, team, backlog] = await Promise.all([
+                dealerLeadDao.getHotLeads(today),
+                dealerLeadDao.getWarmByNotes(today),
+                dealerLeadDao.getReportCounts(today),
+                dealerLeadDao.getTeamActivity(today),
+                dealerLeadDao.getOwnerBacklog(today)
+            ]);
+
+            const daysSince = (dt) => (dt ? moment(today).diff(moment(moment(dt).format('YYYY-MM-DD')), 'days') : null);
+            counts.days_since_call = daysSince(counts.last_call_at);
+            counts.days_since_lead = daysSince(counts.last_lead_at);
+            counts.days_since_won = daysSince(counts.last_won_at);
+
+            hot.forEach(lead => {
+                lead.wa_number = whatsappNumber(lead.phone_number);
+                lead.status_label = labelOf(STATUSES, lead.status);
+                lead.is_due = !lead.next_followup_date || lead.days_overdue >= 0;
+                lead.latest_note = lead.last_activity_note || lead.notes || '';
+            });
+            warmByNotes.forEach(lead => { lead.wa_number = whatsappNumber(lead.phone_number); });
+
+            // Everyone who owns open leads shows in team activity, even with zero calls
+            backlog.forEach(b => {
+                if (b.owner !== 'Unassigned' && !team.some(t => t.who === b.owner)) {
+                    team.push({ who: b.owner, calls: 0, added: 0, moved_up: 0, closed: 0, last_at: null, calls_yday: 0, added_yday: 0 });
+                }
+            });
+            const zeroCallers = team.filter(t => Number(t.calls) === 0).map(t => t.who);
+
+            const dueHot = hot.filter(l => l.is_due);
+            const fmt = (d) => moment(d).format('DD-MMM-YYYY');
+            const short = (s, n) => (s && s.length > n ? s.substring(0, n - 1) + '…' : (s || ''));
+
+            // WhatsApp text: *bold*, numbers become tappable
+            const lines = [];
+            lines.push(`*PetroMath – Leads report ${fmt(today)}*`);
+            lines.push('');
+            lines.push(`Hot leads open: *${hot.length}* · due or overdue: *${dueHot.length}*`);
+            lines.push(`Calls logged yesterday: *${counts.calls_yesterday || 0}* · last 7 days: *${counts.calls_7d || 0}*`);
+            lines.push(`New leads last 7 days: *${counts.added_7d || 0}*`);
+            lines.push(`ROs won: *${counts.won_total || 0}*` +
+                (counts.last_won_at ? ` · last win ${counts.days_since_won} days ago` : ' · none yet'));
+            if (counts.days_since_call >= 2) {
+                lines.push(`⚠️ No call logged for *${counts.days_since_call} days*`);
+            }
+            if (zeroCallers.length) {
+                lines.push(`⚠️ No calls logged in 7 days: *${zeroCallers.join(', ')}*`);
+            }
+            lines.push('');
+            if (dueHot.length) {
+                lines.push('*🔥 Call today – hot leads*');
+                const byOwner = {};
+                dueHot.forEach(l => {
+                    const owner = l.assigned_to_name || 'Unassigned';
+                    (byOwner[owner] = byOwner[owner] || []).push(l);
+                });
+                Object.keys(byOwner).forEach(owner => {
+                    lines.push('');
+                    lines.push(`_${owner}_`);
+                    byOwner[owner].forEach((l, i) => {
+                        const due = !l.next_followup_date ? 'no follow-up date'
+                            : (l.days_overdue > 0 ? `${l.days_overdue} days overdue` : 'due today');
+                        lines.push(`${i + 1}. *${l.bunk_name}*, ${l.place}${l.contact_person_name ? ' – ' + l.contact_person_name : ''}`);
+                        lines.push(`   📞 ${l.phone_number || '-'} · ${l.status_label} · ${due}`);
+                        if (l.latest_note) lines.push(`   ${short(l.latest_note, 120)}`);
+                    });
+                });
+                lines.push('');
+            }
+            if (warmByNotes.length) {
+                const n = warmByNotes.length;
+                lines.push(`*👀 ${n} more ${n === 1 ? 'lead sounds' : 'leads sound'} warm in the notes but ${n === 1 ? 'is' : 'are'} still New* – open the report and star or mark Interested.`);
+                lines.push('');
+            }
+            lines.push('*After every call:* open the lead → *Log call* → set status + next follow-up date.');
+
+            res.render('dealer-lead-report', {
+                title: 'Leads Report',
+                mobileReady: true,
+                user: req.user,
+                today,
+                hot,
+                dueHot,
+                warmByNotes,
+                counts,
+                team,
+                backlog,
+                shareText: lines.join('\n'),
+                moment
+            });
+        } catch (error) {
+            next(error);
+        }
+    },
+
     exportCsv: async (req, res, next) => {
         try {
             const leads = await dealerLeadDao.getLeads(readFilters(req.query), req.user.Person_id);

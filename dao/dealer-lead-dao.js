@@ -291,6 +291,136 @@ module.exports = {
         });
     },
 
+    // ── Daily leads report ──────────────────────────────────────────────
+    // creation_date / last_contacted_at are stored in IST (Sequelize +05:30)
+    // while MySQL runs on UTC, so "today" is passed in (IST) rather than CURDATE().
+
+    // Hot = Interested / Demo / Onboarding, or starred (★) and still open.
+    // Overdue first, then by days since the last contact.
+    getHotLeads: async (today) => {
+        return db.sequelize.query(`
+            SELECT l.lead_id, l.bunk_name, l.place, l.district, l.phone_number, l.oil_company,
+                   l.contact_person_name, l.status, l.is_priority, l.notes,
+                   l.assigned_to, p.Person_Name AS assigned_to_name,
+                   l.next_followup_date, l.last_contacted_at, l.creation_date,
+                   DATEDIFF(:today, l.next_followup_date) AS days_overdue,
+                   DATEDIFF(:today, DATE(COALESCE(l.last_contacted_at, l.creation_date))) AS days_since_contact,
+                   (SELECT a.notes FROM t_dealer_lead_activity a
+                     WHERE a.lead_id = l.lead_id AND a.activity_type <> 'EDIT' AND a.notes IS NOT NULL
+                     ORDER BY a.creation_date DESC, a.activity_id DESC LIMIT 1) AS last_activity_note
+            FROM t_dealer_lead l
+            LEFT JOIN m_persons p ON p.Person_id = l.assigned_to
+            WHERE l.status IN (:openStatuses)
+              AND (l.status IN ('INTERESTED', 'DEMO', 'ONBOARDING') OR l.is_priority = 'Y')
+            ORDER BY (l.next_followup_date IS NOT NULL AND l.next_followup_date <= :today) DESC,
+                     FIELD(l.status, 'ONBOARDING', 'DEMO', 'INTERESTED') DESC,
+                     days_since_contact DESC, l.lead_id
+        `, {
+            replacements: { today, openStatuses: OPEN_STATUSES },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
+    // New / Contacted leads whose notes sound warm but which nobody has starred
+    // or moved to Interested — the telecaller writes the outcome in notes only.
+    getWarmByNotes: async (today) => {
+        return db.sequelize.query(`
+            SELECT l.lead_id, l.bunk_name, l.place, l.phone_number, l.contact_person_name,
+                   l.status, l.notes, l.creation_date, l.next_followup_date,
+                   p.Person_Name AS assigned_to_name,
+                   DATEDIFF(:today, DATE(COALESCE(l.last_contacted_at, l.creation_date))) AS days_since_contact
+            FROM t_dealer_lead l
+            LEFT JOIN m_persons p ON p.Person_id = l.assigned_to
+            WHERE l.status IN ('NEW', 'CONTACTED')
+              AND COALESCE(l.is_priority, 'N') <> 'Y'
+              AND l.notes REGEXP 'demo|install|interest|call (after|on|at|back|me)|after diwali|tuesday|monday|wednesday|thursday|friday|saturday|explain|visit|meet'
+              AND l.notes NOT REGEXP 'not interest|no interest|not need|don.?t need|not required|already using'
+            ORDER BY l.creation_date DESC
+            LIMIT 30
+        `, {
+            replacements: { today },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
+    // Headline numbers for the report
+    getReportCounts: async (today) => {
+        const rows = await db.sequelize.query(`
+            SELECT
+                (SELECT COUNT(*) FROM t_dealer_lead WHERE status IN (:openStatuses)) AS open_leads,
+                (SELECT COUNT(*) FROM t_dealer_lead WHERE status IN (:openStatuses)
+                    AND next_followup_date < :today) AS overdue,
+                (SELECT COUNT(*) FROM t_dealer_lead WHERE DATE(creation_date) > :today - INTERVAL 7 DAY) AS added_7d,
+                (SELECT COUNT(*) FROM t_dealer_lead WHERE DATE(creation_date) = :today - INTERVAL 1 DAY) AS added_yesterday,
+                (SELECT COUNT(*) FROM t_dealer_lead_activity WHERE activity_type <> 'EDIT'
+                    AND DATE(creation_date) > :today - INTERVAL 7 DAY) AS calls_7d,
+                (SELECT COUNT(*) FROM t_dealer_lead_activity WHERE activity_type <> 'EDIT'
+                    AND DATE(creation_date) = :today - INTERVAL 1 DAY) AS calls_yesterday,
+                (SELECT MAX(creation_date) FROM t_dealer_lead_activity WHERE activity_type <> 'EDIT') AS last_call_at,
+                (SELECT MAX(creation_date) FROM t_dealer_lead) AS last_lead_at,
+                (SELECT COUNT(*) FROM t_dealer_lead WHERE status = 'WON') AS won_total,
+                (SELECT MAX(a.creation_date) FROM t_dealer_lead_activity a WHERE a.status_after = 'WON') AS last_won_at
+        `, {
+            replacements: { today, openStatuses: OPEN_STATUSES },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+        return rows[0];
+    },
+
+    // Per person, last 7 days: calls logged (Log call) and leads added (Add lead)
+    getTeamActivity: async (today) => {
+        return db.sequelize.query(`
+            SELECT who, SUM(calls) AS calls, SUM(added) AS added, SUM(moved_up) AS moved_up,
+                   SUM(closed) AS closed, MAX(last_at) AS last_at,
+                   SUM(calls_yday) AS calls_yday, SUM(added_yday) AS added_yday
+            FROM (
+                SELECT CONVERT(COALESCE(p.Person_Name, a.created_by) USING utf8mb4) COLLATE utf8mb4_unicode_ci AS who,
+                       COUNT(*) AS calls, 0 AS added,
+                       SUM(a.status_after IN ('INTERESTED', 'DEMO', 'ONBOARDING', 'WON')) AS moved_up,
+                       SUM(a.status_after IN ('NOT_INTERESTED', 'INVALID')) AS closed,
+                       MAX(a.creation_date) AS last_at,
+                       SUM(DATE(a.creation_date) = :today - INTERVAL 1 DAY) AS calls_yday, 0 AS added_yday
+                FROM t_dealer_lead_activity a
+                LEFT JOIN m_persons p ON p.Person_id = a.created_by_id
+                WHERE a.activity_type <> 'EDIT' AND DATE(a.creation_date) > :today - INTERVAL 7 DAY
+                GROUP BY 1
+                UNION ALL
+                SELECT CONVERT(COALESCE(p.Person_Name, l.updated_by, 'Website / stall form') USING utf8mb4) COLLATE utf8mb4_unicode_ci AS who,
+                       0, COUNT(*), 0, 0, MAX(l.creation_date),
+                       0, SUM(DATE(l.creation_date) = :today - INTERVAL 1 DAY)
+                FROM t_dealer_lead l
+                -- the two columns have different collations on prod; compare bytes
+                LEFT JOIN m_persons p ON BINARY p.User_Name = BINARY l.updated_by
+                WHERE DATE(l.creation_date) > :today - INTERVAL 7 DAY
+                GROUP BY 1
+            ) x
+            GROUP BY who
+            ORDER BY who
+        `, {
+            replacements: { today },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
+    // Open leads per owner: how many, how many overdue, oldest overdue date
+    getOwnerBacklog: async (today) => {
+        return db.sequelize.query(`
+            SELECT COALESCE(p.Person_Name, 'Unassigned') AS owner,
+                   COUNT(*) AS open_leads,
+                   SUM(l.next_followup_date < :today) AS overdue,
+                   SUM(l.next_followup_date IS NULL) AS no_date,
+                   MIN(CASE WHEN l.next_followup_date < :today THEN l.next_followup_date END) AS oldest_overdue
+            FROM t_dealer_lead l
+            LEFT JOIN m_persons p ON p.Person_id = l.assigned_to
+            WHERE l.status IN (:openStatuses)
+            GROUP BY 1
+            ORDER BY overdue DESC
+        `, {
+            replacements: { today, openStatuses: OPEN_STATUSES },
+            type: db.Sequelize.QueryTypes.SELECT
+        });
+    },
+
     // Saves corrected lead details and logs what changed as an EDIT activity
     updateLeadDetails: async (lead, changes, changeSummary, user) => {
         await db.sequelize.transaction(async (transaction) => {
