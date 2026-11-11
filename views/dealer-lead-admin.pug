@@ -73,6 +73,9 @@ block content
                             i.bi.bi-person-check
                             |  My open leads
                     if canExport
+                        a.btn.btn-sm.btn-outline-danger.mr-2(href='/dealer-leads/admin/report')
+                            i.bi.bi-clipboard-data
+                            |  Daily report
                         a.btn.btn-sm.btn-primary(href='/dealer-leads/admin/export' + (queryString ? '?' + queryString : ''))
                             i.bi.bi-download
                             |  Export CSV
