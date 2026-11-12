@@ -605,13 +605,14 @@ block content
         li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.
 
   script.
-    // Video language switch: Tamil where a Tamil copy exists, English otherwise. Remembered per browser; ?lang=ta in a link sets it.
+    // Video language switch: Tamil by default (owner, 2026-11-12), English if chosen. Remembered per browser;
+    // ?lang=en / ?lang=ta in a link sets it. A video without a Tamil copy plays in English.
     (function () {
       var KEY = 'helpVideoLang';
       var q = new URLSearchParams(location.search).get('lang');
       var lang = q === 'ta' || q === 'en' ? q : null;
       if (!lang) { try { lang = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ } }
-      if (lang !== 'ta') lang = 'en';
+      if (lang !== 'en') lang = 'ta';
       function apply(l) {
         document.querySelectorAll('.help-lang button').forEach(function (b) {
           var on = b.getAttribute('data-lang') === l;
