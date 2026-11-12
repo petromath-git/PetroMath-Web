@@ -190,6 +190,9 @@ async function main() {
                  created_by, updated_by, creation_date)
                VALUES ('DEMO OWNER', ?, ?, 'Admin', ?, '2026-01-01', '9999-12-31', 'video-demo', 'video-demo', NOW())`, [adminUser, hash, LOC]);
     }
+    // Logins the add-user video creates: removed so it can add them again.
+    const VIDEO_USERS = ['SENTHIL KUMAR', 'PANDIAN R'];
+    await q('DELETE FROM m_persons WHERE location_code = ? AND Person_Name IN (?)', [LOC, VIDEO_USERS]);
     for (const [name, role] of STAFF) {
       if (!(await one('SELECT Person_id FROM m_persons WHERE location_code = ? AND Person_Name = ?', [LOC, name]))) {
         await q(`INSERT INTO m_persons (Person_Name, Role, location_code, effective_start_date, effective_end_date, created_by, updated_by, creation_date)

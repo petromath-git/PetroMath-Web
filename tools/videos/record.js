@@ -837,6 +837,81 @@ const VIDEOS = {
     },
   },
 
+  'add-user': {
+    title: 'Add staff logins: Admin, Manager and Cashier roles',
+    user: 'admin', // Users is Admin+ only
+    async run(h, page) {
+      // demo-location.js deletes these two on reset (VIDEO_USERS).
+      const MGR = 'SENTHIL KUMAR';
+      const ATT = 'PANDIAN R';
+      await h.go('/home');
+      await h.begin();
+      await h.say('Everyone who uses PetroMath gets their own login. What they can see depends on their role.', 3200);
+      await h.say("Admin is the owner's role. PetroMath gives the owner this login.", 2800);
+      await h.say('Manager: for the person who runs the station day to day.', 2400);
+      await h.say('Cashier: for your cashiers and pump attendants.', 2400);
+      await h.say('Each role has its own default menu and access.', 2400);
+      await h.say('Want a role to see more, or less, at your station? Ask PetroMath, and we add or remove that access for the role.', 3600);
+
+      await h.say('Open Masters, then Users.', 600);
+      await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /masters/i }).first(), 700);
+      await h.tap('.sidebar a[href="/users"]', 0);
+      await page.waitForURL(/\/users/);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.say('Everyone at your station is listed, with their role.', 600);
+      await h.point('#users-table tbody tr >> nth=0', 2400);
+
+      // A Manager
+      await h.say('Click Add User.', 400);
+      await h.tap('button[data-target="#add-user-modal"]', 900);
+      await page.locator('#add-user-modal.show').waitFor();
+      await h.say('Type the full name, in capital letters.', 400);
+      await h.type('#m_user_name_0', MGR);
+      await h.say('The username is made for you, from the name and your station code.', 400);
+      await h.point('#m_user_username_0', 2600);
+      await h.say('Every new login starts with the password shown here. Ask them to change it after they sign in.', 400);
+      await h.point('#add-user-modal small.text-muted', 3000);
+      await h.say('Choose the role. Here, Manager.', 400);
+      await h.pick('#m_user_role_0', 'Manager', 700);
+      await h.say('Click Save.', 400);
+      await Promise.all([page.waitForNavigation(), h.tap('#users-save', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(600);
+      await h.say('Saved.', 1400);
+      await h.point(page.locator('#users-table tbody tr', { hasText: MGR }).first(), 2000);
+
+      // An attendant: same way, Cashier role
+      await h.say('An attendant is added the same way, with the Cashier role.', 400);
+      await h.tap('button[data-target="#add-user-modal"]', 900);
+      await page.locator('#add-user-modal.show').waitFor();
+      await h.type('#m_user_name_0', ATT);
+      await h.pick('#m_user_role_0', 'Cashier', 700);
+      await Promise.all([page.waitForNavigation(), h.tap('#users-save', 0)]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      const att = page.locator('#users-table tbody tr', { hasText: ATT }).first();
+      await h.point(att, 600);
+      await h.say("Cashiers and attendants show up in each shift's Attendance, so you can mark who worked.", 3200);
+
+      // Someone leaves
+      await h.say('When someone leaves, click Disable. They can no longer sign in, and their past entries stay.', 400);
+      const disable = att.locator('button[title="Disable user"]');
+      await h.point(disable, 2400);
+      await h.dialog('Please confirm if you want to disable the user?', 'Confirm with OK.');
+      await Promise.all([page.waitForNavigation(), disable.click()]);
+      await page.waitForLoadState('networkidle');
+      await h.pause(500);
+      await h.say('Disabled users are kept under Disabled. Enable brings them back.', 400);
+      await h.tap('a[href="/users?view=disabled"]', 0);
+      await page.waitForURL(/view=disabled/);
+      await page.waitForLoadState('networkidle');
+      await h.point(page.locator('#disabled-users-table tbody tr', { hasText: ATT }).first(), 2600);
+      await h.say('If someone forgets their password, reset it from Administration, then Password Reset.', 3200);
+      await h.say('PetroMath: the right access for every person.', 2400);
+    },
+  },
+
   'fuel-invoice': {
     title: 'Upload a fuel (tanker) invoice PDF',
     async run(h, page) {
