@@ -22,6 +22,88 @@ const OUT = path.join(__dirname, 'out');
 const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
 const VIEW = { width: 1280, height: 720 };
 const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
+
+// Voiceover (node record.js --lang=ta sap-upload): captions are swapped for voice/<lang>.json. Writes
+// <name>.<lang>.mp4 beside the English one. Each line is spoken by:
+//  1. a hand-made clip in out/voice/<lang>/manual/ (voice-import.js: a paste on the ElevenLabs website, split), else
+//  2. ElevenLabs "Mangai" (v4), the owner's pick 2026-11-11 (ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID in .env;
+//     library voices need a paid plan via the API), else
+//  3. Sarvam AI's Bulbul (SARVAM_API_KEY; bulbul:v3 "ishita"): a draft only, sounds like a Hindi speaker.
+const LANG = (process.argv.find((a) => a.startsWith('--lang=')) || '').slice(7) || null;
+const CAPTIONS_ONLY = process.argv.includes('--captions');
+const ELEVEN = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_VOICE_ID);
+const VOICE = ELEVEN
+  ? { provider: 'elevenlabs', voice: process.env.ELEVENLABS_VOICE_ID, model: process.env.ELEVENLABS_MODEL || 'eleven_v4' }
+  : { model: 'bulbul:v3', speaker: process.env.VOICE_SPEAKER || 'ishita', temperature: 0.8, pace: 1.1 };
+const SCRIPT = LANG ? JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}.json`), 'utf8')) : null;
+const voiceFile = (speech) => path.join(OUT, 'voice', LANG,
+  `${require('crypto').createHash('sha1').update(`${JSON.stringify(VOICE)}|${speech}`).digest('hex').slice(0, 16)}.mp3`);
+const lineOf = (text) => {
+  const line = SCRIPT[text];
+  if (!line) throw new Error(`No ${LANG} line in voice/${LANG}.json for: ${JSON.stringify(text)}`);
+  const l = typeof line === 'string' ? { said: line, speech: line } : { said: line.show, speech: line.say };
+  // Sarvam said "PetroMath" as "petromaaat"; owner picked the spelling "Petromath" for it (2026-11-11).
+  return ELEVEN ? l : { ...l, speech: l.speech.replace(/PetroMath/g, 'Petromath') };
+};
+
+// One line from the voice service, as mp3 bytes. Retries when rate-limited.
+async function ttsBytes(speech) {
+  for (let attempt = 1; ; attempt++) {
+    const r = ELEVEN
+      ? await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE.voice}?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speech, model_id: VOICE.model }),
+      })
+      : await fetch('https://api.sarvam.ai/text-to-speech', {
+        method: 'POST',
+        headers: { 'api-subscription-key': process.env.SARVAM_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speech, language_code: `${LANG}-IN`, ...VOICE, output_audio_codec: 'mp3', speech_sample_rate: 24000 }),
+      });
+    if (r.status === 429 && attempt < 6) { await new Promise((res) => setTimeout(res, attempt * 10000)); continue; }
+    if (!r.ok) throw new Error(`${ELEVEN ? 'ElevenLabs' : 'Sarvam'} ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    if (ELEVEN) return Buffer.from(await r.arrayBuffer());
+    return Buffer.from((await r.json()).audios.join(''), 'base64');
+  }
+}
+
+// Make every clip before recording (cached in out/voice/<lang>/): waiting for one mid-recording leaves dead air.
+// Only the lines of the videos being recorded (voice/order.json) that have no hand-made clip.
+async function makeVoice(videos) {
+  const order = JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', 'order.json'), 'utf8'));
+  const lines = [...new Set(videos.flatMap((v) => order[v] || Object.keys(SCRIPT).filter((k) => !k.startsWith('_'))))];
+  fs.mkdirSync(path.join(OUT, 'voice', LANG), { recursive: true });
+  for (const text of lines) {
+    const { said, speech } = lineOf(text);
+    const f = voiceFile(speech);
+    if (fs.existsSync(f) || fs.existsSync(manualFile(said))) continue;
+    if (!ELEVEN && !process.env.SARVAM_API_KEY) throw new Error(`No clip for "${said}": set ELEVENLABS_* or SARVAM_API_KEY in .env`);
+    // Trim the silence the voice leaves before and after the words, so steps follow on naturally.
+    const raw = `${f}.raw.mp3`;
+    fs.writeFileSync(raw, await ttsBytes(speech));
+    const trim = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05';
+    execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', raw, '-af', `${trim},areverse,${trim},areverse`, '-ac', '1', '-b:a', '64k', f]);
+    fs.unlinkSync(raw);
+    console.log(`voice: ${speech}`);
+  }
+}
+
+// A clip made by hand (e.g. pasted into the ElevenLabs website, then split per line) wins over the generated one:
+// out/voice/<lang>/manual/<sha1 of the caption>.mp3, written by voice-import.js.
+const manualFile = (said) => path.join(OUT, 'voice', LANG, 'manual',
+  `${require('crypto').createHash('sha1').update(said).digest('hex').slice(0, 16)}.mp3`);
+
+// The caption in the video's language, and its spoken clip.
+function speak(text) {
+  const { said, speech } = lineOf(text);
+  const file = fs.existsSync(manualFile(said)) ? manualFile(said) : voiceFile(speech);
+  // ffmpeg prints the clip length when asked to read it with no output (and exits 1).
+  let info = '';
+  try { execFileSync(ffmpeg, ['-i', file], { stdio: 'pipe' }); } catch (e) { info = String(e.stderr); }
+  const m = info.match(/Duration: (\d+):(\d+):([\d.]+)/);
+  const dur = m ? (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]) : 3;
+  return { said, file, dur };
+}
 // Phone videos (VIDEOS entry phone: true): an Android phone screen, saved 720 px wide.
 const PHONE = {
   view: { width: 412, height: 860 }, scale: 2, outWidth: 720,
@@ -39,7 +121,7 @@ function overlayScript(phone) {
     body { padding-bottom: 180px !important; } /* lets buttons at the end of a page scroll clear of the caption */
     #__vcap { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: 860px; z-index: 2147483647;
       background: rgba(15, 23, 42, 0.92); color: #fff; border-radius: 12px; padding: 12px 22px; pointer-events: none;
-      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; text-align: center;
+      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Nirmala UI", "Noto Sans Tamil", sans-serif; text-align: center;
       box-shadow: 0 6px 24px rgba(0,0,0,.35); transition: opacity .25s; }
     #__vptr { position: fixed; left: 0; top: 0; width: 26px; height: 26px; z-index: 2147483647; pointer-events: none;
       transition: transform .55s cubic-bezier(.4,0,.2,1); }
@@ -287,7 +369,7 @@ function overlayScript(phone) {
 }
 
 function makeHelpers(page, t0) {
-  const marks = { start: 0, cuts: [] };
+  const marks = { start: 0, cuts: [], voice: [], voiceEnd: 0, said: [] };
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
@@ -297,6 +379,19 @@ function makeHelpers(page, t0) {
     async go(url) { await page.goto(BASE + url, { waitUntil: 'networkidle' }); },
     async begin() { marks.start = now(); },
     async say(text, ms = 1800) {
+      if (LANG && text) {
+        // Voiceover: the screen keeps moving while she talks, as a person would demo it. Only the next line waits
+        // for this one to finish (a short breath between lines), and the step pauses for part of the line.
+        const clip = speak(text);
+        const wait = marks.voiceEnd - now();
+        if (wait > 0) await pause(Math.round(wait * 1000));
+        await page.evaluate((t) => window.__vSay(t), clip.said);
+        marks.voice.push({ t: now(), file: clip.file });
+        marks.voiceEnd = now() + clip.dur + 0.35;
+        await pause(Math.round(Math.max(Math.min(ms, clip.dur * 1000), clip.dur * 600)));
+        return;
+      }
+      if (text) marks.said.push(text);
       await page.evaluate((t) => window.__vSay(t), text);
       if (ms) await pause(ms);
     },
@@ -397,7 +492,9 @@ function makeHelpers(page, t0) {
       const a = now();
       const r = await work;
       const b = now();
-      if (b - a > keep * 2.5) marks.cuts.push([a + keep, b - keep / 2]);
+      // Never cut while a voice line is still playing: its audio would run over the next one.
+      const from = Math.max(a + keep, marks.voiceEnd);
+      if (b - keep / 2 - from > keep) marks.cuts.push([from, b - keep / 2]);
       return r;
     },
     // Show the look-alike browser toolbar on a blank new tab (the real page is already loaded underneath).
@@ -1365,6 +1462,8 @@ const VIDEOS = {
       await h.go('/home');
       await h.begin();
       await h.say('This is the Cashier Shift screen. Every shift is listed here.', 2600);
+      // Dealers read "shift" as the station's 24-hour day (demo 2026-11-11), so say what it means here.
+      await h.say("In PetroMath, a shift is one cashier's duty: from taking the opening cash to handing over the cash. One 24-hour duty is one shift a day; if cashiers change, enter one shift per cashier.", 6500);
       await h.say('To start a new shift, click Add New.', 900);
       await h.tap(page.getByRole('button', { name: 'Add New' }), 0);
       await page.waitForURL(/\/new-closing/);
@@ -1684,9 +1783,19 @@ function toMp4(dir, frames, mp4, marks, total, outWidth = VIEW.width) {
   list.push(`file '${frames[frames.length - 1].file}'`);
   fs.writeFileSync(path.join(dir, 'frames.txt'), list.join('\n'));
   const start = Math.max(0, marks.start - frames[0].t);
+  const voice = (marks.voice || []).map((c) => ({ ...c, at: cutTime(c.t) - frames[0].t - start })).filter((c) => c.at >= 0);
+  const silent = voice.length ? path.join(dir, 'silent.mp4') : mp4;
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.join(dir, 'frames.txt'),
     '-vf', `fps=30,trim=start=${start.toFixed(3)},setpts=PTS-STARTPTS,scale=${outWidth}:-2:flags=lanczos,setsar=1`, '-r', '30',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4]);
+    '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-tune', 'stillimage', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', silent]);
+  if (voice.length) {
+    // Lay each spoken clip at the moment its caption appeared.
+    const delays = voice.map((c, i) => `[${i + 1}:a]aresample=48000,adelay=${Math.round(c.at * 1000)}:all=1[a${i}]`);
+    const mix = `${voice.map((c, i) => `[a${i}]`).join('')}amix=inputs=${voice.length}:normalize=0:dropout_transition=0[a]`;
+    execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', silent, ...voice.flatMap((c) => ['-i', c.file]),
+      '-filter_complex', [...delays, mix].join(';'), '-map', '0:v', '-map', '[a]',
+      '-c:v', 'copy', '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', mp4]);
+  }
   // Poster frame for the Help page (shown before playing).
   execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-ss', '6', '-i', mp4, '-frames:v', '1', '-vf', 'scale=640:-2',
     '-q:v', '4', mp4.replace(/\.mp4$/, '.jpg')]);
@@ -1742,15 +1851,21 @@ async function record(browser, name) {
   let ok = false;
   try {
     await v.run(h, page);
-    await h.pause(500);
+    // Let the last voice line finish before the video ends.
+    await h.pause(Math.max(500, Math.round((h.marks.voiceEnd - (Date.now() - t0) / 1000) * 1000) + 500));
     ok = true;
   } finally {
     const total = (Date.now() - t0) / 1000;
     await cdp.send('Page.stopScreencast').catch(() => {});
     if (!ok) await page.screenshot({ path: path.join(OUT, `${name}-failed.png`) }).catch(() => {});
     await ctx.close();
-    if (ok && frames.length) {
-      const mp4 = path.join(PUBLIC, `${name}.mp4`);
+    // --captions: a dry run that only writes the captions in the order said (to write a voice script from).
+    if (ok && CAPTIONS_ONLY) {
+      fs.mkdirSync(path.join(OUT, 'captions'), { recursive: true });
+      fs.writeFileSync(path.join(OUT, 'captions', `${name}.json`), JSON.stringify(h.marks.said, null, 2));
+      console.log(`${name}: ${h.marks.said.length} captions`);
+    } else if (ok && frames.length) {
+      const mp4 = path.join(PUBLIC, LANG ? `${name}.${LANG}.mp4` : `${name}.mp4`);
       toMp4(dir, frames, mp4, h.marks, total, v.phone ? PHONE.outWidth : VIEW.width);
       const kb = Math.round(fs.statSync(mp4).size / 1024);
       console.log(`${name}: ${mp4} (${kb} KB, ${Math.round(total - h.marks.start)} s, ${frames.length} frames)`);
@@ -1759,12 +1874,13 @@ async function record(browser, name) {
 }
 
 (async () => {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter((a) => !a.startsWith('--lang=') && a !== '--captions');
   if (!args.length || args[0] === '--list') {
     Object.entries(VIDEOS).forEach(([k, v]) => console.log(`${k}  ${v.title}`));
     return;
   }
   for (const a of args) if (!VIDEOS[a]) throw new Error(`Unknown video: ${a}`);
+  if (LANG) await makeVoice(args);
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(PUBLIC, { recursive: true });
   const browser = await chromium.launch();
