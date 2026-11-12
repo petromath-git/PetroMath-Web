@@ -2,6 +2,7 @@
 // video's voiceover. Splits the download into one clip per caption and installs them in out/voice/<lang>/manual/,
 // where record.js --lang=<lang> picks them up instead of generated clips.
 //
+//   node voice-import.js order <video...>                  save line order from a record.js --captions dry run
 //   node voice-import.js text <video>                      print the paste text for a video
 //   node voice-import.js check <file.mp3>                  speech-to-text, grouped by pauses (finds skipped lines)
 //   node voice-import.js split <video> <file.mp3>          split a whole-video download into its lines
@@ -24,14 +25,16 @@ const SCRIPT = JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}
 const MANUAL = path.join(__dirname, 'out', 'voice', LANG, 'manual');
 const caption = (k) => (typeof SCRIPT[k] === 'string' ? SCRIPT[k] : SCRIPT[k].show);
 
-// The video's captions in the order it says them: the lines under its "_video <name>" key in voice/<lang>.json
-// (keep that order the same as the video's; captions often come from shared helpers, so the code can't tell).
+// The video's captions in the order it says them, from voice/order.json. Captions often come from shared helpers,
+// so the code can't tell the order: refresh it with `node record.js --captions <video>` (dry run, writes
+// out/captions/<video>.json) and `node voice-import.js order <video>`.
+const ORDER_FILE = path.join(__dirname, 'voice', 'order.json');
 function linesOf(video) {
-  const keys = Object.keys(SCRIPT);
-  const at = keys.indexOf(`_video ${video}`);
-  if (at < 0) throw new Error(`No "_video ${video}" section in voice/${LANG}.json`);
-  const end = keys.findIndex((k, i) => i > at && k.startsWith('_video '));
-  return keys.slice(at + 1, end < 0 ? keys.length : end).filter((k) => !k.startsWith('_'));
+  const order = JSON.parse(fs.readFileSync(ORDER_FILE, 'utf8'));
+  if (!order[video]) throw new Error(`No ${video} in voice/order.json`);
+  const missing = order[video].filter((k) => !SCRIPT[k]);
+  if (missing.length) throw new Error(`voice/${LANG}.json has no line for:\n${missing.join('\n')}`);
+  return order[video];
 }
 
 const install = (k, run) => {
@@ -116,7 +119,12 @@ async function check(input) {
 
 (async () => {
   const [cmd, a, b, c] = args;
-  if (cmd === 'text') console.log(linesOf(a).map(caption).join('\n\n'));
+  if (cmd === 'order') {
+    const order = fs.existsSync(ORDER_FILE) ? JSON.parse(fs.readFileSync(ORDER_FILE, 'utf8')) : {};
+    for (const v of args.slice(1)) order[v] = JSON.parse(fs.readFileSync(path.join(__dirname, 'out', 'captions', `${v}.json`), 'utf8'));
+    fs.writeFileSync(ORDER_FILE, `${JSON.stringify(order, null, 2)}\n`);
+    console.log(`voice/order.json: ${Object.keys(order).join(', ')}`);
+  } else if (cmd === 'text') console.log(linesOf(a).map(caption).join('\n\n'));
   else if (cmd === 'split') split(a, b);
   else if (cmd === 'check') await check(a);
   else if (cmd === 'line') {

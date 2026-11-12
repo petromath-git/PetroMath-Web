@@ -24,12 +24,17 @@ const VIEW = { width: 1280, height: 720 };
 const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, small file
 
 // Voiceover (node record.js --lang=ta sap-upload): captions are swapped for voice/<lang>.json. Writes
-// <name>.<lang>.mp4 beside the English one. Voice used for the real videos (owner, 2026-11-11): ElevenLabs "Mangai"
-// (v4), pasted on the ElevenLabs website and split per line by voice-import.js into out/voice/<lang>/manual/.
-// Lines without a manual clip are spoken by Sarvam AI's Bulbul (SARVAM_API_KEY in .env; bulbul:v3 "ishita",
-// temperature 0.8, pace 1.1): fine for a draft, but it sounds like a Hindi speaker speaking Tamil.
+// <name>.<lang>.mp4 beside the English one. Each line is spoken by:
+//  1. a hand-made clip in out/voice/<lang>/manual/ (voice-import.js: a paste on the ElevenLabs website, split), else
+//  2. ElevenLabs "Mangai" (v4), the owner's pick 2026-11-11 (ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID in .env;
+//     library voices need a paid plan via the API), else
+//  3. Sarvam AI's Bulbul (SARVAM_API_KEY; bulbul:v3 "ishita"): a draft only, sounds like a Hindi speaker.
 const LANG = (process.argv.find((a) => a.startsWith('--lang=')) || '').slice(7) || null;
-const VOICE = { model: 'bulbul:v3', speaker: process.env.VOICE_SPEAKER || 'ishita', temperature: 0.8, pace: 1.1 };
+const CAPTIONS_ONLY = process.argv.includes('--captions');
+const ELEVEN = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_VOICE_ID);
+const VOICE = ELEVEN
+  ? { provider: 'elevenlabs', voice: process.env.ELEVENLABS_VOICE_ID, model: process.env.ELEVENLABS_MODEL || 'eleven_v4' }
+  : { model: 'bulbul:v3', speaker: process.env.VOICE_SPEAKER || 'ishita', temperature: 0.8, pace: 1.1 };
 const SCRIPT = LANG ? JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}.json`), 'utf8')) : null;
 const voiceFile = (speech) => path.join(OUT, 'voice', LANG,
   `${require('crypto').createHash('sha1').update(`${JSON.stringify(VOICE)}|${speech}`).digest('hex').slice(0, 16)}.mp3`);
@@ -37,34 +42,45 @@ const lineOf = (text) => {
   const line = SCRIPT[text];
   if (!line) throw new Error(`No ${LANG} line in voice/${LANG}.json for: ${JSON.stringify(text)}`);
   const l = typeof line === 'string' ? { said: line, speech: line } : { said: line.show, speech: line.say };
-  // Spelling the voice says right: "PetroMath" came out "petromaaat"; owner picked "Petromath" (2026-11-11).
-  return { ...l, speech: l.speech.replace(/PetroMath/g, 'Petromath') };
+  // Sarvam said "PetroMath" as "petromaaat"; owner picked the spelling "Petromath" for it (2026-11-11).
+  return ELEVEN ? l : { ...l, speech: l.speech.replace(/PetroMath/g, 'Petromath') };
 };
 
-// Make every clip before recording (cached in out/voice/<lang>/): waiting for one mid-recording leaves dead air.
-async function makeVoice() {
-  if (!process.env.SARVAM_API_KEY) throw new Error('SARVAM_API_KEY missing in tools/videos/.env');
-  fs.mkdirSync(path.join(OUT, 'voice', LANG), { recursive: true });
-  for (const text of Object.keys(SCRIPT).filter((k) => !k.startsWith('_'))) {
-    const { speech } = lineOf(text);
-    const f = voiceFile(speech);
-    if (fs.existsSync(f)) continue;
-    let r;
-    let j;
-    for (let attempt = 1; ; attempt++) {
-      r = await fetch('https://api.sarvam.ai/text-to-speech', {
+// One line from the voice service, as mp3 bytes. Retries when rate-limited.
+async function ttsBytes(speech) {
+  for (let attempt = 1; ; attempt++) {
+    const r = ELEVEN
+      ? await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${VOICE.voice}?output_format=mp3_44100_128`, {
+        method: 'POST',
+        headers: { 'xi-api-key': process.env.ELEVENLABS_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: speech, model_id: VOICE.model }),
+      })
+      : await fetch('https://api.sarvam.ai/text-to-speech', {
         method: 'POST',
         headers: { 'api-subscription-key': process.env.SARVAM_API_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: speech, language_code: `${LANG}-IN`, ...VOICE, output_audio_codec: 'mp3', speech_sample_rate: 24000 }),
       });
-      j = await r.json();
-      if (r.status !== 429 || attempt === 6) break;
-      await new Promise((res) => setTimeout(res, attempt * 10000)); // rate limit: wait and try again
-    }
-    if (!r.ok) throw new Error(`Sarvam ${r.status}: ${JSON.stringify(j.error || j).slice(0, 300)}`);
+    if (r.status === 429 && attempt < 6) { await new Promise((res) => setTimeout(res, attempt * 10000)); continue; }
+    if (!r.ok) throw new Error(`${ELEVEN ? 'ElevenLabs' : 'Sarvam'} ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    if (ELEVEN) return Buffer.from(await r.arrayBuffer());
+    return Buffer.from((await r.json()).audios.join(''), 'base64');
+  }
+}
+
+// Make every clip before recording (cached in out/voice/<lang>/): waiting for one mid-recording leaves dead air.
+// Only the lines of the videos being recorded (voice/order.json) that have no hand-made clip.
+async function makeVoice(videos) {
+  const order = JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', 'order.json'), 'utf8'));
+  const lines = [...new Set(videos.flatMap((v) => order[v] || Object.keys(SCRIPT).filter((k) => !k.startsWith('_'))))];
+  fs.mkdirSync(path.join(OUT, 'voice', LANG), { recursive: true });
+  for (const text of lines) {
+    const { said, speech } = lineOf(text);
+    const f = voiceFile(speech);
+    if (fs.existsSync(f) || fs.existsSync(manualFile(said))) continue;
+    if (!ELEVEN && !process.env.SARVAM_API_KEY) throw new Error(`No clip for "${said}": set ELEVENLABS_* or SARVAM_API_KEY in .env`);
     // Trim the silence the voice leaves before and after the words, so steps follow on naturally.
     const raw = `${f}.raw.mp3`;
-    fs.writeFileSync(raw, Buffer.from(j.audios.join(''), 'base64'));
+    fs.writeFileSync(raw, await ttsBytes(speech));
     const trim = 'silenceremove=start_periods=1:start_threshold=-45dB:start_silence=0.05';
     execFileSync(ffmpeg, ['-y', '-loglevel', 'error', '-i', raw, '-af', `${trim},areverse,${trim},areverse`, '-ac', '1', '-b:a', '64k', f]);
     fs.unlinkSync(raw);
@@ -353,7 +369,7 @@ function overlayScript(phone) {
 }
 
 function makeHelpers(page, t0) {
-  const marks = { start: 0, cuts: [], voice: [], voiceEnd: 0 };
+  const marks = { start: 0, cuts: [], voice: [], voiceEnd: 0, said: [] };
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
@@ -375,6 +391,7 @@ function makeHelpers(page, t0) {
         await pause(Math.round(Math.max(Math.min(ms, clip.dur * 1000), clip.dur * 600)));
         return;
       }
+      if (text) marks.said.push(text);
       await page.evaluate((t) => window.__vSay(t), text);
       if (ms) await pause(ms);
     },
@@ -1842,7 +1859,12 @@ async function record(browser, name) {
     await cdp.send('Page.stopScreencast').catch(() => {});
     if (!ok) await page.screenshot({ path: path.join(OUT, `${name}-failed.png`) }).catch(() => {});
     await ctx.close();
-    if (ok && frames.length) {
+    // --captions: a dry run that only writes the captions in the order said (to write a voice script from).
+    if (ok && CAPTIONS_ONLY) {
+      fs.mkdirSync(path.join(OUT, 'captions'), { recursive: true });
+      fs.writeFileSync(path.join(OUT, 'captions', `${name}.json`), JSON.stringify(h.marks.said, null, 2));
+      console.log(`${name}: ${h.marks.said.length} captions`);
+    } else if (ok && frames.length) {
       const mp4 = path.join(PUBLIC, LANG ? `${name}.${LANG}.mp4` : `${name}.mp4`);
       toMp4(dir, frames, mp4, h.marks, total, v.phone ? PHONE.outWidth : VIEW.width);
       const kb = Math.round(fs.statSync(mp4).size / 1024);
@@ -1852,13 +1874,13 @@ async function record(browser, name) {
 }
 
 (async () => {
-  const args = process.argv.slice(2).filter((a) => !a.startsWith('--lang='));
+  const args = process.argv.slice(2).filter((a) => !a.startsWith('--lang=') && a !== '--captions');
   if (!args.length || args[0] === '--list') {
     Object.entries(VIDEOS).forEach(([k, v]) => console.log(`${k}  ${v.title}`));
     return;
   }
   for (const a of args) if (!VIDEOS[a]) throw new Error(`Unknown video: ${a}`);
-  if (LANG) await makeVoice();
+  if (LANG) await makeVoice(args);
   fs.mkdirSync(OUT, { recursive: true });
   fs.mkdirSync(PUBLIC, { recursive: true });
   const browser = await chromium.launch();
