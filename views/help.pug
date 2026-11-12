@@ -112,6 +112,7 @@ block content
         strong Contents
         ol.mt-2
           li: a(href='#shift') Enter and close a shift
+          li: a(href='#day-close') Close the day, and read the Day-Close Report
           li: a(href='#bank-upload') Upload a bank statement
           li: a(href='#sap-upload') Upload the oil company (SAP) statement
           li: a(href='#customer-statement') Run a customer's credit statement
@@ -122,7 +123,6 @@ block content
           li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
           li: a(href='#lube-invoice') Upload a lube purchase invoice PDF
           li: a(href='#accounting') Create the accounts and read the Profit &amp; Loss
-          li: a(href='#day-close') Close the day, and read the Day-Close Report
 
     section#shift
       h2 1. Enter and close a shift
@@ -197,365 +197,8 @@ block content
         li A closed shift can no longer be edited. Its closing readings become the next shift's opening readings.
         li If Close says the credit quantity is more than the meter sale, check the product on the credit bills (for example, HSD entered as MS).
 
-    section#bank-upload
-      h2 2. Upload a bank statement
-      +howVideo('bank-upload', 'upload a bank statement')
-      p Bring every credit and debit in your bank account into PetroMath. Download the statement from your internet banking as an Excel file (some banks also work as PDF).
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Upload Transactions
-          | .
-        li
-          strong Step 1:
-          |  choose the bank account, choose the statement file and click
-          strong  Next: Preview Transactions
-          | . If the file has a password, PetroMath asks for it.
-        li
-          strong Step 2:
-          |  choose a ledger for each line: the customer who paid, the UPI or card vendor, Cash for cash deposits, your SAP account for payments to the oil company, or an expense such as Bank Charges.
-        li
-          strong Step 3:
-          |  check the number of lines and the account, then click
-          strong  Save All Transactions
-          |  and confirm with
-          strong  OK
-          | .
-      h3 Good to know
-      ul
-        li Lines you uploaded before are marked as duplicates and skipped, so an overlapping statement is safe to upload.
-        li After the first few uploads, PetroMath suggests the ledger from what you chose before. Check the suggestions.
-        li The saved lines are in
-          strong  Bank Transactions
-          | . If a ledger was chosen wrongly, ask your Admin to change it there.
-
-    section#sap-upload
-      h2 3. Upload the oil company (SAP) statement
-      +howVideo('sap-upload', 'upload the oil company (SAP) statement')
-      p The account statement from your oil company portal is uploaded the same way, on the same screen. Download it as an Excel file.
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Upload Transactions
-          |  and choose your oil company (SAP) account.
-        li Choose the statement file and click
-          strong  Next: Preview Transactions
-          | .
-        li
-          | Choose a ledger for each line: product invoices go to
-          strong  Purchase Invoice
-          | , your payments to your bank account, fleet card and loyalty credits to their own ledgers, and fees to the matching charge ledger.
-        li
-          | Click
-          strong  Next
-          | , then
-          strong  Save All Transactions
-          |  and confirm with
-          strong  OK
-          | .
-      h3 Good to know
-      ul
-        li The saved lines are in
-          strong  SAP Transactions
-          | .
-        li Upload both statements regularly: a payment to the oil company appears in both, as a debit in the bank and a credit in SAP.
-
-    section#customer-statement
-      h2 4. Run a customer's credit statement
-      +howVideo('customer-statement', "run a customer's credit statement")
-      p
-        | The
-        strong  Customer Detailed Report
-        |  is a credit customer's statement: every bill and payment in a period, with the running balance.
-      ol.help-steps
-        li
-          | Open
-          strong  Reports → Customer Detailed Report
-          | .
-        li
-          | Choose the
-          strong  Date Range
-          | : This Month, Last Month, a month and year, a financial year, or Custom Date with your own dates.
-        li
-          | Choose the customer in
-          strong  Company Name
-          |  and click
-          strong  Go
-          | .
-        li
-          | Check the
-          strong  Period Summary
-          |  (opening balance, bills, payments, closing balance), then the lines below: each bill with product, vehicle, quantity and amount, and each payment.
-        li
-          | To send it, click the green
-          strong  Download PDF
-          |  button, or the blue
-          strong  Print
-          |  button to open it ready to print.
-      h3 Good to know
-      ul
-        li Bills appear once their shift is closed. Payments appear once they are recorded: from an uploaded bank statement with the customer as the ledger, or entered in Credit Receipts.
-        li The PDF carries your station's name and address, so you can share it on WhatsApp as it is.
-        li For a shorter statement with one line per bill or payment, use
-          strong  Customer Ledger Report
-          | .
-
-    section#customer-phone
-      h2 5. Your customer sees their statement on their phone
-      +howVideo('customer-phone', 'see your statement on your phone', true)
-      p Each credit customer has their own login, so they can check what they owe any time, without calling you. Send them this video with their username and password.
-      ol.help-steps
-        li
-          | The customer opens
-          strong  petromath.co.in
-          |  on their phone and signs in with the username and password you sent them (see
-          a(href='#add-customer')  Add a credit customer
-          | ).
-        li Their statement opens straight away: opening balance, every bill (date, bill number, product, litres, vehicle) and every payment, with the balance after each line, and the closing balance at the end.
-        li
-          | To see another period, they pick a
-          strong  Date Range
-          |  (for example Last Month) and tap
-          strong  Go
-          | .
-        li The green button downloads the statement as a PDF; the blue one prints it.
-        li
-          | From the menu (☰) they can
-          strong  Change Password
-          | .
-      h3 Good to know
-      ul
-        li A customer sees only their own bills and payments.
-        li If they forget the password, use Reset Password next to their login in Masters → Customers.
-
-    section#paytm-recon
-      h2 6. Reconcile Paytm (digital reconciliation)
-      +howVideo('paytm-recon', 'reconcile Paytm')
-      p
-        | Check that every rupee your cashiers collected through Paytm (or any card, UPI or fleet card vendor) was paid into your bank.
-        | PetroMath compares the
-        strong  Digital Sales
-        |  entered in your shifts with the vendor's payments from your uploaded bank statement, and matches them for you.
-      ol.help-steps
-        li
-          | Open
-          strong  Reports → Digital Reconciliation
-          | .
-        li
-          | Choose the period and the
-          strong  Digital Vendor
-          | , then click
-          strong  Go
-          | .
-        li
-          | Debits are the sales from your shifts; credits are the vendor's payments. Matched lines share a
-          strong  Match ID
-          | : green when paid the next day, orange when paid a few days later (for example weekend sales paid on Monday).
-        li
-          | Tick
-          strong  Show Only Unreconciled
-          |  to see what is left.
-        li
-          | To match lines by hand, tick them and click
-          strong  Manual Match
-          | . If the amounts differ, enter a note explaining the difference and click
-          strong  Save & Match
-          | .
-      h3 Good to know
-      ul
-        li Upload your bank statement first and tag the vendor's payments to the vendor (for example PAYTM), or they won't appear as credits.
-        li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
-        li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
-
-    section#add-customer
-      h2 7. Add a credit customer, with opening balance and login
-      +howVideo('add-customer', 'add a credit customer')
-      p Customers are added by the owner (Admin login).
-      ol.help-steps
-        li
-          | Open
-          strong  Masters → Customers
-          |  and click
-          strong  Add Customer
-          | .
-        li Enter the company name, a short name (printed on bills), phone, address, and the GST number if they need tax invoices.
-        li
-          strong Remittance Bank:
-          |  the account they pay into. Their payments then appear under this customer when you upload that bank's statement.
-        li
-          strong Opening Balance:
-          |  what they owed before their first bill in PetroMath, from your old ledger.
-          strong  As on
-          |  is filled in as the day before you started on PetroMath. Leave 0 for a brand-new customer.
-        li
-          | Click
-          strong  Save Customer
-          | . PetroMath also creates the customer's login.
-        li
-          | Click the
-          strong  key
-          |  next to the login to see the username and password, and send them to the customer. Reset Password gives a new one; you can also switch the login off there.
-        li
-          | Add their vehicles with the
-          strong  truck
-          |  button.
-      h3 Good to know
-      ul
-        li
-          | An existing customer whose opening balance shows
-          strong  Not set
-          |  can get one with the
-          strong  Set
-          |  button in the Opening Balance column.
-        li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
-
-    section#add-product
-      h2 8. Add a product, with opening stock
-      +howVideo('add-product', 'add a product')
-      p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
-      ol.help-steps
-        li
-          | Open
-          strong  Masters → Products
-          |  and click
-          strong  Add Product
-          | .
-        li Enter the product name as you want it on bills, with the pack size (for example 500 ML, 1 LTR), and the HSN code from the supplier's invoice.
-        li
-          strong Unit:
-          |  NOS for packs and bottles, LIT for loose oil.
-        li
-          | The selling
-          strong  Price
-          |  (with GST), and the GST rate split into
-          strong  CGST
-          |  and
-          strong  SGST
-          |  (18% is 9 and 9).
-        li
-          | Click
-          strong  Add Product
-          | . Cashiers can now pick it in Lube Sales and Credit Sales.
-        li
-          | In the
-          strong  Opening Stock
-          |  column click
-          strong  Set
-          | , and enter how many you have in hand (from a physical count) on the date shown.
-      h3 Good to know
-      ul
-        li Purchases add to the stock and every sale takes from it, so the opening count matters.
-        li To change a price, use the edit button on the product.
-
-    section#fuel-invoice
-      h2 9. Upload a fuel (tanker) invoice PDF
-      +howVideo('fuel-invoice', 'upload a fuel invoice')
-      p Enter the oil company's tanker invoice from its PDF, without typing.
-      ol.help-steps
-        li
-          | Open
-          strong  Transactions → Purchase Invoice
-          | , click
-          strong  New Purchase
-          | , then
-          strong  Fuel Invoice
-          | .
-        li
-          | Click
-          strong  Choose File
-          |  and pick the invoice PDF you downloaded from the oil company portal.
-        li PetroMath reads it and fills in the invoice number, date, tanker number, delivery and seal numbers, the total, and each product with quantity, rate, density, HSN code and VAT.
-        li
-          | The first time only, pick which of your products each invoice product is (for example EBMS is MS). PetroMath remembers it.
-        li
-          | Check the figures against the paper invoice and click
-          strong  Save Mapping
-          | . The PDF is kept with the invoice (View PDF).
-      h3 Good to know
-      ul
-        li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
-
-    section#lube-invoice
-      h2 10. Upload a lube purchase invoice PDF
-      +howVideo('lube-invoice', 'upload a lube purchase invoice')
-      p Enter your lube distributor's invoice from its PDF.
-      ol.help-steps
-        li
-          | Open
-          strong  Transactions → Purchase Invoice
-          | , click
-          strong  New Purchase
-          | , then
-          strong  Lube Invoice
-          | .
-        li
-          | Click
-          strong  Fill from invoice PDF
-          |  and pick the invoice PDF.
-        li PetroMath fills in the supplier, invoice number and date, and every product line with quantity, rate, discount and GST.
-        li
-          | Each line shows
-          strong  Matched
-          | ,
-          strong  Suggested
-          |  or
-          strong  Pick
-          | . Check Suggested lines and choose the product for Pick lines; PetroMath remembers your choice for that supplier.
-        li
-          | Check that the total matches the invoice, then click
-          strong  Save & Close Invoice
-          |  and confirm. The stock of each product goes up and the PDF is attached.
-      h3 Good to know
-      ul
-        li It reads IndianOil (SERVO) distributor invoices and Tally-style tax invoices. For other formats, enter the invoice by hand on the same screen.
-        li Figures read from the PDF are locked, so the invoice in PetroMath matches the paper exactly.
-        li PetroMath warns if the same invoice number has already been entered.
-
-    section#accounting
-      h2 11. Create the accounts and read the Profit &amp; Loss
-      +howVideo('accounting', 'create the accounts and read the Profit & Loss')
-      p Turn a month's shifts, bills, invoices and bank lines into accounting entries, then see your profit and what makes it up.
-      ol.help-steps
-        li
-          | Open
-          strong  Accounting → GL Control
-          | . (Only the owner, Admin, can run the steps below.)
-        li
-          | On
-          strong  Generate Events
-          | , choose the period (for example
-          strong  Last Month
-          | ) and click
-          strong  Generate Missing Events
-          | . Every sale, receipt, invoice and bank line of that period is queued for the accounts.
-        li
-          | On
-          strong  Events Monitor
-          | , click
-          strong  View
-          |  to see the queue. The eye button shows the transaction behind any event.
-        li
-          | On
-          strong  Create Accounting
-          | , choose the same period and click
-          strong  Run Create Accounting
-          | . PetroMath writes the vouchers and shows how many were created.
-        li
-          | Open
-          strong  Accounting → Profit &amp; Loss
-          | , choose the period and click
-          strong  View
-          | : income, expenses and net profit.
-        li Click any ledger name to open its Ledger Report: every entry behind that figure, with date, voucher and description.
-      h3 Good to know
-      ul
-        li Both steps are safe to run again: events already queued and vouchers already created are not repeated.
-        li Dates with a shift still in draft are skipped. Close the shift, then run Create Accounting again.
-        li If an event shows Error, open it with the eye button, fix the cause (usually a missing ledger), then Retry.
-        li A wrong figure in the P&amp;L usually comes from a wrongly tagged bank or SAP line: open the ledger, find the line, and correct its tag.
-
     section#day-close
-      h2 12. Close the day, and read the Day-Close Report
+      h2 2. Close the day, and read the Day-Close Report
       +howVideo('day-close', 'close the day and read the Day-Close Report')
       p Once all of a day's shifts are closed, close the day's cash. The Day-Close Report then gives a snapshot of the whole day.
       ol.help-steps
@@ -603,6 +246,364 @@ block content
       ul
         li A day can be closed only after the day before it is closed.
         li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.
+
+    section#bank-upload
+      h2 3. Upload a bank statement
+      +howVideo('bank-upload', 'upload a bank statement')
+      p Bring every credit and debit in your bank account into PetroMath. Download the statement from your internet banking as an Excel file (some banks also work as PDF).
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Upload Transactions
+          | .
+        li
+          strong Step 1:
+          |  choose the bank account, choose the statement file and click
+          strong  Next: Preview Transactions
+          | . If the file has a password, PetroMath asks for it.
+        li
+          strong Step 2:
+          |  choose a ledger for each line: the customer who paid, the UPI or card vendor, Cash for cash deposits, your SAP account for payments to the oil company, or an expense such as Bank Charges.
+        li
+          strong Step 3:
+          |  check the number of lines and the account, then click
+          strong  Save All Transactions
+          |  and confirm with
+          strong  OK
+          | .
+      h3 Good to know
+      ul
+        li Lines you uploaded before are marked as duplicates and skipped, so an overlapping statement is safe to upload.
+        li After the first few uploads, PetroMath suggests the ledger from what you chose before. Check the suggestions.
+        li The saved lines are in
+          strong  Bank Transactions
+          | . If a ledger was chosen wrongly, ask your Admin to change it there.
+
+    section#sap-upload
+      h2 4. Upload the oil company (SAP) statement
+      +howVideo('sap-upload', 'upload the oil company (SAP) statement')
+      p The account statement from your oil company portal is uploaded the same way, on the same screen. Download it as an Excel file.
+      ol.help-steps
+        li
+          | Open
+          strong  Daily Operations → Upload Transactions
+          |  and choose your oil company (SAP) account.
+        li Choose the statement file and click
+          strong  Next: Preview Transactions
+          | .
+        li
+          | Choose a ledger for each line: product invoices go to
+          strong  Purchase Invoice
+          | , your payments to your bank account, fleet card and loyalty credits to their own ledgers, and fees to the matching charge ledger.
+        li
+          | Click
+          strong  Next
+          | , then
+          strong  Save All Transactions
+          |  and confirm with
+          strong  OK
+          | .
+      h3 Good to know
+      ul
+        li The saved lines are in
+          strong  SAP Transactions
+          | .
+        li Upload both statements regularly: a payment to the oil company appears in both, as a debit in the bank and a credit in SAP.
+
+    section#customer-statement
+      h2 5. Run a customer's credit statement
+      +howVideo('customer-statement', "run a customer's credit statement")
+      p
+        | The
+        strong  Customer Detailed Report
+        |  is a credit customer's statement: every bill and payment in a period, with the running balance.
+      ol.help-steps
+        li
+          | Open
+          strong  Reports → Customer Detailed Report
+          | .
+        li
+          | Choose the
+          strong  Date Range
+          | : This Month, Last Month, a month and year, a financial year, or Custom Date with your own dates.
+        li
+          | Choose the customer in
+          strong  Company Name
+          |  and click
+          strong  Go
+          | .
+        li
+          | Check the
+          strong  Period Summary
+          |  (opening balance, bills, payments, closing balance), then the lines below: each bill with product, vehicle, quantity and amount, and each payment.
+        li
+          | To send it, click the green
+          strong  Download PDF
+          |  button, or the blue
+          strong  Print
+          |  button to open it ready to print.
+      h3 Good to know
+      ul
+        li Bills appear once their shift is closed. Payments appear once they are recorded: from an uploaded bank statement with the customer as the ledger, or entered in Credit Receipts.
+        li The PDF carries your station's name and address, so you can share it on WhatsApp as it is.
+        li For a shorter statement with one line per bill or payment, use
+          strong  Customer Ledger Report
+          | .
+
+    section#customer-phone
+      h2 6. Your customer sees their statement on their phone
+      +howVideo('customer-phone', 'see your statement on your phone', true)
+      p Each credit customer has their own login, so they can check what they owe any time, without calling you. Send them this video with their username and password.
+      ol.help-steps
+        li
+          | The customer opens
+          strong  petromath.co.in
+          |  on their phone and signs in with the username and password you sent them (see
+          a(href='#add-customer')  Add a credit customer
+          | ).
+        li Their statement opens straight away: opening balance, every bill (date, bill number, product, litres, vehicle) and every payment, with the balance after each line, and the closing balance at the end.
+        li
+          | To see another period, they pick a
+          strong  Date Range
+          |  (for example Last Month) and tap
+          strong  Go
+          | .
+        li The green button downloads the statement as a PDF; the blue one prints it.
+        li
+          | From the menu (☰) they can
+          strong  Change Password
+          | .
+      h3 Good to know
+      ul
+        li A customer sees only their own bills and payments.
+        li If they forget the password, use Reset Password next to their login in Masters → Customers.
+
+    section#paytm-recon
+      h2 7. Reconcile Paytm (digital reconciliation)
+      +howVideo('paytm-recon', 'reconcile Paytm')
+      p
+        | Check that every rupee your cashiers collected through Paytm (or any card, UPI or fleet card vendor) was paid into your bank.
+        | PetroMath compares the
+        strong  Digital Sales
+        |  entered in your shifts with the vendor's payments from your uploaded bank statement, and matches them for you.
+      ol.help-steps
+        li
+          | Open
+          strong  Reports → Digital Reconciliation
+          | .
+        li
+          | Choose the period and the
+          strong  Digital Vendor
+          | , then click
+          strong  Go
+          | .
+        li
+          | Debits are the sales from your shifts; credits are the vendor's payments. Matched lines share a
+          strong  Match ID
+          | : green when paid the next day, orange when paid a few days later (for example weekend sales paid on Monday).
+        li
+          | Tick
+          strong  Show Only Unreconciled
+          |  to see what is left.
+        li
+          | To match lines by hand, tick them and click
+          strong  Manual Match
+          | . If the amounts differ, enter a note explaining the difference and click
+          strong  Save & Match
+          | .
+      h3 Good to know
+      ul
+        li Upload your bank statement first and tag the vendor's payments to the vendor (for example PAYTM), or they won't appear as credits.
+        li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
+        li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
+
+    section#add-customer
+      h2 8. Add a credit customer, with opening balance and login
+      +howVideo('add-customer', 'add a credit customer')
+      p Customers are added by the owner (Admin login).
+      ol.help-steps
+        li
+          | Open
+          strong  Masters → Customers
+          |  and click
+          strong  Add Customer
+          | .
+        li Enter the company name, a short name (printed on bills), phone, address, and the GST number if they need tax invoices.
+        li
+          strong Remittance Bank:
+          |  the account they pay into. Their payments then appear under this customer when you upload that bank's statement.
+        li
+          strong Opening Balance:
+          |  what they owed before their first bill in PetroMath, from your old ledger.
+          strong  As on
+          |  is filled in as the day before you started on PetroMath. Leave 0 for a brand-new customer.
+        li
+          | Click
+          strong  Save Customer
+          | . PetroMath also creates the customer's login.
+        li
+          | Click the
+          strong  key
+          |  next to the login to see the username and password, and send them to the customer. Reset Password gives a new one; you can also switch the login off there.
+        li
+          | Add their vehicles with the
+          strong  truck
+          |  button.
+      h3 Good to know
+      ul
+        li
+          | An existing customer whose opening balance shows
+          strong  Not set
+          |  can get one with the
+          strong  Set
+          |  button in the Opening Balance column.
+        li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
+
+    section#add-product
+      h2 9. Add a product, with opening stock
+      +howVideo('add-product', 'add a product')
+      p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
+      ol.help-steps
+        li
+          | Open
+          strong  Masters → Products
+          |  and click
+          strong  Add Product
+          | .
+        li Enter the product name as you want it on bills, with the pack size (for example 500 ML, 1 LTR), and the HSN code from the supplier's invoice.
+        li
+          strong Unit:
+          |  NOS for packs and bottles, LIT for loose oil.
+        li
+          | The selling
+          strong  Price
+          |  (with GST), and the GST rate split into
+          strong  CGST
+          |  and
+          strong  SGST
+          |  (18% is 9 and 9).
+        li
+          | Click
+          strong  Add Product
+          | . Cashiers can now pick it in Lube Sales and Credit Sales.
+        li
+          | In the
+          strong  Opening Stock
+          |  column click
+          strong  Set
+          | , and enter how many you have in hand (from a physical count) on the date shown.
+      h3 Good to know
+      ul
+        li Purchases add to the stock and every sale takes from it, so the opening count matters.
+        li To change a price, use the edit button on the product.
+
+    section#fuel-invoice
+      h2 10. Upload a fuel (tanker) invoice PDF
+      +howVideo('fuel-invoice', 'upload a fuel invoice')
+      p Enter the oil company's tanker invoice from its PDF, without typing.
+      ol.help-steps
+        li
+          | Open
+          strong  Transactions → Purchase Invoice
+          | , click
+          strong  New Purchase
+          | , then
+          strong  Fuel Invoice
+          | .
+        li
+          | Click
+          strong  Choose File
+          |  and pick the invoice PDF you downloaded from the oil company portal.
+        li PetroMath reads it and fills in the invoice number, date, tanker number, delivery and seal numbers, the total, and each product with quantity, rate, density, HSN code and VAT.
+        li
+          | The first time only, pick which of your products each invoice product is (for example EBMS is MS). PetroMath remembers it.
+        li
+          | Check the figures against the paper invoice and click
+          strong  Save Mapping
+          | . The PDF is kept with the invoice (View PDF).
+      h3 Good to know
+      ul
+        li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
+
+    section#lube-invoice
+      h2 11. Upload a lube purchase invoice PDF
+      +howVideo('lube-invoice', 'upload a lube purchase invoice')
+      p Enter your lube distributor's invoice from its PDF.
+      ol.help-steps
+        li
+          | Open
+          strong  Transactions → Purchase Invoice
+          | , click
+          strong  New Purchase
+          | , then
+          strong  Lube Invoice
+          | .
+        li
+          | Click
+          strong  Fill from invoice PDF
+          |  and pick the invoice PDF.
+        li PetroMath fills in the supplier, invoice number and date, and every product line with quantity, rate, discount and GST.
+        li
+          | Each line shows
+          strong  Matched
+          | ,
+          strong  Suggested
+          |  or
+          strong  Pick
+          | . Check Suggested lines and choose the product for Pick lines; PetroMath remembers your choice for that supplier.
+        li
+          | Check that the total matches the invoice, then click
+          strong  Save & Close Invoice
+          |  and confirm. The stock of each product goes up and the PDF is attached.
+      h3 Good to know
+      ul
+        li It reads IndianOil (SERVO) distributor invoices and Tally-style tax invoices. For other formats, enter the invoice by hand on the same screen.
+        li Figures read from the PDF are locked, so the invoice in PetroMath matches the paper exactly.
+        li PetroMath warns if the same invoice number has already been entered.
+
+    section#accounting
+      h2 12. Create the accounts and read the Profit &amp; Loss
+      +howVideo('accounting', 'create the accounts and read the Profit & Loss')
+      p Turn a month's shifts, bills, invoices and bank lines into accounting entries, then see your profit and what makes it up.
+      ol.help-steps
+        li
+          | Open
+          strong  Accounting → GL Control
+          | . (Only the owner, Admin, can run the steps below.)
+        li
+          | On
+          strong  Generate Events
+          | , choose the period (for example
+          strong  Last Month
+          | ) and click
+          strong  Generate Missing Events
+          | . Every sale, receipt, invoice and bank line of that period is queued for the accounts.
+        li
+          | On
+          strong  Events Monitor
+          | , click
+          strong  View
+          |  to see the queue. The eye button shows the transaction behind any event.
+        li
+          | On
+          strong  Create Accounting
+          | , choose the same period and click
+          strong  Run Create Accounting
+          | . PetroMath writes the vouchers and shows how many were created.
+        li
+          | Open
+          strong  Accounting → Profit &amp; Loss
+          | , choose the period and click
+          strong  View
+          | : income, expenses and net profit.
+        li Click any ledger name to open its Ledger Report: every entry behind that figure, with date, voucher and description.
+      h3 Good to know
+      ul
+        li Both steps are safe to run again: events already queued and vouchers already created are not repeated.
+        li Dates with a shift still in draft are skipped. Close the shift, then run Create Accounting again.
+        li If an event shows Error, open it with the eye button, fix the cause (usually a missing ledger), then Retry.
+        li A wrong figure in the P&amp;L usually comes from a wrongly tagged bank or SAP line: open the ledger, find the line, and correct its tag.
+
 
   script.
     // Video language switch: Tamil by default (owner, 2026-11-12), English if chosen. Remembered per browser;
