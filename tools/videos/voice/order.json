@@ -352,5 +352,29 @@
     "And what is due: renewals, rent and other deadlines.",
     "A snapshot of the whole day. Read it every morning.",
     "PetroMath: every day, closed and accounted for."
+  ],
+  "add-user": [
+    "Everyone who uses PetroMath gets their own login. What they can see depends on their role.",
+    "Admin is the owner's role. PetroMath gives the owner this login.",
+    "Manager: for the person who runs the station day to day.",
+    "Cashier: for your cashiers and pump attendants.",
+    "Each role has its own default menu and access.",
+    "Want a role to see more, or less, at your station? Ask PetroMath, and we add or remove that access for the role.",
+    "Open Masters, then Users.",
+    "Everyone at your station is listed, with their role.",
+    "Click Add User.",
+    "Type the full name, in capital letters.",
+    "The username is made for you, from the name and your station code.",
+    "Every new login starts with the password shown here. Ask them to change it after they sign in.",
+    "Choose the role. Here, Manager.",
+    "Click Save.",
+    "Saved.",
+    "An attendant is added the same way, with the Cashier role.",
+    "Cashiers and attendants show up in each shift's Attendance, so you can mark who worked.",
+    "When someone leaves, click Disable. They can no longer sign in, and their past entries stay.",
+    "Confirm with OK.",
+    "Disabled users are kept under Disabled. Enable brings them back.",
+    "If someone forgets their password, reset it from Administration, then Password Reset.",
+    "PetroMath: the right access for every person."
   ]
 }
