@@ -118,6 +118,7 @@ block content
           li: a(href='#customer-statement') Run a customer's credit statement
           li: a(href='#customer-phone') Your customer sees their statement on their phone
           li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
+          li: a(href='#add-user') Add staff logins: Admin, Manager and Cashier roles
           li: a(href='#add-customer') Add a credit customer, with opening balance and login
           li: a(href='#add-product') Add a product, with opening stock
           li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
@@ -417,8 +418,54 @@ block content
         li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
         li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
 
+    section#add-user
+      h2 8. Add staff logins: Admin, Manager and Cashier roles
+      +howVideo('add-user', 'add staff logins and roles')
+      p Everyone who uses PetroMath gets their own login, and their role decides what they can see.
+      ul
+        li
+          strong Admin
+          | : the owner. PetroMath gives the owner this login.
+        li
+          strong Manager
+          | : the person who runs the station day to day.
+        li
+          strong Cashier
+          | : your cashiers and pump attendants. They appear in each shift's Attendance.
+      p
+        | Each role has its own default menu and access. If you want a role to see more, or less, at your station, ask PetroMath (raise a
+        strong  Support Ticket
+        | ) and we add or remove that access for the role.
+      ol.help-steps
+        li
+          | Open
+          strong  Masters → Users
+          |  and click
+          strong  Add User
+          | .
+        li Type the full name in capital letters. The username is made from the name and your station code.
+        li Every new login starts with the default password shown in the form; ask the person to change it after they sign in.
+        li
+          | Choose the role and click
+          strong  Save
+          | .
+        li
+          | When someone leaves, click
+          strong  Disable
+          | . They can no longer sign in; their past entries stay. Disabled users are under
+          strong  Disabled
+          | , where
+          strong  Enable
+          |  brings them back.
+      h3 Good to know
+      ul
+        li
+          | Forgot password? Reset it from
+          strong  Administration → Password Reset
+          | .
+
     section#add-customer
-      h2 8. Add a credit customer, with opening balance and login
+      h2 9. Add a credit customer, with opening balance and login
       +howVideo('add-customer', 'add a credit customer')
       p Customers are added by the owner (Admin login).
       ol.help-steps
@@ -460,7 +507,7 @@ block content
         li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
 
     section#add-product
-      h2 9. Add a product, with opening stock
+      h2 10. Add a product, with opening stock
       +howVideo('add-product', 'add a product')
       p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
       ol.help-steps
@@ -498,7 +545,7 @@ block content
         li To change a price, use the edit button on the product.
 
     section#fuel-invoice
-      h2 10. Upload a fuel (tanker) invoice PDF
+      h2 11. Upload a fuel (tanker) invoice PDF
       +howVideo('fuel-invoice', 'upload a fuel invoice')
       p Enter the oil company's tanker invoice from its PDF, without typing.
       ol.help-steps
@@ -526,7 +573,7 @@ block content
         li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
 
     section#lube-invoice
-      h2 11. Upload a lube purchase invoice PDF
+      h2 12. Upload a lube purchase invoice PDF
       +howVideo('lube-invoice', 'upload a lube purchase invoice')
       p Enter your lube distributor's invoice from its PDF.
       ol.help-steps
@@ -562,7 +609,7 @@ block content
         li PetroMath warns if the same invoice number has already been entered.
 
     section#accounting
-      h2 12. Create the accounts and read the Profit &amp; Loss
+      h2 13. Create the accounts and read the Profit &amp; Loss
       +howVideo('accounting', 'create the accounts and read the Profit & Loss')
       p Turn a month's shifts, bills, invoices and bank lines into accounting entries, then see your profit and what makes it up.
       ol.help-steps
