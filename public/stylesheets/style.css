@@ -1366,14 +1366,25 @@ body {
   margin: 15px 0;
 }
 
+/* Group headers: near-white, a little larger than before (were 11px at 60% white,
+   hard to read on the dark sidebar, tkt #482). */
 .menu-section-title {
-  padding: 10px 20px 8px;
-  font-size: 11px;
+  padding: 11px 20px 9px;
+  font-size: 12.5px;
   text-transform: uppercase;
-  letter-spacing: 1px;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: #f8f9fa;
+  font-weight: 700;
   background: rgba(0, 0, 0, 0.15);
+  transition: background 0.2s ease;
+}
+
+.menu-section-title:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.menu-section-title .collapse-icon {
+  color: #f4d03f;
 }
 
 /* Nested sub-menu headers (e.g. Accounting > Setup) get a darker shade
