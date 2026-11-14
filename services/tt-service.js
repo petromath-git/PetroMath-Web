@@ -218,13 +218,13 @@ async function buildReconciliation(locationCode, vendorId, fromDate, toDate) {
     ]);
     const rows = new Map();
     const row = (ym) => {
-        if (!rows.has(ym)) rows.set(ym, { month: ym, bills: [], taxable: 0, gst: 0, tds: 0, due: 0, bank: [], card: [], bankTotal: 0, cardTotal: 0 });
+        if (!rows.has(ym)) rows.set(ym, { month: ym, bills: [], taxable: 0, tds: 0, due: 0, bank: [], card: [], bankTotal: 0, cardTotal: 0 });
         return rows.get(ym);
     };
     bills.filter(b => b.vendor_id === vendorId).forEach(b => {
         const r = row(monthKey(b.bill_date_iso));
         r.bills.push(b.bill_no);
-        r.taxable += Number(b.taxable_value); r.gst += Number(b.cgst_amount) + Number(b.sgst_amount) + Number(b.igst_amount);
+        r.taxable += Number(b.taxable_value);
         r.tds += Number(b.tds_amount); r.due += Number(b.net_receivable);
     });
     bank.forEach(x => { const r = row(prevMonth(monthKey(x.txn_date))); r.bank.push(x); r.bankTotal += Number(x.amount); });
@@ -236,16 +236,16 @@ async function buildReconciliation(locationCode, vendorId, fromDate, toDate) {
         .map(r => {
             const received = r2(r.bankTotal + r.cardTotal);
             return Object.assign(r, {
-                taxable: r2(r.taxable), gst: r2(r.gst), tds: r2(r.tds), due: r2(r.due), bankTotal: r2(r.bankTotal), cardTotal: r2(r.cardTotal),
+                taxable: r2(r.taxable), tds: r2(r.tds), due: r2(r.due), bankTotal: r2(r.bankTotal), cardTotal: r2(r.cardTotal),
                 received, difference: r2(r.due - received),
                 cardShare: received > 0 ? Math.round(r.cardTotal / received * 1000) / 10 : null,
                 paidIn: nextMonth(r.month)
             });
         });
     const totals = list.reduce((t, r) => {
-        ['taxable', 'gst', 'tds', 'due', 'bankTotal', 'cardTotal', 'received', 'difference'].forEach(k => { t[k] = r2(t[k] + r[k]); });
+        ['taxable', 'tds', 'due', 'bankTotal', 'cardTotal', 'received', 'difference'].forEach(k => { t[k] = r2(t[k] + r[k]); });
         return t;
-    }, { taxable: 0, gst: 0, tds: 0, due: 0, bankTotal: 0, cardTotal: 0, received: 0, difference: 0 });
+    }, { taxable: 0, tds: 0, due: 0, bankTotal: 0, cardTotal: 0, received: 0, difference: 0 });
     return { rows: list, totals };
 }
 
