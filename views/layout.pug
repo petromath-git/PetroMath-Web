@@ -214,8 +214,8 @@ html
                     | #{menu.menu_name}
                 each dd in group.dropdowns
                   .menu-subsection
-                    .menu-section-title.collapsible-header(onclick=`toggleMenuSection('${dd.parent.menu_code}')`, style="cursor: pointer; padding-left: 32px; font-size: 10px;")
-                      i.bi.bi-chevron-right.collapse-icon(id=`icon-${dd.parent.menu_code}`, style="margin-right: 8px; transition: transform 0.3s ease; font-size: 10px;")
+                    .menu-section-title.collapsible-header(onclick=`toggleMenuSection('${dd.parent.menu_code}')`, style="cursor: pointer; padding-left: 32px; font-size: 11.5px;")
+                      i.bi.bi-chevron-right.collapse-icon(id=`icon-${dd.parent.menu_code}`, style="margin-right: 8px; transition: transform 0.3s ease; font-size: 11px;")
                       span.menu-item-icon
                         i.bi(class=dd.parent.icon || 'bi-circle', style="font-size: 12px; margin-left: 4px;")
                       | #{dd.parent.menu_name}
@@ -356,6 +356,14 @@ html
         
         if (submenu && icon) {
           if (submenu.style.maxHeight === '0px' || submenu.style.maxHeight === '') {
+            // Accordion (tkt #482): opening a group closes any other open group,
+            // except the groups this one sits inside.
+            document.querySelectorAll('#sidebar .menu-submenu').forEach(function(other) {
+              if (other === submenu || other.contains(submenu)) return;
+              if (other.style.maxHeight && other.style.maxHeight !== '0px') {
+                collapseMenuSection(other.id.replace('submenu-', ''));
+              }
+            });
             expandMenuSection(menuCode);
           } else {
             collapseMenuSection(menuCode);
