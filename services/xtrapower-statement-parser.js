@@ -19,12 +19,37 @@ const num = (s) => {
     const v = parseFloat(String(s == null ? '' : s).replace(/,/g, '').replace(/[^\d.\-]/g, ''));
     return isNaN(v) ? 0 : v;
 };
-const DATE_RE = /(\d{2})\/(\d{2})\/(\d{4})/;
-const iso = (s) => { const m = DATE_RE.exec(String(s || '')); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
-const isoTime = (s) => {
-    const m = /(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2}:\d{2}:\d{2})?/.exec(String(s || ''));
-    return m ? `${m[3]}-${m[2]}-${m[1]}${m[4] ? ' ' + m[4] : ''}` : null;
-};
+// Dates come in two shapes, depending on how the statement was downloaded:
+//   DD/MM/YYYY HH:MM:SS          e.g. 04/07/2026 12:03:23
+//   M/D/YYYY h:mm:ss AM/PM       e.g. 7/4/2026 12:03:23 PM   (tkt #469, MME Jul-2026)
+// The order is decided once per file from the period end, whose day is always 28 or more.
+const DATE_RE = /(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?)?/i;
+const pad2 = (n) => String(n).padStart(2, '0');
+function dateOrder(periodTo) {
+    const m = /(\d{1,2})\/(\d{1,2})\/\d{4}/.exec(String(periodTo || ''));
+    return m && Number(m[2]) > 12 ? 'MDY' : 'DMY';
+}
+function dateReader(order) {
+    const parts = (s) => {
+        const m = DATE_RE.exec(String(s || ''));
+        if (!m) return null;
+        const [d, mo] = order === 'MDY' ? [m[2], m[1]] : [m[1], m[2]];
+        if (+mo < 1 || +mo > 12 || +d < 1 || +d > 31) return null;
+        let time = null;
+        if (m[4] !== undefined) {
+            let h = Number(m[4]);
+            const ap = (m[7] || '').toUpperCase();
+            if (ap === 'PM' && h < 12) h += 12;
+            if (ap === 'AM' && h === 12) h = 0;
+            time = `${pad2(h)}:${m[5]}:${m[6] || '00'}`;
+        }
+        return { date: `${m[3]}-${pad2(mo)}-${pad2(d)}`, time };
+    };
+    return {
+        iso: (s) => { const p = parts(s); return p ? p.date : null; },
+        isoTime: (s) => { const p = parts(s); return p ? p.date + (p.time ? ' ' + p.time : '') : null; }
+    };
+}
 
 // Header labels -> column key. x of each label is read per page.
 const HEADERS = [
@@ -59,7 +84,11 @@ function parseSummary(items) {
     const text = (i) => i.s.replace(/\s+/g, ' ').trim();
     for (const it of items) {
         let m;
-        if ((m = /Period:\s*(\d{2}\/\d{2}\/\d{4})\s*To\s*(\d{2}\/\d{2}\/\d{4})/i.exec(it.s))) { out.period_from = iso(m[1]); out.period_to = iso(m[2]); }
+        if ((m = /Period:\s*(\d{1,2}\/\d{1,2}\/\d{4})\s*To\s*(\d{1,2}\/\d{1,2}\/\d{4})/i.exec(it.s))) {
+            out.date_order = dateOrder(m[2]);
+            const { iso } = dateReader(out.date_order);
+            out.period_from = iso(m[1]); out.period_to = iso(m[2]);
+        }
         if ((m = /Customer ID:\s*(\d+)/i.exec(it.s)) && !out.customer_id) out.customer_id = m[1];
         if ((m = /Customer Name:\s*(.+)$/i.exec(it.s))) out.customer_name = m[1].trim();
     }
@@ -162,6 +191,7 @@ async function parseXtrapowerStatement(buffer) {
     const summary = parseSummary(pages[0] || []);
     if (!summary.customer_id || !summary.period_from) throw new Error('Customer ID or statement period not found.');
     if (!summary.ccms) throw new Error('The CCMS summary line (opening / recharge / sale / closing) was not found.');
+    const { iso, isoTime } = dateReader(summary.date_order);
 
     const txns = [];
     for (const items of pages) {
@@ -218,6 +248,11 @@ async function parseXtrapowerStatement(buffer) {
     const warnings = [];
     if (summary.loyalty) {
         const L = summary.loyalty;
+        // Some downloads (MME Jul-2026, tkt #469) also count the loyalty TDS under REDEMPTION:
+        // redemption = TDS, with no redeem rows. Count it once, as TDS, like the other months.
+        if (L.redemption && Math.abs(L.redemption - L.tds) <= 1 && sum('LOYALTY_REDEEM') === 0 && Math.abs(sum('LOYALTY_TDS') - L.tds) <= 1) {
+            L.redemption = 0;
+        }
         const checks = [['awards', sum('LOYALTY_AWARD'), L.award], ['TDS', sum('LOYALTY_TDS'), L.tds],
             ['redemptions', sum('LOYALTY_REDEEM'), L.redemption], ['expiry', sum('LOYALTY_EXPIRY'), L.expiry]];
         for (const [what, got, want] of checks) {

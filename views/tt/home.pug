@@ -263,7 +263,6 @@ block content
                                 tr
                                     th Bills of
                                     th.num Taxable
-                                    th.num.tt-hide-sm GST (RCM)
                                     th.num TDS
                                     th.num Due
                                     th Paid in
@@ -278,7 +277,6 @@ block content
                                             | #{monthLabel(r.month)}
                                             .small.text-muted= r.bills.length ? r.bills.length + ' bill' + (r.bills.length > 1 ? 's' : '') : 'no bills'
                                         td.num= fmtAmt(r.taxable)
-                                        td.num.tt-hide-sm= fmtAmt(r.gst)
                                         td.num= fmtAmt(r.tds)
                                         td.num.font-weight-bold= fmtAmt(r.due)
                                         td.text-nowrap.small= monthLabel(r.paidIn)
@@ -298,7 +296,6 @@ block content
                                 tr.font-weight-bold
                                     td Total
                                     td.num= fmtAmt(recon.totals.taxable)
-                                    td.num.tt-hide-sm= fmtAmt(recon.totals.gst)
                                     td.num= fmtAmt(recon.totals.tds)
                                     td.num= fmtAmt(recon.totals.due)
                                     td
@@ -307,7 +304,7 @@ block content
                                     td.num= fmtAmt(recon.totals.received)
                                     td.num= fmtAmt(recon.totals.difference)
                     p.small.text-muted
-                        | Difference = due − received. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
+                        | Difference = due − received. GST is left out: it is under reverse charge (paid by #{vendor.oil_company}) and is not part of what you receive. See the Bills tab for GST (RCM) per bill. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
                         if !cards.length
                             |  No fleet card is set up, so the card column is empty.
 
