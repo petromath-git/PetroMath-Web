@@ -201,7 +201,10 @@ block content
     section#day-close
       h2 2. Close the day, and read the Day-Close Report
       +howVideo('day-close', 'close the day and read the Day-Close Report')
-      p Once all of a day's shifts are closed, close the day's cash. The Day-Close Report then gives a snapshot of the whole day.
+      p
+        strong Day Close is your office accounts for one 24-hour day.
+        |  Think of the cash drawer in your office: cash comes in (InFlow) and cash goes out (OutFlow). What is left stays in the locker and is carried forward to the next day.
+      p Close it once a day, after all of that day's shifts are closed. The Day-Close Report then gives a snapshot of the whole day.
       ol.help-steps
         li
           | Open
@@ -213,19 +216,39 @@ block content
           |  for a day already started).
         li
           strong InFlow
-          |  (Balance B/F, shift collections, 2T oil, cashier excess) and
-          strong  OutFlow
-          |  (cashier shortage, shift expenses) are filled in from the shifts.
+          |  (on the left) is the cash that came into the drawer:
+          ul
+            li
+              strong Balance B/F
+              | : the cash left in the locker at the end of yesterday, brought forward.
+            li
+              strong Collection
+              | : the day's sales collection from the shifts. It is
+              strong  not
+              |  the total of the notes the cashier counted.
+            li A cashier's excess and the 2T oil sale.
+        li
+          strong OutFlow
+          |  (on the right) is the cash that went out of the drawer: a cashier's shortage and the shift expenses.
+        li
+          | The
+          strong  grey rows
+          |  are filled in from the shifts. To change one, correct the shift.
         li
           | Add what PetroMath can't know with
           strong  +
-          | : cash deposited in the bank, a cash receipt from a customer, salary paid.
+          | : a cash receipt from a customer (InFlow), salary paid (OutFlow), and the cash deposited in the bank.
+          | A row you add is white, with a
+          strong  ✕
+          |  at the end to delete it.
         li
-          | Count the notes in the cash box under
+          strong Cash deposited in the bank goes in OutFlow.
+          |  It is still your money, but it has left the office drawer, so it is cash going out.
+        li
+          strong Difference
+          |  (InFlow − OutFlow) is the cash that should be left in the locker tonight. Count the notes actually left under
           strong  Denominations
-          | . The
-          strong  Difference
-          |  is the cash that should be there.
+          | ; any gap is the day's cash excess or shortage.
         li
           | Click
           strong  SAVE
@@ -246,6 +269,7 @@ block content
       h3 Good to know
       ul
         li A day can be closed only after the day before it is closed.
+        li The next day starts from the Difference of the day before: it comes in as that day's Balance B/F.
         li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.
 
     section#bank-upload
