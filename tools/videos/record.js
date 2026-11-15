@@ -210,6 +210,13 @@ function overlayScript(phone) {
     if (!el) { el = document.createElement('div'); el.id = '__vcap'; document.documentElement.appendChild(el); }
     el.textContent = text || '';
     el.style.opacity = text ? '1' : '0';
+    el.style.visibility = store.get('__vcaphide') ? 'hidden' : '';
+  };
+  // While zoomed in (h.zoom) the caption would be magnified and cut off, so it is hidden until h.unzoom.
+  window.__vCapHide = (on) => {
+    store.set('__vcaphide', on ? '1' : '');
+    const el = document.getElementById('__vcap');
+    if (el) el.style.visibility = on ? 'hidden' : '';
   };
   window.__vMove = (x, y) => {
     store.set('__vptr', `${x},${y}`);
@@ -373,6 +380,9 @@ function makeHelpers(page, t0) {
   const now = () => (Date.now() - t0) / 1000;
   const pause = (ms) => page.waitForTimeout(ms);
   const loc = (l) => (typeof l === 'string' ? page.locator(l).first() : l);
+  let zoomed = 0; // current pinch zoom (0 = not zoomed)
+  let cdpSession = null;
+  const cdp = async () => (cdpSession ||= await page.context().newCDPSession(page));
   const h = {
     marks,
     pause,
@@ -411,7 +421,45 @@ function makeHelpers(page, t0) {
       await pause(ms);
       return { el, x, y };
     },
+    // Zoom in on an element the way a touchpad pinch does: Chrome redraws the page bigger, so text stays sharp
+    // (the screencast is only 1280x720, so cropping the video afterwards would look soft). The pinch keeps the
+    // element where it is on screen and grows the page around it. at: 'left' anchors near the element's left
+    // edge (a long field being typed into). The caption is hidden while zoomed. Don't click while zoomed:
+    // h.tap zooms out first; h.type types without clicking.
+    async zoom(l, opts = {}) {
+      if (zoomed) await h.unzoom(0);
+      const el = await h.show(l, 300);
+      const b = await el.boundingBox();
+      const z = opts.z || Math.max(1.4, Math.min(2, (VIEW.width * 0.8) / b.width, (VIEW.height * 0.6) / b.height));
+      // A pinch keeps its point still and grows the page around it. To land the element's centre c at the
+      // screen centre: p + (c - p) * z = size / 2  =>  p = (c * z - size / 2) / (z - 1), kept on screen.
+      const toCentre = (c, size) => Math.min(size - 2, Math.max(2, (c * z - size / 2) / (z - 1)));
+      const x = Math.round(opts.at === 'left' ? b.x + 40 : toCentre(b.x + b.width / 2, VIEW.width));
+      const y = Math.round(toCentre(b.y + b.height / 2, VIEW.height));
+      await page.evaluate(() => window.__vCapHide(true));
+      await (await cdp()).send('Input.synthesizePinchGesture', { x, y, scaleFactor: z, relativeSpeed: 300 });
+      zoomed = z;
+      await pause(opts.ms ?? 500);
+    },
+    async unzoom(ms = 500) {
+      if (!zoomed) return;
+      // The pinch point is in the zoomed (visual) viewport's own coordinates: use its centre.
+      const vv = await page.evaluate(() => ({ w: visualViewport.width, h: visualViewport.height, s: visualViewport.scale }));
+      await (await cdp()).send('Input.synthesizePinchGesture', {
+        x: Math.round(vv.w / 2), y: Math.round(vv.h / 2), scaleFactor: 1 / vv.s, relativeSpeed: 300,
+      });
+      zoomed = 0;
+      await page.evaluate(() => window.__vCapHide(false));
+      await pause(ms);
+    },
+    // Point at an element, zoom in on it for `ms`, then zoom back out (the caption shows before and after).
+    async spot(l, ms = 2600, opts = {}) {
+      await h.point(l, 300);
+      await h.zoom(l, { ...opts, ms });
+      await h.unzoom();
+    },
     async tap(l, ms = 700, opts = {}) {
+      if (zoomed && !opts.noClick) await h.unzoom(200);
       const { el, x, y } = await h.point(l);
       await page.evaluate(([px, py]) => window.__vRing(px, py), [x, y]);
       await pause(250);
@@ -420,7 +468,7 @@ function makeHelpers(page, t0) {
     },
     async type(l, text, delay = 70) {
       const { el } = await h.point(l, 450);
-      await el.click();
+      if (!zoomed) await el.click(); // a click while pinch-zoomed can land elsewhere; fill/press focus it anyway
       await el.fill(''); // clear first: Ctrl+A then typing can drop the first digit in a number box
       await el.pressSequentially(String(text), { delay });
       await pause(350);
@@ -1114,15 +1162,21 @@ const VIDEOS = {
       await h.newTab('desktop');
       await h.begin();
       await h.say('Welcome to PetroMath. A quick tour for the owner of the bunk.', 2800);
-      await h.say('Open your browser and type petromath.co.in.', 300);
+      await h.say('Open your browser and type petromath.co.in.', 1400);
+      await h.zoom('#__vbar .omni', { at: 'left', z: 2, ms: 300 });
       await h.typeUrl('petromath.co.in');
-      await h.say('This is the PetroMath website. Click Sign in at the top right.', 600);
+      await h.unzoom();
+      await h.say('This is the PetroMath website. Click Sign in at the top right.', 1400);
+      await h.spot(page.locator('a[href="/login"]').first(), 1600, { z: 2 });
       await Promise.all([page.waitForURL(/\/login/), h.tap(page.locator('a[href="/login"]').first(), 0)]);
       await page.waitForLoadState('networkidle');
       await h.pause(500);
-      await h.say('Sign in with the username and password PetroMath gave you.', 600);
+      await h.say('Sign in with the username and password PetroMath gave you.', 1400);
+      await h.zoom(page.locator('form').filter({ has: page.locator('#username') }).first(), { ms: 300 });
       await h.type('#username', process.env.TRAINING_USER || 'TRAINING-OWNER', 90);
       await h.type('#pw', process.env.DEMO_PASSWORD, 70);
+      await h.pause(600);
+      await h.unzoom();
       await h.say('Click Login.', 400);
       await Promise.all([page.waitForURL(/\/home/, { timeout: 30000 }), h.tap('button[type=submit]', 0)]);
       await page.waitForLoadState('networkidle');
@@ -1261,10 +1315,11 @@ const VIDEOS = {
       await h.point(page.locator('.card', { hasText: 'Cashier Shifts Contributing' }).first(), 2400);
       await h.say('InFlow, on the left: the cash that came into the drawer today.', 600);
       await h.point('#cashflow-credit-table', 2600);
-      await h.say("Balance B/F: the cash left in the locker at the end of yesterday, brought forward to today.", 600);
-      await h.point(autoRow('credit', 'Balance B/F'), 4000);
-      await h.say("Collection: the day's sales collection from the shifts. It is not the total of the notes the cashier counted.", 600);
-      await h.point(autoRow('credit', 'Collection'), 4600);
+      // Zooms (h.spot) hide the caption, so each caption is left on screen long enough to read first.
+      await h.say("Balance B/F: the cash left in the locker at the end of yesterday, brought forward to today.", 2400);
+      await h.spot(autoRow('credit', 'Balance B/F'), 2600);
+      await h.say("Collection: the day's sales collection from the shifts. It is not the total of the notes the cashier counted.", 3000);
+      await h.spot(autoRow('credit', 'Collection'), 2600);
       await h.say("A cashier's excess and the 2T oil sale come in here too.", 600);
       await h.point(autoRow('credit', 'Cashier A/C (+)'), 2800);
       await h.say('OutFlow, on the right: the cash that went out of the drawer. A cashier\'s shortage and the shift expenses come in here.', 600);
@@ -1282,12 +1337,13 @@ const VIDEOS = {
       await h.type(row.locator('input[id^="cashflow-debit-amt-"]'), String(DAY_CLOSE.bankAmount));
       await page.keyboard.press('Tab');
       await h.pause(600);
-      await h.say('A row you add is white, with a cross at the end to delete it.', 600);
-      await h.point(row.locator('button.close'), 3000);
-      await h.say('InFlow minus OutFlow is the Difference: the cash that should be left in the locker tonight.', 600);
-      await h.point('#cashflow-difference-total', 4000);
-      await h.say('Denominations: count the notes actually left, and enter how many of each. Here they were counted already: 33 rupees short.', 600);
-      await h.point('#denominations_total', 4400);
+      await h.say('A row you add is white, with a cross at the end to delete it.', 2200);
+      await h.point(row.locator('button.close'), 300);
+      await h.spot(row, 2600);
+      await h.say('InFlow minus OutFlow is the Difference: the cash that should be left in the locker tonight.', 2600);
+      await h.spot('#cashflow-difference-total', 2600, { z: 1.8 });
+      await h.say('Denominations: count the notes actually left, and enter how many of each. Here they were counted already: 33 rupees short.', 3200);
+      await h.spot(page.locator('#denom-table tr').filter({ has: page.locator('#denominations_total') }), 2600, { z: 1.8 });
 
       await h.say('Click SAVE, then CLOSE.', 400);
       await h.tap(page.locator('.cashflow-actions button', { hasText: 'SAVE' }), 300);
@@ -1344,8 +1400,8 @@ const VIDEOS = {
       await h.skip(Promise.all([page.waitForURL(/\/cashflow\?id=/, { timeout: 120000 }), gen.click()])
         .then(() => page.waitForLoadState('networkidle')));
       await h.pause(600);
-      await h.say("Balance B/F: yesterday's Difference, the cash left in the locker, carried forward. Each day starts from what was left the day before.", 600);
-      await h.point(autoRow('credit', 'Balance B/F'), 5200);
+      await h.say("Balance B/F: yesterday's Difference, the cash left in the locker, carried forward. Each day starts from what was left the day before.", 3400);
+      await h.spot(autoRow('credit', 'Balance B/F'), 3000);
       await h.say('PetroMath: every day, closed and accounted for.', 2400);
     },
   },
