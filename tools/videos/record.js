@@ -1224,14 +1224,27 @@ const VIDEOS = {
       const [y, m, d] = DAY_CLOSE.day.split('-');
       // An InFlow/OutFlow row filled in from the shifts (grey, read-only), by its type.
       const autoRow = (table, type) => page.locator(`#cashflow-${table}-table tr`, { has: page.locator('select[readonly] option', { hasText: type }) }).first();
+      // The sidebar shows one group open at a time (tkt #482): open Day Close's group(s) first, then click it.
+      const openDayClose = async () => {
+        const link = page.locator('.sidebar a[href="/cashflowhome"]').first();
+        const closed = await link.evaluate((a) => {
+          const codes = [];
+          for (let e = a.parentElement; e; e = e.parentElement) {
+            if (e.classList.contains('menu-submenu') && (e.style.maxHeight === '' || e.style.maxHeight === '0px')) codes.unshift(e.id.replace('submenu-', ''));
+          }
+          return codes;
+        });
+        for (const code of closed) await h.tap(`.sidebar [onclick="toggleMenuSection('${code}')"]`, 700);
+        await h.tap(link, 0);
+        await page.waitForURL(/\/cashflowhome/);
+        await page.waitForLoadState('networkidle');
+      };
       await h.go('/home');
       await h.begin();
       await h.say("Day Close is your office accounts for one 24-hour day. Think of the cash drawer in your office: cash comes in, and cash goes out.", 4200);
       await h.say("Close it once a day, after all of the day's shifts are closed.", 2400);
       await h.say('Open Daily Operations, then Day Close.', 600);
-      await h.tap('.sidebar a[href="/cashflowhome"]', 0);
-      await page.waitForURL(/\/cashflowhome/);
-      await page.waitForLoadState('networkidle');
+      await openDayClose();
       await h.pause(500);
       await h.say('Each day you click Generate Day Close. PetroMath brings in the day\'s shifts.', 600);
       await h.point('.card.border-primary', 2800);
@@ -1322,9 +1335,7 @@ const VIDEOS = {
 
       // The next day: the locker balance is carried forward as its Balance B/F.
       await h.say('The next day, open Day Close again and click Generate Day Close.', 600);
-      await h.tap('.sidebar a[href="/cashflowhome"]', 0);
-      await page.waitForURL(/\/cashflowhome/);
-      await page.waitForLoadState('networkidle');
+      await openDayClose();
       await h.pause(500);
       const gen = page.locator('#cashflow button[type="submit"]');
       await h.tap(gen, 0, { noClick: true });
