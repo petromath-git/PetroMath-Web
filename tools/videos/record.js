@@ -765,7 +765,7 @@ const VIDEOS = {
       await dl.saveAs(pdf);
       execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
       await h.showDoc(path.join(dir, 'page1.png'), dl.suggestedFilename(), [
-        'The PDF has your station name and address at the top.',
+        'The PDF has your bunk name and address at the top.',
         'Share it on WhatsApp or print it. The blue Print button opens it ready to print.']);
       await h.say('PetroMath: every customer, every bill, accounted for.', 2400);
     },
@@ -848,10 +848,10 @@ const VIDEOS = {
       await h.begin();
       await h.say('Everyone who uses PetroMath gets their own login. What they can see depends on their role.', 3200);
       await h.say("Admin is the owner's role. PetroMath gives the owner this login.", 2800);
-      await h.say('Manager: for the person who runs the station day to day.', 2400);
+      await h.say('Manager: for the person who runs the bunk day to day.', 2400);
       await h.say('Cashier: for your cashiers and pump attendants.', 2400);
       await h.say('Each role has its own default menu and access.', 2400);
-      await h.say('Want a role to see more, or less, at your station? Ask PetroMath, and we add or remove that access for the role.', 3600);
+      await h.say('Want a role to see more, or less, at your bunk? Ask PetroMath, and we add or remove that access for the role.', 3600);
 
       await h.say('Open Masters, then Users.', 600);
       await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /masters/i }).first(), 700);
@@ -859,7 +859,7 @@ const VIDEOS = {
       await page.waitForURL(/\/users/);
       await page.waitForLoadState('networkidle');
       await h.pause(600);
-      await h.say('Everyone at your station is listed, with their role.', 600);
+      await h.say('Everyone at your bunk is listed, with their role.', 600);
       await h.point('#users-table tbody tr >> nth=0', 2400);
 
       // A Manager
@@ -868,7 +868,7 @@ const VIDEOS = {
       await page.locator('#add-user-modal.show').waitFor();
       await h.say('Type the full name, in capital letters.', 400);
       await h.type('#m_user_name_0', MGR);
-      await h.say('The username is made for you, from the name and your station code.', 400);
+      await h.say('The username is made for you, from the name and your bunk code.', 400);
       await h.point('#m_user_username_0', 2600);
       await h.say('Every new login starts with the password shown here. Ask them to change it after they sign in.', 400);
       await h.point('#add-user-modal small.text-muted', 3000);
@@ -1113,7 +1113,7 @@ const VIDEOS = {
       await h.go('/'); // the website, hidden under a blank new tab until the address is typed
       await h.newTab('desktop');
       await h.begin();
-      await h.say('Welcome to PetroMath. A quick tour for the owner of the station.', 2800);
+      await h.say('Welcome to PetroMath. A quick tour for the owner of the bunk.', 2800);
       await h.say('Open your browser and type petromath.co.in.', 300);
       await h.typeUrl('petromath.co.in');
       await h.say('This is the PetroMath website. Click Sign in at the top right.', 600);
@@ -1130,7 +1130,7 @@ const VIDEOS = {
 
       await h.say('You land on Cashier Shift: every shift, with its sales and shortage or excess.', 600);
       await h.point(page.locator('table tbody tr').first(), 2600);
-      await h.say('Your name and station are at the top left. Everything else is in this menu.', 600);
+      await h.say('Your name and bunk are at the top left. Everything else is in this menu.', 600);
       await h.point('.sidebar-user', 2600);
 
       await tour(/daily operations/i, 'Daily Operations: the work of every day.', [
@@ -1183,45 +1183,72 @@ const VIDEOS = {
       await page.waitForLoadState('networkidle');
       await h.pause(600);
       await h.point('.help-toc', 2800);
-      await h.say('PetroMath: your whole station, in one place.', 2600);
+      await h.say('PetroMath: your whole bunk, in one place.', 2600);
     },
   },
 
-  // Day Close and the Day-Close Report, at the beta training station (MUE) on DAY_CLOSE.day. Before recording, that
-  // day close is put back to DRAFT the way Reopen does (cashflow-closing-dao reopenCashflow) and its typed bank
-  // deposit line is removed, so the video can continue the day, add the deposit and close it again.
+  // Day Close and the Day-Close Report, at the beta training station (MUE) on DAY_CLOSE.day. Before recording, any
+  // later MUE day close is reopened and deleted, and DAY_CLOSE.day is put back to DRAFT the way Reopen does
+  // (cashflow-closing-dao reopenCashflow) with its typed bank deposit line removed. The video then adds the deposit,
+  // closes the day, and generates the next day to show the locker balance carried forward as its Balance B/F.
+  // The script is built around how the owner explains it to dealers (2026-11-15): Day Close = the office cash drawer
+  // for 24 hours; Collection = sales collection, not the cashier's note count; grey rows come from the shifts;
+  // cash deposited in the bank is OutFlow; Denominations = the cash left; the balance stays in the locker for tomorrow.
   'day-close': {
     title: 'Day Close and the Day-Close Report',
     user: 'training',
     async prepare() {
       const db = await betaDb();
+      const reopen = async (id) => {
+        await db.query("UPDATE t_cashflow_closing SET closing_status = 'DRAFT', updation_date = NOW() WHERE cashflow_id = ?", [id]);
+        await db.query(`UPDATE t_receipts tr JOIN t_cashflow_transaction tct ON tct.source_table = 't_receipts' AND tct.source_id = tr.treceipt_id
+                        SET tr.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [id]);
+        await db.query(`UPDATE t_employee_ledger el JOIN t_cashflow_transaction tct ON tct.source_table = 't_employee_ledger' AND tct.source_id = el.ledger_id
+                        SET el.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [id]);
+      };
       try {
+        const [later] = await db.query("SELECT cashflow_id, cashflow_date, closing_status FROM t_cashflow_closing WHERE location_code = 'MUE' AND cashflow_date > ? ORDER BY cashflow_date DESC", [DAY_CLOSE.day]);
+        for (const l of later) {
+          if (l.closing_status === 'CLOSED') await reopen(l.cashflow_id);
+          await db.query('CALL delete_cashflow(?)', [l.cashflow_id]);
+          console.log(`  deleted later day close ${l.cashflow_id}`);
+        }
         const [[cf]] = await db.query("SELECT cashflow_id, closing_status FROM t_cashflow_closing WHERE location_code = 'MUE' AND cashflow_date = ?", [DAY_CLOSE.day]);
         if (!cf) throw new Error(`No MUE day close on ${DAY_CLOSE.day}`);
-        const [[later]] = await db.query("SELECT COUNT(*) n FROM t_cashflow_closing WHERE location_code = 'MUE' AND cashflow_date > ? AND closing_status = 'CLOSED'", [DAY_CLOSE.day]);
-        if (later.n) throw new Error(`A later MUE day close is CLOSED; pick the latest day for DAY_CLOSE.day`);
-        if (cf.closing_status === 'CLOSED') {
-          await db.query("UPDATE t_cashflow_closing SET closing_status = 'DRAFT', updation_date = NOW() WHERE cashflow_id = ?", [cf.cashflow_id]);
-          await db.query(`UPDATE t_receipts tr JOIN t_cashflow_transaction tct ON tct.source_table = 't_receipts' AND tct.source_id = tr.treceipt_id
-                          SET tr.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [cf.cashflow_id]);
-          await db.query(`UPDATE t_employee_ledger el JOIN t_cashflow_transaction tct ON tct.source_table = 't_employee_ledger' AND tct.source_id = el.ledger_id
-                          SET el.cashflow_date = NULL WHERE tct.cashflow_id = ?`, [cf.cashflow_id]);
-        }
+        if (cf.closing_status === 'CLOSED') await reopen(cf.cashflow_id);
         const [del] = await db.query("DELETE FROM t_cashflow_transaction WHERE cashflow_id = ? AND calc_flag = 'N' AND type = ?", [cf.cashflow_id, DAY_CLOSE.bankType]);
         console.log(`  day close ${cf.cashflow_id} (${DAY_CLOSE.day}) back to DRAFT; removed ${del.affectedRows} bank deposit line(s)`);
       } finally { await db.end(); }
     },
     async run(h, page) {
       const [y, m, d] = DAY_CLOSE.day.split('-');
+      // An InFlow/OutFlow row filled in from the shifts (grey, read-only), by its type.
+      const autoRow = (table, type) => page.locator(`#cashflow-${table}-table tr`, { has: page.locator('select[readonly] option', { hasText: type }) }).first();
+      // The sidebar shows one group open at a time (tkt #482): open Day Close's group(s) first, then click it.
+      const openDayClose = async () => {
+        const link = page.locator('.sidebar a[href="/cashflowhome"]').first();
+        const closed = await link.evaluate((a) => {
+          const codes = [];
+          for (let e = a.parentElement; e; e = e.parentElement) {
+            if (e.classList.contains('menu-submenu') && (e.style.maxHeight === '' || e.style.maxHeight === '0px')) codes.unshift(e.id.replace('submenu-', ''));
+          }
+          return codes;
+        });
+        for (const code of closed) await h.tap(`.sidebar [onclick="toggleMenuSection('${code}')"]`, 700);
+        await h.tap(link, 0);
+        await page.waitForURL(/\/cashflowhome/);
+        await page.waitForLoadState('networkidle');
+      };
       await h.go('/home');
       await h.begin();
-      await h.say('Day Close: once a day, after all of the day\'s shifts are closed, the cash for the whole day is closed.', 3200);
+      await h.say("Day Close is your office accounts for one 24-hour day. Think of the cash drawer in your office: cash comes in, and cash goes out.", 4200);
+      // Dealers' 24 hours differ (9 am to 9 am, 6 am to 6 am...): one example, and say it isn't fixed (owner, 2026-11-15).
+      await h.say("Your bunk decides when its 24 hours start. For example, 14-Nov 9 am to 15-Nov 9 am. Your bunk may use a different time.", 5200);
+      await h.say("Close it once a day, after all of the day's shifts are closed.", 2400);
       await h.say('Open Daily Operations, then Day Close.', 600);
-      await h.tap('.sidebar a[href="/cashflowhome"]', 0);
-      await page.waitForURL(/\/cashflowhome/);
-      await page.waitForLoadState('networkidle');
+      await openDayClose();
       await h.pause(500);
-      await h.say('Each day you pick the date and click Generate Day Close. PetroMath brings in the day\'s shifts.', 600);
+      await h.say('Each day you click Generate Day Close. PetroMath brings in the day\'s shifts.', 600);
       await h.point('.card.border-primary', 2800);
       await h.say(`Here ${d}-${MONTH_SHORT[Number(m) - 1]} is already generated (Draft). Click Continue Day Close.`, 400);
       const cont = page.locator('a', { hasText: 'Continue Day Close' });
@@ -1230,14 +1257,24 @@ const VIDEOS = {
         .then(() => page.waitForLoadState('networkidle')));
       await h.pause(600);
 
-      await h.say("At the top: the day's closed shifts, and the cash each cashier handed over.", 600);
-      await h.point(page.locator('.card', { hasText: 'Cashier Shifts Contributing' }).first(), 3000);
-      await h.say("InFlow: yesterday's cash balance (Balance B/F), the shift collections, 2T oil and cashier excess.", 600);
-      await h.point('#cashflow-credit-table', 3600);
-      await h.say('OutFlow: cashier shortage and the expenses entered in the shifts. PetroMath fills all of these in.', 600);
-      await h.point('#cashflow-debit-table', 3400);
+      await h.say("At the top: the day's closed shifts.", 600);
+      await h.point(page.locator('.card', { hasText: 'Cashier Shifts Contributing' }).first(), 2400);
+      await h.say('InFlow, on the left: the cash that came into the drawer today.', 600);
+      await h.point('#cashflow-credit-table', 2600);
+      await h.say("Balance B/F: the cash left in the locker at the end of yesterday, brought forward to today.", 600);
+      await h.point(autoRow('credit', 'Balance B/F'), 4000);
+      await h.say("Collection: the day's sales collection from the shifts. It is not the total of the notes the cashier counted.", 600);
+      await h.point(autoRow('credit', 'Collection'), 4600);
+      await h.say("A cashier's excess and the 2T oil sale come in here too.", 600);
+      await h.point(autoRow('credit', 'Cashier A/C (+)'), 2800);
+      await h.say('OutFlow, on the right: the cash that went out of the drawer. A cashier\'s shortage and the shift expenses come in here.', 600);
+      await h.point('#cashflow-debit-table', 4200);
+      await h.say('The grey rows are filled in from the shifts. To change one, correct the shift.', 600);
+      await h.point(autoRow('debit', 'Expense'), 3600);
 
-      await h.say('Add what PetroMath cannot know. Here: the cash deposited in the bank. Click +.', 600);
+      await h.say('Now the most important part: cash you deposit in the bank goes in OutFlow.', 3400);
+      await h.say('It is still your money, but it has left the office drawer. So it is cash going out.', 3600);
+      await h.say('Click + and add the bank deposit.', 400);
       await h.tap('#debit-add-new', 700);
       const row = page.locator('#cashflow-debit-table tr:visible', { has: page.locator('select[id^="cashflow-debit-transaction-"]') }).first();
       await h.pick(row.locator('select[id^="cashflow-debit-transaction-"]'), DAY_CLOSE.bankType, 600);
@@ -1245,10 +1282,12 @@ const VIDEOS = {
       await h.type(row.locator('input[id^="cashflow-debit-amt-"]'), String(DAY_CLOSE.bankAmount));
       await page.keyboard.press('Tab');
       await h.pause(600);
-      await h.say('The Difference is the cash that should be in your cash box now.', 600);
-      await h.point('#cashflow-difference-total', 2800);
-      await h.say('Count the notes and enter how many of each. Here they were counted already: 33 rupees short.', 600);
-      await h.point('#denominations_total', 3200);
+      await h.say('A row you add is white, with a cross at the end to delete it.', 600);
+      await h.point(row.locator('button.close'), 3000);
+      await h.say('InFlow minus OutFlow is the Difference: the cash that should be left in the locker tonight.', 600);
+      await h.point('#cashflow-difference-total', 4000);
+      await h.say('Denominations: count the notes actually left, and enter how many of each. Here they were counted already: 33 rupees short.', 600);
+      await h.point('#denominations_total', 4400);
 
       await h.say('Click SAVE, then CLOSE.', 400);
       await h.tap(page.locator('.cashflow-actions button', { hasText: 'SAVE' }), 300);
@@ -1295,6 +1334,18 @@ const VIDEOS = {
       await sec('banktransaction-table-container', "The day's bank and oil company (SAP) statement lines, once uploaded.", 3400);
       await sec('deadline-table-container', 'And what is due: renewals, rent and other deadlines.', 3000);
       await h.say('A snapshot of the whole day. Read it every morning.', 2600);
+
+      // The next day: the locker balance is carried forward as its Balance B/F.
+      await h.say('The next day, open Day Close again and click Generate Day Close.', 600);
+      await openDayClose();
+      await h.pause(500);
+      const gen = page.locator('#cashflow button[type="submit"]');
+      await h.tap(gen, 0, { noClick: true });
+      await h.skip(Promise.all([page.waitForURL(/\/cashflow\?id=/, { timeout: 120000 }), gen.click()])
+        .then(() => page.waitForLoadState('networkidle')));
+      await h.pause(600);
+      await h.say("Balance B/F: yesterday's Difference, the cash left in the locker, carried forward. Each day starts from what was left the day before.", 600);
+      await h.point(autoRow('credit', 'Balance B/F'), 5200);
       await h.say('PetroMath: every day, closed and accounted for.', 2400);
     },
   },
@@ -1358,7 +1409,7 @@ const VIDEOS = {
       // The app's home screen is the phone menu
       await h.say('The app opens full screen, already signed in.', 2400);
       const hint = page.locator('#pwaHint:visible');
-      await h.say('Your name and station are at the top.', 400);
+      await h.say('Your name and bunk are at the top.', 400);
       await h.point('.mhome-who', 1800);
       if (await hint.count()) await hint.evaluate((e) => { e.hidden = true; });
       await h.say('Every screen is a tile, grouped like the menu on a computer.', 400);
@@ -1384,7 +1435,7 @@ const VIDEOS = {
       await h.tap(page.locator('.mhome-tile', { hasText: 'Cashier Shift' }).first(), 0);
       await page.waitForLoadState('networkidle');
       await h.pause(1600);
-      await h.say('PetroMath: your station, in your pocket.', 2600);
+      await h.say('PetroMath: your bunk, in your pocket.', 2600);
     },
   },
 
@@ -1437,7 +1488,7 @@ const VIDEOS = {
       await dl.saveAs(pdf);
       execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
       await h.showDoc(path.join(dir, 'page1.png'), 'Statement PDF', [
-        'Your station name on top, every bill and payment below.',
+        'Your bunk name on top, every bill and payment below.',
         'They can keep it, or forward it to their accounts person.']);
 
       await h.say('From the menu they can change their password.', 400);
@@ -1642,7 +1693,7 @@ const VIDEOS = {
       await h.next('#new_digital_sales');
 
       // ── Collections (optional tab) ──
-      await h.say('Collections and Employee Advance are optional tabs: you see them only if they are switched on for your station.', 3200);
+      await h.say('Collections and Employee Advance are optional tabs: you see them only if they are switched on for your bunk.', 3200);
       await h.say('Collections: payments from credit customers received during the shift.', 500);
       await h.tap(page.getByRole('button', { name: 'Add Collection' }), 500);
       await h.say('Cash or digital, the customer and the amount.', 300);
