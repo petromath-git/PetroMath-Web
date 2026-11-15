@@ -765,7 +765,7 @@ const VIDEOS = {
       await dl.saveAs(pdf);
       execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
       await h.showDoc(path.join(dir, 'page1.png'), dl.suggestedFilename(), [
-        'The PDF has your station name and address at the top.',
+        'The PDF has your bunk name and address at the top.',
         'Share it on WhatsApp or print it. The blue Print button opens it ready to print.']);
       await h.say('PetroMath: every customer, every bill, accounted for.', 2400);
     },
@@ -848,10 +848,10 @@ const VIDEOS = {
       await h.begin();
       await h.say('Everyone who uses PetroMath gets their own login. What they can see depends on their role.', 3200);
       await h.say("Admin is the owner's role. PetroMath gives the owner this login.", 2800);
-      await h.say('Manager: for the person who runs the station day to day.', 2400);
+      await h.say('Manager: for the person who runs the bunk day to day.', 2400);
       await h.say('Cashier: for your cashiers and pump attendants.', 2400);
       await h.say('Each role has its own default menu and access.', 2400);
-      await h.say('Want a role to see more, or less, at your station? Ask PetroMath, and we add or remove that access for the role.', 3600);
+      await h.say('Want a role to see more, or less, at your bunk? Ask PetroMath, and we add or remove that access for the role.', 3600);
 
       await h.say('Open Masters, then Users.', 600);
       await h.tap(page.locator('.sidebar .menu-section-title', { hasText: /masters/i }).first(), 700);
@@ -859,7 +859,7 @@ const VIDEOS = {
       await page.waitForURL(/\/users/);
       await page.waitForLoadState('networkidle');
       await h.pause(600);
-      await h.say('Everyone at your station is listed, with their role.', 600);
+      await h.say('Everyone at your bunk is listed, with their role.', 600);
       await h.point('#users-table tbody tr >> nth=0', 2400);
 
       // A Manager
@@ -868,7 +868,7 @@ const VIDEOS = {
       await page.locator('#add-user-modal.show').waitFor();
       await h.say('Type the full name, in capital letters.', 400);
       await h.type('#m_user_name_0', MGR);
-      await h.say('The username is made for you, from the name and your station code.', 400);
+      await h.say('The username is made for you, from the name and your bunk code.', 400);
       await h.point('#m_user_username_0', 2600);
       await h.say('Every new login starts with the password shown here. Ask them to change it after they sign in.', 400);
       await h.point('#add-user-modal small.text-muted', 3000);
@@ -1113,7 +1113,7 @@ const VIDEOS = {
       await h.go('/'); // the website, hidden under a blank new tab until the address is typed
       await h.newTab('desktop');
       await h.begin();
-      await h.say('Welcome to PetroMath. A quick tour for the owner of the station.', 2800);
+      await h.say('Welcome to PetroMath. A quick tour for the owner of the bunk.', 2800);
       await h.say('Open your browser and type petromath.co.in.', 300);
       await h.typeUrl('petromath.co.in');
       await h.say('This is the PetroMath website. Click Sign in at the top right.', 600);
@@ -1130,7 +1130,7 @@ const VIDEOS = {
 
       await h.say('You land on Cashier Shift: every shift, with its sales and shortage or excess.', 600);
       await h.point(page.locator('table tbody tr').first(), 2600);
-      await h.say('Your name and station are at the top left. Everything else is in this menu.', 600);
+      await h.say('Your name and bunk are at the top left. Everything else is in this menu.', 600);
       await h.point('.sidebar-user', 2600);
 
       await tour(/daily operations/i, 'Daily Operations: the work of every day.', [
@@ -1183,7 +1183,7 @@ const VIDEOS = {
       await page.waitForLoadState('networkidle');
       await h.pause(600);
       await h.point('.help-toc', 2800);
-      await h.say('PetroMath: your whole station, in one place.', 2600);
+      await h.say('PetroMath: your whole bunk, in one place.', 2600);
     },
   },
 
@@ -1242,6 +1242,8 @@ const VIDEOS = {
       await h.go('/home');
       await h.begin();
       await h.say("Day Close is your office accounts for one 24-hour day. Think of the cash drawer in your office: cash comes in, and cash goes out.", 4200);
+      // Dealers' 24 hours differ (9 am to 9 am, 6 am to 6 am...): one example, and say it isn't fixed (owner, 2026-11-15).
+      await h.say("Your bunk decides when its 24 hours start. For example, 14-Nov 9 am to 15-Nov 9 am. Your bunk may use a different time.", 5200);
       await h.say("Close it once a day, after all of the day's shifts are closed.", 2400);
       await h.say('Open Daily Operations, then Day Close.', 600);
       await openDayClose();
@@ -1407,7 +1409,7 @@ const VIDEOS = {
       // The app's home screen is the phone menu
       await h.say('The app opens full screen, already signed in.', 2400);
       const hint = page.locator('#pwaHint:visible');
-      await h.say('Your name and station are at the top.', 400);
+      await h.say('Your name and bunk are at the top.', 400);
       await h.point('.mhome-who', 1800);
       if (await hint.count()) await hint.evaluate((e) => { e.hidden = true; });
       await h.say('Every screen is a tile, grouped like the menu on a computer.', 400);
@@ -1433,7 +1435,7 @@ const VIDEOS = {
       await h.tap(page.locator('.mhome-tile', { hasText: 'Cashier Shift' }).first(), 0);
       await page.waitForLoadState('networkidle');
       await h.pause(1600);
-      await h.say('PetroMath: your station, in your pocket.', 2600);
+      await h.say('PetroMath: your bunk, in your pocket.', 2600);
     },
   },
 
@@ -1486,7 +1488,7 @@ const VIDEOS = {
       await dl.saveAs(pdf);
       execFileSync(process.env.PDFTOPPM_PATH || 'pdftoppm', ['-png', '-r', '110', '-f', '1', '-l', '1', '-singlefile', pdf, path.join(dir, 'page1')]);
       await h.showDoc(path.join(dir, 'page1.png'), 'Statement PDF', [
-        'Your station name on top, every bill and payment below.',
+        'Your bunk name on top, every bill and payment below.',
         'They can keep it, or forward it to their accounts person.']);
 
       await h.say('From the menu they can change their password.', 400);
@@ -1691,7 +1693,7 @@ const VIDEOS = {
       await h.next('#new_digital_sales');
 
       // ── Collections (optional tab) ──
-      await h.say('Collections and Employee Advance are optional tabs: you see them only if they are switched on for your station.', 3200);
+      await h.say('Collections and Employee Advance are optional tabs: you see them only if they are switched on for your bunk.', 3200);
       await h.say('Collections: payments from credit customers received during the shift.', 500);
       await h.tap(page.getByRole('button', { name: 'Add Collection' }), 500);
       await h.say('Cash or digital, the customer and the amount.', 300);

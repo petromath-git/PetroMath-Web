@@ -45,7 +45,7 @@
     "The bill is added to the list. Add the next bill the same way.",
     "Digital Sales: UPI, card and fleet card payments.",
     "The total is shown below the list.",
-    "Collections and Employee Advance are optional tabs: you see them only if they are switched on for your station.",
+    "Collections and Employee Advance are optional tabs: you see them only if they are switched on for your bunk.",
     "Collections: payments from credit customers received during the shift.",
     "Cash or digital, the customer and the amount.",
     "It is added to the shift's cash, and the customer's balance comes down.",
@@ -66,13 +66,13 @@
     "PetroMath: every shift, accounted for."
   ],
   "intro": [
-    "Welcome to PetroMath. A quick tour for the owner of the station.",
+    "Welcome to PetroMath. A quick tour for the owner of the bunk.",
     "Open your browser and type petromath.co.in.",
     "This is the PetroMath website. Click Sign in at the top right.",
     "Sign in with the username and password PetroMath gave you.",
     "Click Login.",
     "You land on Cashier Shift: every shift, with its sales and shortage or excess.",
-    "Your name and station are at the top left. Everything else is in this menu.",
+    "Your name and bunk are at the top left. Everything else is in this menu.",
     "Daily Operations: the work of every day.",
     "Cashier Shift: enter and close each shift.",
     "Day Bill: the GST bill for the day's cash and digital sales.",
@@ -111,7 +111,7 @@
     "Support Tickets: raise a question or problem with the PetroMath team.",
     "Password Reset: reset a staff member's password.",
     "Stuck? Click Help at the top for step-by-step videos like this one.",
-    "PetroMath: your whole station, in one place."
+    "PetroMath: your whole bunk, in one place."
   ],
   "phone-app": [
     "PetroMath works on your phone too, and installs like an app.",
@@ -124,7 +124,7 @@
     "PetroMath is now on your home screen, like any other app.",
     "Tap it to open.",
     "The app opens full screen, already signed in.",
-    "Your name and station are at the top.",
+    "Your name and bunk are at the top.",
     "Every screen is a tile, grouped like the menu on a computer.",
     "Tap \"more\" to see the rest of a section.",
     "Transactions.",
@@ -133,7 +133,7 @@
     "Accounting.",
     "Or search for any screen by name.",
     "Tap a tile to open it.",
-    "PetroMath: your station, in your pocket."
+    "PetroMath: your bunk, in your pocket."
   ],
   "bank-upload": [
     "Upload your bank statement to bring every bank credit and debit into PetroMath.",
@@ -167,7 +167,7 @@
     "Payments appear as credits, and the balance runs line by line.",
     "The statement ends with the totals and the closing balance.",
     "To send it to the customer, click the green Download PDF button.",
-    "The PDF has your station name and address at the top.",
+    "The PDF has your bunk name and address at the top.",
     "Share it on WhatsApp or print it. The blue Print button opens it ready to print.",
     "PetroMath: every customer, every bill, accounted for."
   ],
@@ -182,7 +182,7 @@
     "At the end, the closing balance: what they owe you today.",
     "They can pick another period, for example last month, and tap Go.",
     "The green button downloads the statement as a PDF.",
-    "Your station name on top, every bill and payment below.",
+    "Your bunk name on top, every bill and payment below.",
     "They can keep it, or forward it to their accounts person.",
     "From the menu they can change their password.",
     "No more calls asking \"how much do I owe?\""
@@ -318,6 +318,7 @@
   ],
   "day-close": [
     "Day Close is your office accounts for one 24-hour day. Think of the cash drawer in your office: cash comes in, and cash goes out.",
+    "Your bunk decides when its 24 hours start. For example, 14-Nov 9 am to 15-Nov 9 am. Your bunk may use a different time.",
     "Close it once a day, after all of the day's shifts are closed.",
     "Open Daily Operations, then Day Close.",
     "Each day you click Generate Day Close. PetroMath brings in the day's shifts.",
@@ -366,15 +367,15 @@
   "add-user": [
     "Everyone who uses PetroMath gets their own login. What they can see depends on their role.",
     "Admin is the owner's role. PetroMath gives the owner this login.",
-    "Manager: for the person who runs the station day to day.",
+    "Manager: for the person who runs the bunk day to day.",
     "Cashier: for your cashiers and pump attendants.",
     "Each role has its own default menu and access.",
-    "Want a role to see more, or less, at your station? Ask PetroMath, and we add or remove that access for the role.",
+    "Want a role to see more, or less, at your bunk? Ask PetroMath, and we add or remove that access for the role.",
     "Open Masters, then Users.",
-    "Everyone at your station is listed, with their role.",
+    "Everyone at your bunk is listed, with their role.",
     "Click Add User.",
     "Type the full name, in capital letters.",
-    "The username is made for you, from the name and your station code.",
+    "The username is made for you, from the name and your bunk code.",
     "Every new login starts with the password shown here. Ask them to change it after they sign in.",
     "Choose the role. Here, Manager.",
     "Click Save.",
