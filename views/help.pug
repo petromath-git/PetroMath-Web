@@ -736,6 +736,14 @@ block content
       function isWideVideo(el) {
         return el && el.tagName === 'VIDEO' && el.closest('figure.help-video') && !el.closest('figure.help-video.phone');
       }
+      // iPhone: a page can't go full screen from the 'play' event (not counted as the tap), but a
+      // video without playsinline opens in the iPhone's own player on tap, which turns with the phone.
+      var probe = document.querySelector('figure.help-video video');
+      if (probe && !probe.requestFullscreen && probe.webkitEnterFullscreen) {
+        document.querySelectorAll('figure.help-video video').forEach(function (v) {
+          if (isWideVideo(v)) { v.removeAttribute('playsinline'); v.playsInline = false; }
+        });
+      }
       document.addEventListener('play', function (e) {
         var v = e.target;
         if (!isWideVideo(v) || fsElement()) return;
