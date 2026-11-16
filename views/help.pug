@@ -723,4 +723,42 @@ block content
           if (v !== e.target && !v.paused) v.pause();
         });
       }, true);
+
+      // Phones: a desktop (landscape) video goes full screen and turns sideways when it starts, and the
+      // screen turns back upright when full screen ends. The installed app is locked to portrait
+      // (manifest), so without the lock the video stays small and upright. Phone-screen videos
+      // (figure.phone) stay upright. iPhone can't lock orientation; its own full-screen player turns
+      // with the phone.
+      var isPhone = window.matchMedia && window.matchMedia('(pointer: coarse)').matches &&
+        Math.min(screen.width, screen.height) < 600;
+      if (!isPhone) return;
+      function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+      function isWideVideo(el) {
+        return el && el.tagName === 'VIDEO' && el.closest('figure.help-video') && !el.closest('figure.help-video.phone');
+      }
+      document.addEventListener('play', function (e) {
+        var v = e.target;
+        if (!isWideVideo(v) || fsElement()) return;
+        if (v.requestFullscreen) {
+          v.requestFullscreen({ navigationUI: 'hide' }).catch(function () { /* no tap to go on: stays in the page */ });
+        } else if (v.webkitEnterFullscreen) {
+          try { v.webkitEnterFullscreen(); } catch (err) { /* stays in the page */ }
+        }
+      }, true);
+      function onFullscreenChange() {
+        if (!screen.orientation || !screen.orientation.lock) return;
+        if (isWideVideo(fsElement())) {
+          screen.orientation.lock('landscape').catch(function () { /* not allowed here: user can rotate */ });
+        } else {
+          try { screen.orientation.unlock(); } catch (err) { /* nothing locked */ }
+        }
+      }
+      document.addEventListener('fullscreenchange', onFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+      // Video finished: leave full screen so the page (and the next topic) is back upright
+      document.addEventListener('ended', function (e) {
+        if (isWideVideo(e.target) && fsElement() === e.target && document.exitFullscreen) {
+          document.exitFullscreen().catch(function () {});
+        }
+      }, true);
     })();
