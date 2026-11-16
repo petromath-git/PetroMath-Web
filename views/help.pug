@@ -738,8 +738,9 @@ block content
       }
       // iPhone: a page can't go full screen from the 'play' event (not counted as the tap), but a
       // video without playsinline opens in the iPhone's own player on tap, which turns with the phone.
-      var probe = document.querySelector('figure.help-video video');
-      if (probe && !probe.requestFullscreen && probe.webkitEnterFullscreen) {
+      // (Detect iPhone by name: newer iPhones may list requestFullscreen yet refuse it for a video.)
+      var isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+      if (isIPhone) {
         document.querySelectorAll('figure.help-video video').forEach(function (v) {
           if (isWideVideo(v)) { v.removeAttribute('playsinline'); v.playsInline = false; }
         });
@@ -747,7 +748,12 @@ block content
       document.addEventListener('play', function (e) {
         var v = e.target;
         if (!isWideVideo(v) || fsElement()) return;
-        if (v.requestFullscreen) {
+        if (isIPhone) {
+          // Without playsinline the iPhone player normally opens by itself; this is a fallback
+          if (!v.webkitDisplayingFullscreen && v.webkitEnterFullscreen) {
+            try { v.webkitEnterFullscreen(); } catch (err) { /* stays in the page */ }
+          }
+        } else if (v.requestFullscreen) {
           v.requestFullscreen({ navigationUI: 'hide' }).catch(function () { /* no tap to go on: stays in the page */ });
         } else if (v.webkitEnterFullscreen) {
           try { v.webkitEnterFullscreen(); } catch (err) { /* stays in the page */ }
