@@ -430,12 +430,13 @@ function makeHelpers(page, t0) {
       if (zoomed) await h.unzoom(0);
       const el = await h.show(l, 300);
       const b = await el.boundingBox();
-      const z = opts.z || Math.max(1.4, Math.min(2, (VIEW.width * 0.8) / b.width, (VIEW.height * 0.6) / b.height));
+      const vp = page.viewportSize(); // 1280x720, or the phone screen
+      const z = opts.z || Math.max(1.4, Math.min(2, (vp.width * 0.8) / b.width, (vp.height * 0.6) / b.height));
       // A pinch keeps its point still and grows the page around it. To land the element's centre c at the
       // screen centre: p + (c - p) * z = size / 2  =>  p = (c * z - size / 2) / (z - 1), kept on screen.
       const toCentre = (c, size) => Math.min(size - 2, Math.max(2, (c * z - size / 2) / (z - 1)));
-      const x = Math.round(opts.at === 'left' ? b.x + 40 : toCentre(b.x + b.width / 2, VIEW.width));
-      const y = Math.round(toCentre(b.y + b.height / 2, VIEW.height));
+      const x = Math.round(opts.at === 'left' ? b.x + 40 : toCentre(b.x + b.width / 2, vp.width));
+      const y = Math.round(toCentre(b.y + b.height / 2, vp.height));
       await page.evaluate(() => window.__vCapHide(true));
       await (await cdp()).send('Input.synthesizePinchGesture', { x, y, scaleFactor: z, relativeSpeed: 300 });
       zoomed = z;
@@ -679,8 +680,9 @@ async function uploadWalkthrough(h, page, v) {
 
   // Step 2
   await h.top(300);
-  await h.say('Step 2: PetroMath reads every line of the statement.', 600);
-  await h.point('#step2-summary', 2000);
+  // Zooms (h.spot) hide the caption, so each caption is left on screen long enough to read first.
+  await h.say('Step 2: PetroMath reads every line of the statement.', 2000);
+  await h.spot('#step2-summary', 2200);
   await h.say('Lines already uploaded before are marked as duplicates and skipped.', 2400);
   await h.say('Choose a ledger for each line: who paid, or what the money was for.', 600);
   for (let i = 0; i < v.ledgers.length; i++) {
@@ -696,8 +698,8 @@ async function uploadWalkthrough(h, page, v) {
 
   // Step 3
   await h.top(300);
-  await h.say('Step 3: check the count and the account, then Save All Transactions.', 600);
-  await h.point('#step3-summary', 1800);
+  await h.say('Step 3: check the count and the account, then Save All Transactions.', 2400);
+  await h.spot('#step3-summary', 2200);
   const save = page.locator('#btnFinalSave');
   await h.tap(save, 300, { noClick: true });
   await page.evaluate(() => {
@@ -793,15 +795,15 @@ const VIDEOS = {
       await page.waitForLoadState('networkidle');
       await h.pause(700);
 
-      await h.say('The Period Summary: opening balance, bills, payments and closing balance.', 600);
-      await h.point('.period-summary', 3200);
+      await h.say('The Period Summary: opening balance, bills, payments and closing balance.', 2600);
+      await h.spot('.period-summary', 2800);
       await h.say('Below it, every bill: date, bill number, product, vehicle, quantity and amount.', 600);
       await h.point(page.locator('table.credit-stmt-table tbody tr').nth(2), 2600);
       await h.say('Payments appear as credits, and the balance runs line by line.', 600);
       await h.point(page.locator('table.credit-stmt-table tbody tr.stmt-credit').first(), 3000);
       await h.scrollBy(900, 1600);
-      await h.say('The statement ends with the totals and the closing balance.', 600);
-      await h.point('table.credit-stmt-table tr.stmt-balance-row >> nth=-1', 2600);
+      await h.say('The statement ends with the totals and the closing balance.', 2200);
+      await h.spot('table.credit-stmt-table tr.stmt-balance-row >> nth=-1', 2600);
 
       await h.top(700);
       await h.say('To send it to the customer, click the green Download PDF button.', 600);
@@ -866,16 +868,16 @@ const VIDEOS = {
       await h.type('#searchInput', 'MURUGAN', 90);
       await h.pause(800);
       const row = page.locator('#customers-master-table tbody tr', { hasText: NAME }).first();
-      await h.say('The opening balance is set, as on that date.', 400);
-      await h.point(row.locator('td.ob-cell'), 2600);
+      await h.say('The opening balance is set, as on that date.', 1800);
+      await h.spot(row.locator('td.ob-cell'), 2400, { z: 2 });
       await h.say('PetroMath also made a login, so the customer can see their own bills and statement.', 600);
       await h.point(row.locator('td', { has: page.locator('.show-login-btn') }), 2600);
       await h.say('To see the login details, click the key.', 400);
       await h.tap(row.locator('.show-login-btn'), 1200);
       await page.locator('#loginInfoModal.show').waitFor();
       await page.waitForLoadState('networkidle');
-      await h.say('The username, and the password (hidden in this video).', 500);
-      await h.point('#loginInfoUsername', 2200);
+      await h.say('The username, and the password (hidden in this video).', 2000);
+      await h.spot('#loginInfoUsername', 2200, { z: 2 });
       await h.say('Copy them and send them to the customer, for example on WhatsApp.', 2600);
       await h.say('Reset Password gives a new one if they forget it. You can also switch the login off here.', 400);
       await h.point('#resetPasswordBtn', 2600);
@@ -916,10 +918,10 @@ const VIDEOS = {
       await page.locator('#add-user-modal.show').waitFor();
       await h.say('Type the full name, in capital letters.', 400);
       await h.type('#m_user_name_0', MGR);
-      await h.say('The username is made for you, from the name and your bunk code.', 400);
-      await h.point('#m_user_username_0', 2600);
-      await h.say('Every new login starts with the password shown here. Ask them to change it after they sign in.', 400);
-      await h.point('#add-user-modal small.text-muted', 3000);
+      await h.say('The username is made for you, from the name and your bunk code.', 2200);
+      await h.spot('#m_user_username_0', 2400, { z: 2 });
+      await h.say('Every new login starts with the password shown here. Ask them to change it after they sign in.', 3000);
+      await h.spot('#add-user-modal small.text-muted', 2600, { z: 2 });
       await h.say('Choose the role. Here, Manager.', 400);
       await h.pick('#m_user_role_0', 'Manager', 700);
       await h.say('Click Save.', 400);
@@ -989,9 +991,9 @@ const VIDEOS = {
       await h.say('Everything is filled in from the PDF: invoice number, date, tanker number and total.', 600);
       await h.point('#fi_invoice_number', 1500);
       await h.point('#fi_truck_number', 1300);
-      await h.point('#fi_total_amount', 1800);
-      await h.say('And each product: quantity, rate, density and HSN code, with the VAT charges below.', 600);
-      await h.point('#fi_lines_body tr >> nth=0', 2800);
+      await h.spot('#fi_total_amount', 1800, { z: 2 });
+      await h.say('And each product: quantity, rate, density and HSN code, with the VAT charges below.', 2800);
+      await h.spot('#fi_lines_body tr >> nth=0', 2600);
       await h.say('The first time only, tell PetroMath which of your products each invoice product is.', 600);
       await h.pick(page.locator('#fi_lines_body .fi-product-id').nth(0), 'MS', 600);
       await h.pick(page.locator('#fi_lines_body .fi-product-id').nth(1), 'HSD', 600);
@@ -1036,8 +1038,8 @@ const VIDEOS = {
       await h.say('The supplier, invoice number and date are filled in.', 600);
       await h.point('#supplier_id', 1400);
       await h.point('#invoice_number', 1400);
-      await h.say('Every product line too: quantity, rate, discount and GST.', 600);
-      await h.point(page.locator('.pi-src').first(), 2400);
+      await h.say('Every product line too: quantity, rate, discount and GST.', 2200);
+      await h.spot(page.locator('.pi-src').first(), 2400);
       await h.say('Each line is linked to your product: Matched. Check any marked Suggested or Pick.', 2800);
       // The invoice it read, with the buyer's and supplier's private details blurred (owner's choice).
       const page1 = blurredPage(lube.file, LUBE_INVOICE_BLUR, path.join(OUT, 'real', 'lube-page1.png'));
@@ -1106,8 +1108,8 @@ const VIDEOS = {
       await h.tap(row.locator('.opening-stock-btn'), 1000);
       await page.locator('#openingStockModal.show #osBody').waitFor({ state: 'visible', timeout: 30000 });
       await h.pause(500);
-      await h.say('Opening stock: how many you have in hand when you start selling it in PetroMath.', 500);
-      await h.point('#osDate', 2400);
+      await h.say('Opening stock: how many you have in hand when you start selling it in PetroMath.', 2400);
+      await h.spot('#osDate', 2000, { z: 2 });
       await h.say('Enter the quantity from a physical count.', 300);
       await h.type('#osQty', '24');
       await h.type('#osNote', 'Physical count', 60);
@@ -1116,8 +1118,8 @@ const VIDEOS = {
       await page.waitForLoadState('networkidle');
       await h.pause(600);
       const row2 = page.locator('tr', { hasText: NAME }).first();
-      await h.say('Opening stock is set. Purchases add to it, and every sale takes from it.', 600);
-      await h.point(row2.locator('td', { has: page.locator('.opening-stock-btn') }), 2800);
+      await h.say('Opening stock is set. Purchases add to it, and every sale takes from it.', 2600);
+      await h.spot(row2.locator('td', { has: page.locator('.opening-stock-btn') }), 2400, { z: 2 });
       await h.say('To change a price later, use the edit button on the product.', 600);
       await h.point(row2.locator('button.btn-primary').first(), 2400);
     },
@@ -1418,8 +1420,10 @@ const VIDEOS = {
       await h.newTab('phone');
       await h.begin();
       await h.say('PetroMath works on your phone too, and installs like an app.', 2600);
-      await h.say('Open Chrome on your phone and type petromath.co.in.', 300);
+      await h.say('Open Chrome on your phone and type petromath.co.in.', 1400);
+      await h.zoom('#__vbar .omni', { at: 'left', z: 1.8, ms: 300 });
       await h.typeUrl('petromath.co.in');
+      await h.unzoom();
       await h.say('Tap Sign in.', 500);
       await Promise.all([page.waitForURL(/\/login/), h.tap(page.locator('a[href="/login"]:visible').first(), 0)]);
       await page.waitForLoadState('networkidle');
@@ -1517,7 +1521,7 @@ const VIDEOS = {
       await h.say('Their statement opens straight away, for the last few weeks.', 600);
       await h.point(page.locator('h5:visible').first(), 2000);
       await h.say('It starts with the opening balance.', 400);
-      await h.point(page.locator(':text("Opening Balance"):visible').first(), 2000);
+      await h.point(page.locator(':text("Opening Balance"):visible').first(), 2000); // full phone width already: no zoom
       await h.scrollBy(380, 1200);
       await h.say('Every bill: date, bill number, product, litres and vehicle, with the balance after it.', 3200);
       const receipt = page.locator(':text("By Receipt No"):visible').first();
@@ -1606,8 +1610,8 @@ const VIDEOS = {
       await h.say('Two days were paid together in one payment, so they could not match one-to-one.', 3000);
       await h.say('Select the two sales and the payment.', 400);
       for (const i of [2, 3, 4]) await h.tap(rows.nth(i).locator('.row-select'), 450);
-      await h.say('The difference is zero.', 400);
-      await h.point('#selected-summary', 1800);
+      await h.say('The difference is zero.', 1200);
+      await h.spot('#selected-summary', 2000);
       await h.say('Click Manual Match.', 400);
       await catchAlert();
       await Promise.all([page.waitForEvent('load', { timeout: 60000 }), h.tap(page.getByRole('button', { name: /Manual Match/ }), 0)]);
@@ -1617,7 +1621,7 @@ const VIDEOS = {
       await h.say('One payment came ₹47 short of the sale.', 2400);
       await h.say('Select the sale and the payment.', 400);
       for (const i of [0, 1]) await h.tap(rows.nth(i).locator('.row-select'), 450);
-      await h.point('#selected-summary', 1800);
+      await h.spot('#selected-summary', 2000);
       await h.say('Click Manual Match.', 400);
       await h.tap(page.getByRole('button', { name: /Manual Match/ }), 900);
       await page.locator('#differenceNotesModal.show').waitFor();
@@ -1631,8 +1635,8 @@ const VIDEOS = {
       rows = await unreconciled();
       await h.say('Nothing left to reconcile for the month.', 2400);
       await h.tap('#showUnreconciled', 900);
-      await h.say('Your manual matches keep their Match ID. The red ✕ next to it unmatches a group.', 600);
-      await h.point(page.locator('#creditstmt-table-container button[title="Unmatch this group"]').first(), 2800);
+      await h.say('Your manual matches keep their Match ID. The red ✕ next to it unmatches a group.', 3000);
+      await h.spot(page.locator('#creditstmt-table-container button[title="Unmatch this group"]').first(), 2400, { z: 2 });
       await h.say('Do this every month, for every digital vendor.', 2400);
     },
   },
@@ -1660,8 +1664,8 @@ const VIDEOS = {
       await h.point('#cashierDate', 1600);
       await h.say('Enter the opening cash given to the cashier.', 500);
       await h.type('#cashGiven', '2000');
-      await h.say("Today's selling rates are filled in from the last shift. Check them.", 600);
-      await h.point('#gasoline-prices', 2400);
+      await h.say("Today's selling rates are filled in from the last shift. Check them.", 2200);
+      await h.spot('#gasoline-prices', 2400);
       await h.say('Click Next. PetroMath saves the shift as a draft.', 700);
       await h.next('#new_closing');
 
@@ -1702,7 +1706,7 @@ const VIDEOS = {
       await h.say('Enter testing litres, if any, so they are not counted as sale.', 500);
       await h.type('#f_MS-1pump_testing', '5');
       await page.keyboard.press('Tab');
-      await h.point('#f_MS-1pump_sale', 1800);
+      await h.spot(page.locator('tr', { has: page.locator('#f_MS-1pump_sale') }).first(), 2200);
       await h.next('#new_readings');
 
       // ── Lube Sales ──
@@ -1792,15 +1796,15 @@ const VIDEOS = {
         await page.keyboard.press('Tab');
         await h.pause(200);
       }
-      await h.say('The total is worked out for you.', 400);
-      await h.point('#denominations_total', 1600);
+      await h.say('The total is worked out for you.', 1200);
+      await h.spot('#denominations_total', 1800, { z: 2 });
       await h.next('#new_denoms');
 
       // ── Summary and Close ──
       await h.top(300);
       await h.say('Summary: the whole shift on one page. Check it before closing.', 2600);
-      await h.say('Excess / Shortage compares the cash counted with what was due.', 600);
-      await h.point('#excess_storage', 2600);
+      await h.say('Excess / Shortage compares the cash counted with what was due.', 2400);
+      await h.spot('#excess_storage', 2400, { z: 2 });
       await h.scrollBy(420, 1400);
       await h.say('Sales, credit, digital, expenses and cash, all in one place.', 2200);
       await h.scrollBy(900, 1400);
@@ -1815,8 +1819,8 @@ const VIDEOS = {
       await page.waitForURL(/\/home/, { timeout: 30000 });
       await page.waitForLoadState('networkidle');
       await h.pause(600);
-      await h.say('Done. The shift is listed as Closed, with its shortage or excess.', 600);
-      await h.point(page.locator('tr', { hasText: 'ARUN KUMAR' }).first(), 2400);
+      await h.say('Done. The shift is listed as Closed, with its shortage or excess.', 2400);
+      await h.spot(page.locator('tr', { hasText: 'ARUN KUMAR' }).first(), 2400);
       await h.say("Its closing readings become the next shift's opening readings.", 3000);
       await h.say('PetroMath: every shift, accounted for.', 2200);
     },
@@ -1860,8 +1864,8 @@ const VIDEOS = {
       await page.locator('#geResult').waitFor({ state: 'visible', timeout: 120000 });
       await page.waitForLoadState('networkidle');
       await h.pause(400);
-      await h.say("Every sale, receipt, invoice and bank line of the month is queued for the accounts.", 600);
-      await h.point('#geResultBody', 3200);
+      await h.say("Every sale, receipt, invoice and bank line of the month is queued for the accounts.", 2600);
+      await h.spot('#geResultBody', 2600);
 
       // The queue
       await h.say('Events Monitor shows the queue.', 300);
@@ -1901,8 +1905,8 @@ const VIDEOS = {
       await h.tap('form[action="/gl/profit-loss"] button[type=submit]', 0);
       await page.waitForLoadState('networkidle');
       await h.pause(600);
-      await h.say('Total income, total expenses, and the net profit for the month.', 600);
-      await h.point(page.locator('.card', { hasText: /Net (Profit|Loss)/ }).first(), 2600);
+      await h.say('Total income, total expenses, and the net profit for the month.', 2200);
+      await h.spot(page.locator('.card', { hasText: /Net (Profit|Loss)/ }).first(), 2800);
       await h.say('Income: fuel and lube sales, and the dealer margin.', 300);
       await h.point('#plIncomeTable', 2600);
       await h.say('Expenses: purchases, then salary, rent, bank charges and other costs.', 300);
@@ -1910,8 +1914,8 @@ const VIDEOS = {
       await h.scrollBy(260, 1200);
       const adj = page.locator('#plExpenseTable tr', { hasText: 'Stock Adjustment' });
       if (await adj.count()) {
-        await h.say('Purchases are adjusted for stock: opening + purchases − closing, so you see what was actually sold.', 300);
-        await h.point(adj.first(), 3200);
+        await h.say('Purchases are adjusted for stock: opening + purchases − closing, so you see what was actually sold.', 3200);
+        await h.spot(adj.first(), 2600);
       }
 
       // Drill down: OTHERS
