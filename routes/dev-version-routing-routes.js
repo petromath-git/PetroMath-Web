@@ -37,7 +37,8 @@ router.get('/', guards, async function(req, res, next) {
             config:   require('../config/app-config').APP_CONFIGS,
             locations,
             audit,
-            messages: req.flash()
+            messages: req.flash(),
+            mobileReady: true
         });
     } catch (e) {
         next(e);
