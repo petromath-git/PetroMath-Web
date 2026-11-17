@@ -1,5 +1,6 @@
 extends layout
 include mixins/mixins
+include mixins/card-toggle-mobile
 
 block content
     - const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -8,9 +9,9 @@ block content
 
     .container-fluid.pt-3
 
-        .d-flex.justify-content-between.align-items-center.mb-3
-            h4.mb-0 Beta Access (Version Routing)
-            span.badge.badge-warning.ml-2(style="font-size:0.85rem") BETA ONLY
+        .d-flex.flex-wrap.justify-content-between.align-items-center.mb-3
+            h4.mb-0.mr-2 Beta Access (Version Routing)
+            span.badge.badge-warning(style="font-size:0.85rem") BETA ONLY
 
         .alert.alert-info.py-2.small.mb-3
             i.bi.bi-info-circle-fill.mr-1
@@ -19,13 +20,13 @@ block content
             |  can log in to this beta app; everyone else is logged out with &ldquo;no access to the beta application&rdquo;.
             | Changes take effect at the user's next login and are kept across the 4-hourly DB refresh.
 
-        .card.mb-3
-            .card-header.py-2.d-flex.justify-content-between.align-items-center
-                span.small.font-weight-bold
+        .card.mb-3.ba-section
+            .card-header.py-2.d-flex.flex-wrap.justify-content-between.align-items-center
+                span.small.font-weight-bold.mr-2
                     | Locations (#{betaCount} on beta / #{locations.length} active)
-                input.form-control.form-control-sm#locFilter(type="text" placeholder="Filter…" style="max-width:220px")
+                input.form-control.form-control-sm.ba-filter#locFilter(type="text" placeholder="Filter…")
             .card-body.p-0
-                table.table.table-sm.table-hover.mb-0#routingTable
+                table.table.table-sm.table-hover.mb-0.m-stack.m-collapse#routingTable
                     thead.thead-light
                         tr
                             th Code
@@ -38,9 +39,11 @@ block content
                         each loc in locations
                             - const on = loc.app_version === 'canary';
                             tr(data-search=(loc.location_code + ' ' + loc.location_name).toLowerCase())
-                                td.font-weight-bold= loc.location_code
-                                td= loc.location_name
-                                td
+                                td.font-weight-bold.m-title
+                                    | #{loc.location_code}
+                                    span.d-md-none.font-weight-normal.text-muted.small.d-block= loc.location_name
+                                td.m-hide= loc.location_name
+                                td.m-summary(data-label="Beta Access")
                                     .custom-control.custom-switch
                                         input.custom-control-input.beta-toggle(type="checkbox" id='sw_' + loc.location_code
                                             data-loc=loc.location_code checked=on
@@ -50,16 +53,16 @@ block content
                                                 span.badge.badge-success ON
                                             else
                                                 span.badge.badge-secondary OFF
-                                td.small= on ? fmt(loc.effective_start_date) : '—'
-                                td.small= on ? (loc.effective_end_date ? fmt(loc.effective_end_date) : 'Open-ended') : '—'
-                                td.small= on ? (loc.updated_by || '—') : '—'
+                                td.small(data-label="Since")= on ? fmt(loc.effective_start_date) : '—'
+                                td.small(data-label="Until")= on ? (loc.effective_end_date ? fmt(loc.effective_end_date) : 'Open-ended') : '—'
+                                td.small(data-label="Updated By")= on ? (loc.updated_by || '—') : '—'
 
-        .card
+        .card.ba-section
             .card-header.py-2
                 span.small.font-weight-bold Recent Changes (last 30)
             .card-body.p-0
                 if audit.length
-                    table.table.table-sm.mb-0.small
+                    table.table.table-sm.mb-0.small.m-stack.m-collapse
                         thead.thead-light
                             tr
                                 th When
@@ -71,14 +74,25 @@ block content
                         tbody
                             each a in audit
                                 tr
-                                    td= fmt(a.change_date)
-                                    td= a.location_code
-                                    td= a.action_type
-                                    td= (a.old_app_version ? a.old_app_version + ' → ' : '') + (a.new_app_version || '—')
-                                    td= a.new_effective_end_date ? fmt(a.new_effective_end_date) : '—'
-                                    td= a.new_updated_by || '—'
+                                    td.m-summary(data-label="When")= fmt(a.change_date)
+                                    td.m-title= a.location_code + (a.action_type ? ' · ' + a.action_type : '')
+                                    td.m-hide= a.action_type
+                                    td(data-label="Version")= (a.old_app_version ? a.old_app_version + ' → ' : '') + (a.new_app_version || '—')
+                                    td(data-label="End Date")= a.new_effective_end_date ? fmt(a.new_effective_end_date) : '—'
+                                    td(data-label="By")= a.new_updated_by || '—'
                 else
                     .p-2.small.text-muted No changes recorded.
+
+    style.
+        .ba-filter { max-width: 220px; }
+        @media screen and (max-width: 767px) {
+            /* the rows are cards on phones — drop the outer card's box so they don't double up */
+            body.mobile-ready .ba-section { border: 0; background: transparent; }
+            body.mobile-ready .ba-section > .card-header { background: transparent; border: 0; padding-left: 0; padding-right: 0; }
+            body.mobile-ready .ba-filter { max-width: none; margin-top: 0.4rem; font-size: 16px; }
+        }
+
+    +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
 
     script.
         document.getElementById('locFilter').addEventListener('input', function() {
