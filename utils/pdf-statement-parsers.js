@@ -305,11 +305,97 @@ function parseSbi(pages) {
     });
 }
 
+// ========== Indian Overseas Bank (internet banking statement PDF) ==========
+// Columns: DATE | CHQ NO | NARRATION | COD | DEBIT | CREDIT | BALANCE.
+// Each transaction starts with a line "DD-MON-YYYY | [chq no] | narration…",
+// the narration wraps over further lines, and it ends on the line whose last
+// two cells are the amount and balance:
+//   [narration…] | TRF/CSH/CLR | amount | balance
+// (a one-line transaction has all of it on the date line). The text gives
+// no debit/credit marker and there is no opening balance, so the opening is
+// worked back from the "Total Debit: … Total Credit: …" summary and the
+// closing balance, and direction comes from the balance movement. The
+// summary totals are checked against the parsed rows too.
+// Narration wraps either after '-' or '/' (joined as-is, which matches the
+// Excel download, e.g. "NEFT-…-PAYTM PAYM-…") or at a space (joined with
+// one space). A name hard-broken mid-word gets a stray space — the bank's
+// text doesn't say which kind of break it was.
+function iobDate(s) {
+    const m = /^(\d{2})-([A-Za-z]{3})-(\d{4})$/.exec(s);
+    const mm = m && MONTHS[m[2].toUpperCase()];
+    return mm ? `${m[1]}/${mm}/${m[3]}` : null;
+}
+
+function parseIob(pages) {
+    const lines = pages.flat();
+    const totalsRe = /Total Debit:\s*(-?[\d,]+\.\d{2})\s*Total Credit:\s*(-?[\d,]+\.\d{2})/i;
+
+    let totals = null;
+    const txns = [];
+    let current = null;
+
+    for (const cells of lines) {
+        const c = cells.map(s => s.trim()).filter(Boolean);
+        if (c.length === 0) continue;
+
+        const totalsMatch = totalsRe.exec(c.join(' '));
+        if (totalsMatch) {
+            totals = { debit: toNumber(totalsMatch[1]), credit: toNumber(totalsMatch[2]) };
+            continue;
+        }
+
+        if (!current) {
+            const date = iobDate(c[0]);
+            if (!date) continue; // header/footer text between transactions
+            current = { date, chq: '', text: [] };
+            c.shift();
+            if (c.length > 1 && /^\d+$/.test(c[0])) current.chq = c.shift();
+        }
+
+        if (c.length >= 2 && AMOUNT_RE.test(c[c.length - 1]) && AMOUNT_RE.test(c[c.length - 2])) {
+            // Closing line: [narration…, code, amount, balance]
+            current.amount = c[c.length - 2];
+            current.balance = c[c.length - 1];
+            const rest = c.slice(0, -2);
+            if (rest.length && /^[A-Z]{2,4}$/.test(rest[rest.length - 1])) rest.pop();
+            current.text.push(...rest);
+            txns.push(current);
+            current = null;
+        } else {
+            current.text.push(...c);
+        }
+    }
+
+    if (current) throw new Error(`Transaction on ${current.date} has no balance line`);
+    if (txns.length === 0) return [];
+    if (!totals) throw new Error('"Total Debit / Total Credit" summary not found in the statement');
+
+    const closing = toNumber(txns[txns.length - 1].balance);
+    let prev = closing - totals.credit + totals.debit;
+    let sumDebit = 0;
+    let sumCredit = 0;
+    const rows = txns.map(t => {
+        const description = t.text.reduce((acc, part) =>
+            !acc ? part : (/[-/]$/.test(acc) ? acc + part : `${acc} ${part}`), '');
+        const { debit, credit } = splitByBalance(t.amount, t.balance, prev, `${t.date} (${description})`);
+        prev = toNumber(t.balance);
+        sumDebit += toNumber(debit);
+        sumCredit += toNumber(credit);
+        return [t.date, description, t.date, t.chq, debit, credit, plainAmount(t.balance)];
+    });
+
+    if (Math.abs(sumDebit - totals.debit) > 0.005 || Math.abs(sumCredit - totals.credit) > 0.005) {
+        throw new Error(`Parsed totals (debit ${sumDebit.toFixed(2)}, credit ${sumCredit.toFixed(2)}) do not match the statement (debit ${totals.debit.toFixed(2)}, credit ${totals.credit.toFixed(2)})`);
+    }
+    return rows;
+}
+
 // Keyed by m_bank_statement_template.bank_name (upper-cased).
 const PARSERS = {
     'DHANLAXMI': parseDhanlaxmi,
     'HDFC PDF': parseHdfc,
-    'SBI PDF': parseSbi
+    'SBI PDF': parseSbi,
+    'IOB PDF': parseIob
 };
 
 function getPdfParser(bankName) {
