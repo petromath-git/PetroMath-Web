@@ -1,6 +1,8 @@
 //- Home page (desktop + phone /m): open deadlines that are overdue or inside
 //- their reminder window, plus bank holidays in the next 7 days.
-//-   summary - DeadlineController.getAttentionSummary(locationCode)
+//-   summary - DeadlineController.getAttentionSummary(locationCode, user)
+//-             summary.canMarkDone: show "Mark done" (Admin and above; Manager
+//-             where DEADLINE_MANAGER_CAN_MARK_DONE = Y)
 //-   canOpen - user may open /deadline (admin-type roles)
 mixin deadlineAttention(summary, canOpen)
   if summary && (summary.items.length || summary.holidays.length)
@@ -12,13 +14,30 @@ mixin deadlineAttention(summary, canOpen)
       if summary.items.length
         ul.dl-att-list
           each it in summary.items
-            li.dl-att-item
-              span.badge(class=(it.days_left < 0 ? 'badge-danger' : 'badge-warning'))= it.due_text
-              span.dl-att-name
-                = it.title
-                if it.reference_no
-                  span.text-muted  · #{it.reference_no}
-              span.dl-att-date= it.due_display
+            li.dl-att-item(data-id=it.item_id)
+              .dl-att-row
+                span.badge(class=(it.days_left < 0 ? 'badge-danger' : 'badge-warning'))= it.due_text
+                span.dl-att-name
+                  = it.title
+                  if it.reference_no
+                    span.text-muted  · #{it.reference_no}
+                span.dl-att-date= it.due_display
+                if summary.canMarkDone
+                  button.btn.btn-outline-success.btn-sm.dl-att-done(type="button" title="Record that this is done")
+                    i.bi.bi-check2(aria-hidden="true")
+                    |  Mark done
+              if summary.canMarkDone
+                .dl-att-confirm(hidden)
+                  .dl-att-confirm-text
+                    if it.next_due_display
+                      | Mark as done today. Next reminder: due #[strong #{it.next_due_display}].
+                    else
+                      | Mark as done today. This one-time deadline will be closed.
+                  .dl-att-confirm-row
+                    input.form-control.form-control-sm.dl-att-note(type="text" maxlength="500" placeholder="Note (optional), e.g. paid by cheque 123")
+                    button.btn.btn-success.btn-sm.dl-att-save(type="button") Confirm
+                    button.btn.btn-link.btn-sm.dl-att-cancel(type="button") Cancel
+                  .dl-att-error.text-danger(hidden)
       if summary.holidays.length
         .dl-att-hol
           i.bi.bi-bank(aria-hidden="true")
@@ -27,13 +46,62 @@ mixin deadlineAttention(summary, canOpen)
             |  #{i ? '·' : ''} #[strong #{h.day_name} #{h.date_display}] #{h.description}
   style.
     .dl-att-list { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid #e9ecef; border-radius: 6px; }
-    .dl-att-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid #f1f3f5; font-size: 14px; }
+    .dl-att-item { padding: 8px 12px; border-bottom: 1px solid #f1f3f5; font-size: 14px; }
     .dl-att-item:last-child { border-bottom: 0; }
+    .dl-att-row { display: flex; align-items: center; gap: 10px; }
     .dl-att-item .badge { flex-shrink: 0; min-width: 96px; font-size: 12px; }
     .dl-att-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
     .dl-att-date { flex-shrink: 0; color: #6c757d; font-size: 13px; }
+    .dl-att-done { flex-shrink: 0; white-space: nowrap; }
+    .dl-att-confirm { margin-top: 8px; padding: 8px 10px; background: #f8f9fa; border-radius: 4px; font-size: 13px; }
+    .dl-att-confirm-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+    .dl-att-note { flex: 1 1 auto; min-width: 0; }
+    .dl-att-error { margin-top: 4px; }
     .dl-att-hol { margin-top: 10px; font-size: 13px; color: #495057; }
     @media (max-width: 575px) {
-      .dl-att-item { flex-wrap: wrap; gap: 4px 10px; }
+      .dl-att-row { flex-wrap: wrap; gap: 4px 10px; }
       .dl-att-name { flex-basis: 100%; order: 3; }
+      .dl-att-done { order: 4; }
+      .dl-att-confirm-row { flex-wrap: wrap; }
+      .dl-att-note { flex-basis: 100%; }
     }
+  if summary && summary.canMarkDone && summary.items.length
+    script.
+      (function () {
+        document.querySelectorAll('.dl-att-item').forEach(function (li) {
+          var box = li.querySelector('.dl-att-confirm');
+          var err = li.querySelector('.dl-att-error');
+          var save = li.querySelector('.dl-att-save');
+          if (!box || !save) return;
+          li.querySelector('.dl-att-done').addEventListener('click', function () {
+            box.hidden = !box.hidden;
+            if (!box.hidden) li.querySelector('.dl-att-note').focus();
+          });
+          li.querySelector('.dl-att-cancel').addEventListener('click', function () { box.hidden = true; err.hidden = true; });
+          save.addEventListener('click', function () {
+            save.disabled = true;
+            err.hidden = true;
+            fetch('/deadline/api/' + encodeURIComponent(li.dataset.id) + '/done', {
+              method: 'POST', credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ note: li.querySelector('.dl-att-note').value })
+            })
+              .then(function (r) { return r.json(); })
+              .then(function (d) {
+                if (!d.success) throw new Error(d.error || 'Something went wrong.');
+                var list = li.parentNode;
+                li.remove();
+                if (!list.querySelector('.dl-att-item')) {
+                  var section = list.closest('.deadline-section');
+                  if (section && !section.querySelector('.dl-att-hol')) section.remove();
+                  else list.remove();
+                }
+              })
+              .catch(function (e) {
+                err.textContent = e.message || 'Could not save. Please try again.';
+                err.hidden = false;
+                save.disabled = false;
+              });
+          });
+        });
+      })();
