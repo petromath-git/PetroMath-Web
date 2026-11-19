@@ -14,6 +14,7 @@ router.post('/api',                  canManage, ctrl.createItem);
 router.put('/api/:id',               canManage, ctrl.updateItem);
 router.delete('/api/:id',            canManage, ctrl.deleteItem);
 router.post('/api/:id/renew',        canManage, ctrl.renewItem);
+router.post('/api/:id/done',         canManage, ctrl.markDone);   // home page "Mark done"
 router.get('/api/:id/history',       canManage, ctrl.getHistory);
 router.post('/holidays/api',         canManage, ctrl.createHoliday);
 router.delete('/holidays/api/:id',   canManage, ctrl.deleteHoliday);
