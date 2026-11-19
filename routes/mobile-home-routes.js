@@ -18,7 +18,7 @@ router.get('/', isLoginEnsured, async function (req, res) {
     }
 
     // Overdue / due-soon deadlines above the tiles (never blocks the page)
-    const deadlines = await DeadlineController.getAttentionSummary(req.user.location_code).catch(err => {
+    const deadlines = await DeadlineController.getAttentionSummary(req.user.location_code, req.user).catch(err => {
         console.error('Mobile home: deadline summary failed:', err.message);
         return null;
     });
