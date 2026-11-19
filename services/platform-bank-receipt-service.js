@@ -157,11 +157,69 @@ function parseStatement(buffer) {
     return lines;
 }
 
-async function uploadStatement(file, userId) {
+// IOB names the download AccountStatement_<account no>.xls, and the quarterly
+// interest line reads "Int.Pd:01-08-2026 to 31-10-2026:<account no>". The
+// statement body has no account number, so these are all there is to go on.
+const ACCOUNT_NO = /\d{12,18}/g;
+const accountsInFileName = (name) => String(name || '').match(ACCOUNT_NO) || [];
+const accountInInterestLine = (description) => {
+    const m = /^Int\.Pd:.*:(\d{12,18})\s*$/i.exec(String(description || '').trim());
+    return m ? m[1] : null;
+};
+
+// A balance this many times outside the earlier statements' range means
+// another account (a bunk's account runs in crores, ours in lakhs)
+const BALANCE_RATIO = 10;
+
+/**
+ * Refuses a statement that isn't from PetroMath's own account, judged against
+ * the statements already uploaded. Account number mismatch is a hard stop;
+ * a balance far outside the usual range can be overridden (force).
+ */
+async function checkSameAccount(fileName, lines, force) {
+    const fp = await Dao.findAccountFingerprint();
+
+    const known = new Set();
+    fp.fileNames.forEach(n => accountsInFileName(n).forEach(a => known.add(a)));
+    fp.interestNarrations.forEach(d => { const a = accountInInterestLine(d); if (a) known.add(a); });
+
+    if (known.size) {
+        const found = new Set(accountsInFileName(fileName));
+        lines.forEach(l => { const a = accountInInterestLine(l.description); if (a) found.add(a); });
+        const other = [...found].filter(a => !known.has(a));
+        if (other.length) {
+            const err = new Error(`This statement is for account ${other[0]}, but PetroMath's statements so far are for account ${[...known].join(', ')}. ` +
+                'It looks like a different bank account (perhaps a bunk\'s). Nothing was uploaded.');
+            err.status = 400;
+            throw err;
+        }
+    }
+
+    if (!force && fp.maxBalance) {
+        const balances = lines.map(l => Number(l.balance_amount)).filter(b => b > 0);
+        if (balances.length) {
+            const lo = Math.min(...balances);
+            const hi = Math.max(...balances);
+            const tooHigh = lo > fp.maxBalance * BALANCE_RATIO;
+            const tooLow = fp.minBalance > 0 && hi * BALANCE_RATIO < fp.minBalance;
+            if (tooHigh || tooLow) {
+                const inr = (n) => Number(n).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+                const err = new Error(`The balance in this statement (Rs ${inr(lo)} to Rs ${inr(hi)}) is far from the earlier statements ` +
+                    `(Rs ${inr(fp.minBalance)} to Rs ${inr(fp.maxBalance)}). It may be a different bank account.`);
+                err.status = 409;
+                err.needsConfirm = true;
+                throw err;
+            }
+        }
+    }
+}
+
+async function uploadStatement(file, userId, { force = false } = {}) {
     const lines = parseStatement(file.buffer);
     if (!lines.length) {
         throw new Error('No credit lines found in this statement.');
     }
+    await checkSameAccount(file.originalname, lines, force);
     return Dao.saveUpload(file.originalname, lines, userId);
 }
 

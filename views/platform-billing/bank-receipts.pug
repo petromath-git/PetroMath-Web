@@ -325,15 +325,24 @@ block content
             $('#btnUpload').on('click', function () {
                 const file = document.getElementById('statementFile').files[0];
                 if (!file) { alert('Please choose the statement file.'); return; }
-                const form = new FormData();
-                form.append('statementFile', file);
                 const btn = $(this).prop('disabled', true).text('Uploading...');
-                $.ajax({ url: '/platform-billing/bank-receipts/upload', method: 'POST', data: form, processData: false, contentType: false })
-                    .done(function (r) {
-                        alert(r.added + ' new credit line(s) added, ' + r.skipped + ' already uploaded.');
-                        window.location.href = '/platform-billing/bank-receipts';
-                    })
-                    .fail(function (xhr) { showError(xhr); btn.prop('disabled', false).text('Upload'); });
+                const send = function (force) {
+                    const form = new FormData();
+                    form.append('statementFile', file);
+                    if (force) form.append('force', '1');
+                    $.ajax({ url: '/platform-billing/bank-receipts/upload', method: 'POST', data: form, processData: false, contentType: false })
+                        .done(function (r) {
+                            alert(r.added + ' new credit line(s) added, ' + r.skipped + ' already uploaded.');
+                            window.location.href = '/platform-billing/bank-receipts';
+                        })
+                        .fail(function (xhr) {
+                            const r = xhr.responseJSON || {};
+                            if (r.needsConfirm && confirm(r.error + '\n\nUpload it anyway?')) { send(true); return; }
+                            showError(xhr);
+                            btn.prop('disabled', false).text('Upload');
+                        });
+                };
+                send(false);
             });
 
             $('#btnApply').on('click', function () {
