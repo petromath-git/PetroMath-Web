@@ -17,7 +17,7 @@ const handle = (name, fn) => async (req, res) => {
         res.json({ success: true, ...(await fn(req, req.user.User_Name || req.user.Person_Name)) });
     } catch (err) {
         console.error(`PlatformBankReceiptController.${name}:`, err);
-        res.status(400).json({ error: err.message || 'Something went wrong' });
+        res.status(err.status || 400).json({ error: err.message || 'Something went wrong', needsConfirm: !!err.needsConfirm });
     }
 };
 
@@ -112,7 +112,7 @@ const PlatformBankReceiptController = {
     // ─── POST /platform-billing/bank-receipts/upload ───────────────────────
     upload: handle('upload', async (req, userId) => {
         if (!req.file) throw new Error('Please choose the statement file.');
-        return Svc.uploadStatement(req.file, userId);
+        return Svc.uploadStatement(req.file, userId, { force: req.body.force === '1' });
     }),
 
     // ─── POST /platform-billing/bank-receipts/apply-suggestions ────────────
