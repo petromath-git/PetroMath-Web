@@ -11,10 +11,12 @@ mixin dueBadge(it)
     span.badge.dl-badge(class=cls)= it.due_text
 
 mixin itemActions(it)
-    if it.bucket === 'DONE'
-        button.btn.btn-outline-primary.btn-sm.dl-renew(type="button" title="Reopen with a new due date") Reopen
-    else
-        button.btn.btn-outline-success.btn-sm.dl-renew(type="button" title="Renewed / done") Renewed
+    //- canMarkDone: Admin and above; Manager where DEADLINE_MANAGER_CAN_MARK_DONE = Y
+    if canMarkDone
+        if it.bucket === 'DONE'
+            button.btn.btn-outline-primary.btn-sm.dl-renew(type="button" title="Reopen with a new due date") Reopen
+        else
+            button.btn.btn-outline-success.btn-sm.dl-renew(type="button" title="Renewed / done") Renewed
     button.btn.btn-outline-primary.btn-sm.dl-edit(type="button" title="Edit")
         i.bi.bi-pencil
     if it.renewal_count > 0

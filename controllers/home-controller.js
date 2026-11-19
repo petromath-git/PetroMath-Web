@@ -785,7 +785,7 @@ const getHomeData = async (req, res, next) => {
             getClosingData(locationCode, closingQueryFromDate, closingQueryToDate),
             getDraftsCount(locationCode),
             TxnReadDao.getDraftClosingsBeforeDays(locationCode, maxAllowedDraftDays + 1),
-            getDeadlineSummary(locationCode),
+            getDeadlineSummary(locationCode, req.user),
             getLocationProductColumns(locationCode),
             rolePermissionsDao.hasPermission(req.user.Role, locationCode, 'SEARCH_CLOSINGS')
         ]).then(values => {
@@ -986,8 +986,8 @@ const getDraftsCount = (locationCode) => {
 }
 
 // Overdue / due-soon deadlines + bank holidays this week (empty on error: never blocks the home page)
-const getDeadlineSummary = (locationCode) =>
-    DeadlineController.getAttentionSummary(locationCode).catch(err => {
+const getDeadlineSummary = (locationCode, user) =>
+    DeadlineController.getAttentionSummary(locationCode, user).catch(err => {
         console.error('Home: deadline summary failed:', err.message);
         return { items: [], holidays: [] };
     });

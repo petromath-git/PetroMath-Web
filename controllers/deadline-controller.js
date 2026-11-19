@@ -4,6 +4,19 @@ const moment = require('moment');
 const DeadlineDao = require('../dao/deadline-dao');
 const pushService = require('../services/push-service');
 const BankHolidays = require('../services/bank-holiday-service');
+const locationConfig = require('../utils/location-config');
+
+// Who may record a deadline as done / renewed ("Mark done" on the home
+// page, Renewed / Reopen on /deadline). Admin and above always; Manager only
+// where the location turns on DEADLINE_MANAGER_CAN_MARK_DONE.
+const MARK_DONE_ROLES = ['Admin', 'PowerUser', 'SuperUser'];
+async function canMarkDone(user) {
+    if (!user) return false;
+    if (MARK_DONE_ROLES.includes(user.Role)) return true;
+    if (user.Role !== 'Manager') return false;
+    const flag = await locationConfig.getLocationConfigValue(user.location_code, 'DEADLINE_MANAGER_CAN_MARK_DONE', 'N');
+    return flag === 'Y';
+}
 
 const MAX_TITLE = 200;
 const MAX_REFERENCE = 100;
@@ -23,6 +36,22 @@ const REPEAT_OPTIONS = [
 ];
 
 const fmtDate = (d) => (d ? moment(d, 'YYYY-MM-DD').format('DD-MMM-YYYY') : '');
+
+// Same as addMonths() on /deadline: keep the day of month, clamp to month end
+function addMonths(ymd, months) {
+    const [y, m, d] = ymd.split('-').map(Number);
+    const first = moment.utc([y, m - 1, 1]).add(months, 'months');
+    return first.date(Math.min(d, first.daysInMonth())).format('YYYY-MM-DD');
+}
+
+// Next due date after a renewal: counted from the old due date (keeps the
+// cycle), moved past the done date. One-time items have none (they close).
+function nextDueAfter(dueDate, repeatMonths, doneDate) {
+    if (!(repeatMonths > 0)) return null;
+    let next = addMonths(dueDate, repeatMonths);
+    while (next <= doneDate) next = addMonths(next, repeatMonths);
+    return next;
+}
 const clean = (v) => String(v == null ? '' : v).trim();
 
 function parseDate(v) {
@@ -104,6 +133,7 @@ const fail = (res, status, error) => res.status(status).json({ success: false, e
 module.exports = {
     fmtDate,
     dueText,
+    canMarkDone,
 
     getPage: async (req, res, next) => {
         try {
@@ -114,11 +144,12 @@ module.exports = {
                 return null;
             });
             const thisYear = moment().year();
-            const [items, categories, holidays, references] = await Promise.all([
+            const [items, categories, holidays, references, markDone] = await Promise.all([
                 DeadlineDao.findItems(locationCode),
                 DeadlineDao.getCategories(),
                 BankHolidays.getHolidays(locationCode, `${thisYear - 1}-01-01`, `${thisYear + 1}-12-31`),
                 DeadlineDao.getReferenceSuggestions(locationCode),
+                canMarkDone(req.user),
             ]);
             const list = items.map(decorate);
             const counts = { OVERDUE: 0, SOON: 0, LATER: 0, DONE: 0 };
@@ -140,6 +171,7 @@ module.exports = {
                 // Reminder came from another location (multi-location admins)
                 pushLocation: req.query.loc && req.query.loc !== locationCode ? String(req.query.loc).slice(0, 45) : null,
                 pushReady: pushService.isConfigured(),
+                canMarkDone: markDone,
                 maxTitle: MAX_TITLE, maxReference: MAX_REFERENCE, maxNotes: MAX_NOTES, maxNote: MAX_NOTE,
             });
         } catch (e) {
@@ -195,6 +227,7 @@ module.exports = {
     // Body: done_date, next_due_date (blank + close=Y to close with no next date), note
     renewItem: async (req, res) => {
         try {
+            if (!(await canMarkDone(req.user))) return fail(res, 403, 'Only an Admin can mark a deadline as done here.');
             const item = await DeadlineDao.findItem(parseInt(req.params.id, 10), req.user.location_code);
             if (!item) return fail(res, 404, 'Deadline not found.');
 
@@ -217,6 +250,28 @@ module.exports = {
         } catch (e) {
             console.error('Error renewing deadline:', e);
             fail(res, 500, 'Error saving renewal.');
+        }
+    },
+
+    // "Mark done" from the home page: done today, next due date from the
+    // item's repeat (one-time items close). Body: note (optional)
+    markDone: async (req, res) => {
+        try {
+            if (!(await canMarkDone(req.user))) return fail(res, 403, 'Only an Admin can mark a deadline as done here.');
+            const item = await DeadlineDao.findItem(parseInt(req.params.id, 10), req.user.location_code);
+            if (!item) return fail(res, 404, 'Deadline not found.');
+            if (item.status !== 'OPEN') return fail(res, 400, 'This deadline is already done.');
+
+            const note = clean(req.body.note);
+            if (note.length > MAX_NOTE) return fail(res, 400, `Note must be ${MAX_NOTE} characters or less.`);
+
+            const doneDate = moment().format('YYYY-MM-DD');
+            const nextDueDate = nextDueAfter(item.due_date, Number(item.repeat_months), doneDate);
+            await DeadlineDao.renewItem(item, doneDate, nextDueDate, note || null, req.user.Person_id);
+            res.json({ success: true, next_due: nextDueDate ? fmtDate(nextDueDate) : null });
+        } catch (e) {
+            console.error('Error marking deadline done:', e);
+            fail(res, 500, 'Error saving.');
         }
     },
 
@@ -313,15 +368,22 @@ module.exports = {
     },
 
     // Home page / DSR widget: overdue + due-soon items, and bank holidays in the next 7 days
-    getAttentionSummary: async (locationCode) => {
+    // user (optional): sets canMarkDone for the "Mark done" button
+    getAttentionSummary: async (locationCode, user) => {
         const today = moment().format('YYYY-MM-DD');
-        const [items, holidays] = await Promise.all([
+        const [items, holidays, markDone] = await Promise.all([
             DeadlineDao.findAttentionItems(locationCode),
             BankHolidays.getHolidays(locationCode, today, moment().add(7, 'days').format('YYYY-MM-DD')),
+            canMarkDone(user),
         ]);
         return {
-            items: items.map(decorate),
+            items: items.map(decorate).map(it => {
+                // What "Mark done" will move it to (shown in the confirm line)
+                const next = nextDueAfter(it.due_date, Number(it.repeat_months), today);
+                return { ...it, next_due_display: next ? fmtDate(next) : null };
+            }),
             holidays: holidays.filter(h => h.source !== 'HIDDEN').map(decorateHoliday),
+            canMarkDone: markDone,
         };
     },
 };
