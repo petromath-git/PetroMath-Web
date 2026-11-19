@@ -53,6 +53,27 @@ const PlatformBankReceiptDao = {
         });
     },
 
+    // What the earlier statements look like, so a file from a different
+    // account can be refused: their file names (IOB puts the account number
+    // there), interest-line narrations (they carry it too) and balance range.
+    // Only uploads that still have lines count, so a removed wrong file
+    // doesn't teach the wrong account.
+    findAccountFingerprint: async () => {
+        const [names, interest, [range]] = await Promise.all([
+            select(`SELECT u.file_name FROM t_platform_bank_upload u
+                    WHERE EXISTS (SELECT 1 FROM t_platform_bank_txn t WHERE t.upload_id = u.upload_id)`),
+            select(`SELECT description FROM t_platform_bank_txn WHERE description LIKE 'Int.Pd%'`),
+            select(`SELECT MIN(balance_amount) AS min_balance, MAX(balance_amount) AS max_balance
+                    FROM t_platform_bank_txn WHERE balance_amount IS NOT NULL`)
+        ]);
+        return {
+            fileNames: names.map(r => r.file_name),
+            interestNarrations: interest.map(r => r.description),
+            minBalance: range && range.min_balance != null ? Number(range.min_balance) : null,
+            maxBalance: range && range.max_balance != null ? Number(range.max_balance) : null
+        };
+    },
+
     findRecentUploads: () => select(
         `SELECT u.*,
                 (SELECT COUNT(*) FROM t_platform_bank_txn t WHERE t.upload_id = u.upload_id AND t.status = 'UNTAGGED') AS untagged_count
@@ -65,6 +86,14 @@ const PlatformBankReceiptDao = {
     removeUntaggedLines: async (uploadId) => {
         const [, affected] = await db.sequelize.query(
             `DELETE FROM t_platform_bank_txn WHERE upload_id = :uploadId AND status = 'UNTAGGED'`,
+            { replacements: { uploadId }, type: QueryTypes.RAW }
+        );
+        // An upload left with no lines was a wrong file: drop its row too, so
+        // its file name no longer counts as one of our statements
+        await db.sequelize.query(
+            `DELETE FROM t_platform_bank_upload
+             WHERE upload_id = :uploadId
+               AND NOT EXISTS (SELECT 1 FROM t_platform_bank_txn t WHERE t.upload_id = :uploadId)`,
             { replacements: { uploadId }, type: QueryTypes.RAW }
         );
         return affected && affected.affectedRows !== undefined ? affected.affectedRows : 0;
