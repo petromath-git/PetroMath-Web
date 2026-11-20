@@ -781,7 +781,7 @@ document.addEventListener('DOMContentLoaded', function () {
             extra.push(`Supplier on the PDF: <b>${esc(h.supplier_name || 'not found')}</b>${h.supplier_gstin ? ` (GSTIN ${esc(h.supplier_gstin)})` : ''} — select it above.`);
         }
         (data.duplicates || []).forEach(d => {
-            extra.push(`Invoice ${esc(h.invoice_number)} is already entered (${esc(d.invoice_date)}, ${esc(d.closing_status)}) — <a href="/lubes-invoice?id=${d.lubes_hdr_id}" target="_blank" rel="noopener">open it</a> before saving this again.`);
+            extra.push(`Invoice ${esc(d.invoice_number)} is already entered${d.supplier_name ? ` from ${esc(d.supplier_name)}` : ''} (${esc(d.invoice_date)}, ${esc(d.closing_status)}) — <a href="/lubes-invoice?id=${d.lubes_hdr_id}" target="_blank" rel="noopener">open it</a>. The same supplier's invoice cannot be saved twice.`);
         });
         (data.problems || []).forEach(pr => extra.push(esc(pr)));
         parts.push('Check every line against the invoice, then save — the PDF is attached automatically.');
@@ -801,6 +801,13 @@ document.addEventListener('DOMContentLoaded', function () {
             const res = await fetch('/lubes-invoice/read-pdf', { method: 'POST', body: fd });
             const data = await res.json().catch(() => ({ success: false, message: 'Unexpected server response.' }));
             if (!data.success) { pdfMessage('danger', esc(data.message || 'Could not read the invoice.')); return; }
+            // Already entered for this supplier: don't fill the form — save would refuse it anyway (tkt #487)
+            if (data.header && data.header.supplier_id && (data.duplicates || []).length) {
+                const d = data.duplicates[0];
+                pdfMessage('danger', `<b>Invoice ${esc(d.invoice_number)} from ${esc(d.supplier_name)} is already entered</b> (dated ${esc(d.invoice_date)}, ${esc(d.closing_status)}). ` +
+                    `It cannot be entered again — <a href="/lubes-invoice?id=${d.lubes_hdr_id}" target="_blank" rel="noopener">open the existing invoice</a>.`);
+                return;
+            }
             fillFromPdf(data, file);
         } catch (e) {
             pdfMessage('danger', 'Could not read the invoice — check your connection and try again.');

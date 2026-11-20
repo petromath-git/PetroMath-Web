@@ -113,6 +113,18 @@ module.exports = {
             const supplier = await db.m_supplier.findOne({ where: { supplier_id: parseInt(b.supplier_id) || 0, location_code: locationCode } });
             if (!supplier) return fail(400, 'Please select a supplier.');
 
+            // The same supplier invoice must not be entered twice (tkt #487)
+            const dups = await findDuplicateInvoices(locationCode, invoiceNumber, supplier.supplier_id, hdrId);
+            if (dups.length) {
+                const d = dups[0];
+                return res.status(409).json({
+                    success: false,
+                    duplicate: d,
+                    message: `Invoice ${d.invoice_number} from ${supplier.supplier_name} is already entered (dated ${d.invoice_date}, ${d.closing_status}). It cannot be saved again.`,
+                    errors: [`Invoice ${d.invoice_number} from ${supplier.supplier_name} is already entered (dated ${d.invoice_date}, ${d.closing_status}). It cannot be saved again.`]
+                });
+            }
+
             // Earliest allowed date is the location's go-live (first shift), as for
             // adjustments and bank entries. A supplier's start date doesn't restrict
             // dates on or after go-live (suppliers are often added after their first
@@ -785,16 +797,10 @@ readInvoicePdf: async (req, res) => {
             };
         });
 
-        // Same invoice number already entered at this location (any supplier)
+        // Same invoice number already entered at this location — for the PDF's
+        // supplier when it was recognised, else any supplier. Save refuses it.
         const currentId = parseInt(req.body.lubes_hdr_id) || 0;
-        const duplicates = h.invoice_number ? (await LubesInvoiceHeader.findAll({
-            attributes: ['lubes_hdr_id', 'invoice_date', 'closing_status'],
-            where: { location_code: locationCode, invoice_number: h.invoice_number }
-        })).filter(d => d.lubes_hdr_id !== currentId).map(d => ({
-            lubes_hdr_id: d.lubes_hdr_id,
-            invoice_date: moment(d.invoice_date).format('DD-MMM-YYYY').toUpperCase(),
-            closing_status: d.closing_status
-        })) : [];
+        const duplicates = await findDuplicateInvoices(locationCode, h.invoice_number, supplier ? supplier.supplier_id : null, currentId);
 
         return res.json({
             success: true,
@@ -825,6 +831,34 @@ readInvoicePdf: async (req, res) => {
 // GSTIN if the master doesn't have one yet, and the HSN printed on the invoice
 // for products without a full 8-digit HSN (used by GST Returns). Best effort —
 // the invoice itself is already saved.
+// Invoices already entered at this location with the same number (case and
+// spaces ignored), optionally for one supplier only, excluding `excludeId`.
+// Used to refuse a duplicate on save and to warn when a PDF is read (tkt #487).
+async function findDuplicateInvoices(locationCode, invoiceNumber, supplierId, excludeId) {
+    const key = String(invoiceNumber || '').replace(/\s+/g, '').toUpperCase();
+    if (!key) return [];
+    const supplierSql = supplierId ? 'AND h.supplier_id = :supplierId' : '';
+    const rows = await db.sequelize.query(`
+        SELECT h.lubes_hdr_id, h.invoice_number, h.invoice_date, h.closing_status, s.supplier_name
+        FROM   t_lubes_inv_hdr h
+        LEFT JOIN m_supplier s ON s.supplier_id = h.supplier_id
+        WHERE  h.location_code = :locationCode
+          AND  UPPER(REPLACE(REPLACE(REPLACE(h.invoice_number, ' ', ''), '\\t', ''), '\\n', '')) = :key
+          AND  h.lubes_hdr_id <> :excludeId
+          ${supplierSql}
+        ORDER BY h.lubes_hdr_id`, {
+        replacements: { locationCode, key, supplierId: supplierId || 0, excludeId: excludeId || 0 },
+        type: db.Sequelize.QueryTypes.SELECT
+    });
+    return rows.map(d => ({
+        lubes_hdr_id: d.lubes_hdr_id,
+        invoice_number: d.invoice_number,
+        supplier_name: d.supplier_name || '',
+        invoice_date: moment(d.invoice_date).format('DD-MMM-YYYY').toUpperCase(),
+        closing_status: d.closing_status
+    }));
+}
+
 async function learnFromPdf(src, supplier, productById, locationCode, user) {
     try {
         const skus = (Array.isArray(src.skus) ? src.skus : []).filter(s => s && productById.has(parseInt(s.product_id)));
