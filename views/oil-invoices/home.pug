@@ -45,7 +45,7 @@ block content
                     li.nav-item
                         a.nav-link(class=(tab === t[0] ? 'active' : '') href=`/oil-invoices?tab=${t[0]}&from=${fromDate}&to=${toDate}`)= t[1]
 
-            form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/oil-invoices")
+            form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/oil-invoices" class=(tab === 'email' ? 'd-none' : ''))
                 input(type="hidden" name="tab" value=tab)
                 .mr-2.mb-2
                     label.small.mb-1 From
@@ -225,6 +225,136 @@ block content
                     p.small.text-muted
                         | KL differ: LFR is charged on the KL in its rows (worked out from the rate per KL); Tank Receipts holds the KL of the whole invoice, which can include products IOCL charges no LFR on.
 
+            //- ───────────────────────── Email import ─────────────────────────
+            if tab === 'email'
+                p.small.text-muted.mb-2
+                    | Forward IOCL's invoice mails (from B2BPRD@indianoil.in) to a Gmail mailbox and add it here. PetroMath reads it
+                    if autoRuns
+                        |  every hour (07:25–22:25)
+                    else
+                        |  when you press <b>Check now</b> (this server does not read mailboxes on its own)
+                    | , saves the charge invoices (LFR, E-Lock, XtraPower, merchant consent …) at the bunk whose GSTIN is on the invoice, and leaves the other PDFs (fuel invoices, payment receipts) alone. Read mails get the Gmail label <b>PetroMath-Read</b>; nothing is deleted.
+                if !keyConfigured
+                    .alert.alert-warning.small Password storage is not set up on this server (PORTAL_CRED_KEY missing), so a mailbox cannot be added.
+
+                .card.mb-3
+                    .card-body.py-2
+                        .d-flex.align-items-center.mb-2
+                            .font-weight-bold.mr-auto
+                                i.bi.bi-envelope-at.mr-1
+                                | Mailboxes for #{user.location_code}
+                            if keyConfigured && tickable.length
+                                button.btn.btn-outline-primary.btn-sm#addMailboxBtn(type="button")
+                                    i.bi.bi-plus-lg.mr-1
+                                    | Add mailbox
+                        if !mailboxes.length
+                            .small.text-muted No mailbox is set up for #{user.location_code} yet.
+                        each m in mailboxes
+                            .border.rounded.p-2.mb-2
+                                .d-flex.flex-wrap.align-items-center
+                                    strong.mr-2= m.email_address
+                                    if m.active_flag !== 'Y'
+                                        span.badge.badge-secondary.mr-2 Off
+                                    else if m.last_status === 'LOGIN_FAILED'
+                                        span.badge.badge-danger.mr-2 Login failed
+                                    else if m.last_status === 'ERROR'
+                                        span.badge.badge-warning.mr-2 Last check failed
+                                    else if m.last_status === 'OK'
+                                        span.badge.badge-success.mr-2 OK
+                                    span.small.text-muted.mr-auto bunks: #{m.locations.join(', ')} · last #{m.lookback_days} days
+                                    button.btn.btn-primary.btn-sm.mr-1.mb-1.run-mailbox-btn(type="button" data-id=m.mailbox_id)
+                                        i.bi.bi-arrow-repeat.mr-1
+                                        | Check now
+                                    if m.canManage
+                                        button.btn.btn-outline-secondary.btn-sm.mr-1.mb-1.edit-mailbox-btn(type="button" data-id=m.mailbox_id data-email=m.email_address
+                                            data-locations=m.locations.join(',') data-lookback=m.lookback_days data-active=m.active_flag)
+                                            i.bi.bi-pencil
+                                        button.btn.btn-outline-danger.btn-sm.mb-1.delete-mailbox-btn(type="button" data-id=m.mailbox_id data-email=m.email_address)
+                                            i.bi.bi-trash
+                                if m.last_run_at
+                                    .small(class=(m.last_status === 'OK' ? 'text-muted' : 'text-danger')) #{fmtDateTime(m.last_run_at)}: #{m.last_message}
+
+                .d-flex.align-items-center.mb-1
+                    .font-weight-bold.mr-auto PDFs read from email
+                    if showOther
+                        a.small(href="/oil-invoices?tab=email") Hide other PDFs
+                    else
+                        a.small(href="/oil-invoices?tab=email&other=1") Show other PDFs too (fuel invoices, receipts …)
+                if !log.length
+                    .small.text-muted Nothing read yet.
+                else
+                    table.table.table-sm.table-hover.m-stack.m-collapse
+                        thead.thead-light
+                            tr
+                                th Read on
+                                th Mail
+                                th PDF
+                                th Result
+                        tbody
+                            each g in log
+                                tr(class=(g.status === 'BLOCKED' || g.status === 'ERROR' ? 'table-warning' : (g.status === 'NOT_INVOICE' ? 'text-muted' : '')))
+                                    td.m-title.text-nowrap #{fmtDateTime(g.creation_date)}#{g.created_by === 'AUTO' ? '' : ' · ' + g.created_by}
+                                    td.small(data-label="Mail")
+                                        div= g.subject
+                                        .text-muted #{fmtDateTime(g.mail_date)} · #{g.email_address}
+                                    td.small(data-label="PDF")= g.file_name
+                                    td.small.m-summary(data-label="Result")
+                                        if g.status === 'IMPORTED'
+                                            span.badge.badge-success.mr-1 Imported
+                                        else if g.status === 'EXISTS'
+                                            span.badge.badge-secondary.mr-1 Already in
+                                        else if g.status === 'BLOCKED'
+                                            span.badge.badge-danger.mr-1 Not saved
+                                        else if g.status === 'ERROR'
+                                            span.badge.badge-danger.mr-1 Not read
+                                        else
+                                            span.badge.badge-light.border.mr-1 Other PDF
+                                        if g.invoice_id && g.location_code === user.location_code
+                                            a.mr-1(href=`/oil-invoices/${g.invoice_id}/pdf` target="_blank" rel="noopener")= g.invoice_no
+                                        else if g.invoice_no
+                                            span.mr-1= g.invoice_no
+                                        if g.location_code && g.location_code !== user.location_code
+                                            span.text-muted.mr-1 (#{g.location_code})
+                                        if g.status !== 'IMPORTED' && g.status !== 'EXISTS'
+                                            div= g.detail
+                    p.small.text-muted A PDF marked "Not saved" or "Not read" is not tried again: download it from the mail and upload it in the Invoices tab once the problem is fixed.
+
+                //- Add / edit a mailbox
+                .modal.fade#mailboxModal(tabindex="-1")
+                    .modal-dialog
+                        .modal-content
+                            .modal-header
+                                h5.modal-title#mailboxTitle Add mailbox
+                                button.close(type="button" data-dismiss="modal") &times;
+                            .modal-body
+                                .form-group
+                                    label.small.mb-1 Gmail address
+                                    input.form-control.form-control-sm#mbEmail(type="email" autocomplete="off" placeholder="name@gmail.com")
+                                .form-group
+                                    label.small.mb-1#mbPasswordLabel App Password
+                                    input.form-control.form-control-sm#mbPassword(type="password" autocomplete="new-password" placeholder="16 letters")
+                                    small.form-text.text-muted
+                                        | Not the Gmail password. In that Google account: turn on 2-Step Verification, then Security &gt; App passwords &gt; create one named "PetroMath". It is stored encrypted and never shown again.
+                                .form-group
+                                    label.small.mb-1 Bunks this mailbox gets invoices for
+                                    .d-flex.flex-wrap
+                                        each l in tickable
+                                            .custom-control.custom-checkbox.mr-3
+                                                input.custom-control-input.mb-loc(type="checkbox" id=`mbLoc_${l}` value=l)
+                                                label.custom-control-label(for=`mbLoc_${l}`)= l
+                                .form-row
+                                    .form-group.col-6
+                                        label.small.mb-1 Read mails of the last (days)
+                                        input.form-control.form-control-sm#mbLookback(type="number" min="1" max="365" value="30")
+                                    .form-group.col-6#mbActiveGroup
+                                        label.small.mb-1 Status
+                                        select.form-control.form-control-sm#mbActive
+                                            option(value="Y") On
+                                            option(value="N") Off
+                            .modal-footer
+                                button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
+                                button.btn.btn-primary.btn-sm#mbSaveBtn(type="button") Check login &amp; save
+
             //- Fuel invoices on one LFR invoice
             .modal.fade#rowsModal(tabindex="-1")
                 .modal-dialog.modal-xl
@@ -394,6 +524,69 @@ block content
                 });
                 var unlinkBtn = document.getElementById('unlinkBtn');
                 if (unlinkBtn) unlinkBtn.addEventListener('click', function () { saveLink(null); });
+
+                // ── Email import: mailboxes ──
+                var editMailboxId = null;
+                function openMailbox(btn) {
+                    editMailboxId = btn ? btn.dataset.id : null;
+                    var locs = btn ? btn.dataset.locations.split(',') : [!{JSON.stringify(String(user.location_code)).replace(/</g, '\\u003c')}];
+                    document.getElementById('mailboxTitle').textContent = btn ? 'Edit ' + btn.dataset.email : 'Add mailbox';
+                    var email = document.getElementById('mbEmail');
+                    email.value = btn ? btn.dataset.email : '';
+                    email.disabled = !!btn;
+                    document.getElementById('mbPassword').value = '';
+                    document.getElementById('mbPasswordLabel').textContent = btn ? 'New App Password (leave blank to keep the saved one)' : 'App Password';
+                    document.querySelectorAll('.mb-loc').forEach(function (c) { c.checked = locs.indexOf(c.value) >= 0; });
+                    document.getElementById('mbLookback').value = btn ? btn.dataset.lookback : 30;
+                    document.getElementById('mbActive').value = btn ? btn.dataset.active : 'Y';
+                    document.getElementById('mbActiveGroup').style.display = btn ? '' : 'none';
+                    $('#mailboxModal').modal('show');
+                }
+                var addMailboxBtn = document.getElementById('addMailboxBtn');
+                if (addMailboxBtn) addMailboxBtn.addEventListener('click', function () { openMailbox(null); });
+                document.querySelectorAll('.edit-mailbox-btn').forEach(function (b) { b.addEventListener('click', function () { openMailbox(b); }); });
+                var mbSaveBtn = document.getElementById('mbSaveBtn');
+                if (mbSaveBtn) mbSaveBtn.addEventListener('click', async function () {
+                    var body = {
+                        email: document.getElementById('mbEmail').value,
+                        password: document.getElementById('mbPassword').value,
+                        locations: Array.prototype.filter.call(document.querySelectorAll('.mb-loc'), function (c) { return c.checked; }).map(function (c) { return c.value; }),
+                        lookback_days: document.getElementById('mbLookback').value,
+                        active: document.getElementById('mbActive').value
+                    };
+                    mbSaveBtn.disabled = true;
+                    mbSaveBtn.textContent = 'Checking login…';
+                    try {
+                        await call('POST', '/oil-invoices/api/mailboxes' + (editMailboxId ? '/' + editMailboxId : ''), body);
+                        sessionStorage.setItem('oilInvMessage', 'Mailbox saved. Press "Check now" to read it.');
+                        window.location.reload();
+                    } catch (e) {
+                        $('#mailboxModal').modal('hide');
+                        showMessage(e.message, false);
+                    } finally { mbSaveBtn.disabled = false; mbSaveBtn.textContent = 'Check login & save'; }
+                });
+                document.querySelectorAll('.delete-mailbox-btn').forEach(function (b) {
+                    b.addEventListener('click', async function () {
+                        if (!confirm('Stop reading ' + b.dataset.email + '? Its saved password and read log are removed; invoices already imported stay.')) return;
+                        try {
+                            await call('POST', '/oil-invoices/api/mailboxes/' + b.dataset.id + '/delete');
+                            sessionStorage.setItem('oilInvMessage', b.dataset.email + ' removed.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+                document.querySelectorAll('.run-mailbox-btn').forEach(function (b) {
+                    b.addEventListener('click', async function () {
+                        b.disabled = true;
+                        var label = b.innerHTML;
+                        b.innerHTML = '<span class="spinner-border spinner-border-sm mr-1"></span>Reading…';
+                        try {
+                            var d = await call('POST', '/oil-invoices/api/mailboxes/' + b.dataset.id + '/run');
+                            sessionStorage.setItem('oilInvMessage', d.message);
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); b.disabled = false; b.innerHTML = label; }
+                    });
+                });
 
                 // ── Delete ──
                 document.querySelectorAll('.delete-btn').forEach(function (btn) {
