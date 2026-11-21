@@ -36,12 +36,15 @@ router.get('/api/invoices/:id(\\d+)', canUse, ctrl.getInvoice);
 router.get('/api/invoices/:id(\\d+)/candidates', canUse, ctrl.getCandidates);
 router.post('/api/invoices/:id(\\d+)/link', canUse, ctrl.link);
 router.post('/api/invoices/:id(\\d+)/delete', canUse, ctrl.deleteInvoice);
-// Email import (forwarding Gmail mailboxes)
-router.post('/api/mailboxes', canUse, ctrl.createMailbox);
-router.post('/api/mailboxes/:id(\\d+)', canUse, ctrl.updateMailbox);
-router.post('/api/mailboxes/:id(\\d+)/delete', canUse, ctrl.deleteMailbox);
-router.post('/api/mailboxes/:id(\\d+)/run', canUse, ctrl.runMailbox);
-router.post('/api/mailboxes/:id(\\d+)/script', canUse, ctrl.newScript);
+// Email import: the forwarding Gmail mailboxes are set up in Administration > IOCL Mail Import
+// (menu OIL_INVOICE_MAILBOXES, SuperUser); bunk users only see their PDFs on the Email Import tab.
+const canSetUp = [isLoginEnsured, security.hasMenu('OIL_INVOICE_MAILBOXES')];
+router.get('/mailboxes', canSetUp, ctrl.getMailboxesPage);
+router.post('/api/mailboxes', canSetUp, ctrl.createMailbox);
+router.post('/api/mailboxes/:id(\\d+)', canSetUp, ctrl.updateMailbox);
+router.post('/api/mailboxes/:id(\\d+)/delete', canSetUp, ctrl.deleteMailbox);
+router.post('/api/mailboxes/:id(\\d+)/run', canSetUp, ctrl.runMailbox);
+router.post('/api/mailboxes/:id(\\d+)/script', canSetUp, ctrl.newScript);
 
 // The Google script in a forwarding Gmail posts here: no login, its key (X-PetroMath-Key) says which mailbox.
 const inboundLimiter = rateLimit({

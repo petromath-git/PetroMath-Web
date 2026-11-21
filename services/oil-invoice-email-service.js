@@ -70,13 +70,27 @@ async function pickLocation(parsed, locations) {
     return { location: null, reason: `Bunks ${hits.join(', ')} share GSTIN ${gstin}, so PetroMath cannot tell which one this invoice is for. Upload it at the right bunk.` };
 }
 
+// The one bunk (of the mailbox's) whose GSTIN is among those printed on a PDF; null if none or several.
+async function locationByGstins(gstins, locations) {
+    if (!gstins || !gstins.length) return null;
+    const hits = [];
+    for (const loc of locations) {
+        const cfg = await GstConfigDao.findByLocationCode(loc);
+        if (cfg && gstins.includes(String(cfg.gstin || '').trim().toUpperCase())) hits.push(loc);
+    }
+    return hits.length === 1 ? hits[0] : null;
+}
+
 // One PDF -> log row fields (status, location_code, invoice_no, invoice_id, detail).
 async function importPdf(buffer, fileName, locations, by) {
     let parsed;
     try {
         parsed = await parseOilChargeInvoice(buffer);
     } catch (e) {
-        if (e.code === 'NOT_CHARGE_INVOICE') return { status: 'NOT_INVOICE', detail: 'Not an IOCL charge invoice (fuel invoice, payment receipt …) - left alone.' };
+        if (e.code === 'NOT_CHARGE_INVOICE') {
+            return { status: 'NOT_INVOICE', location_code: await locationByGstins(e.gstins, locations),
+                detail: 'Not an IOCL charge invoice (fuel invoice, payment receipt …) - left alone.' };
+        }
         return { status: 'ERROR', detail: e.message };
     }
     const { location, reason } = await pickLocation(parsed, locations);
