@@ -5,6 +5,7 @@
 //   invoices  upload PDFs (several at once), list with the SAP debit each is linked to
 //   sap       charge debits on the SAP account, with or without an invoice
 //   lfr       the fuel invoices each LFR invoice charges, checked against Tank Receipts
+const crypto = require('crypto');
 const dateFormat = require('dateformat');
 const OilInvoiceDao = require('../dao/oil-invoice-dao');
 const OilInvoiceService = require('../services/oil-invoice-service');
@@ -40,13 +41,23 @@ const canManage = (user, box) => box.locations.every(l => security.canAccessLoca
 const cleanPassword = (p) => String(p || '').replace(/\s+/g, '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-// Validates the body of a mailbox save. Returns { error } or { email, password, locations, lookbackDays, active }.
-async function readMailboxBody(req, isNew) {
+// Google script key: random, shown once inside the script; only its SHA-256 is stored.
+const newScriptKey = () => crypto.randomBytes(24).toString('base64').replace(/[+/=]/g, c => ({ '+': '-', '/': '_', '=': '' }[c]));
+const sha256 = (s) => crypto.createHash('sha256').update(String(s)).digest('hex');
+const inboundUrl = (req) => {
+    const host = req.get('host');
+    const proto = /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? req.protocol : 'https';
+    return `${proto}://${host}/oil-invoices/inbound`;
+};
+
+// Validates the body of a mailbox save. Returns { error } or { email, mode, password, locations, lookbackDays, active }.
+async function readMailboxBody(req, isNew, currentMode) {
     const b = req.body || {};
     const email = String(b.email || '').trim().toLowerCase();
     if (isNew && !EMAIL_RE.test(email)) return { error: 'Enter the Gmail address the invoices are forwarded to.' };
-    const password = cleanPassword(b.password);
-    if (isNew && !password) return { error: 'Enter the App Password of this Gmail account.' };
+    const mode = isNew ? (b.mode === 'IMAP' ? 'IMAP' : 'SCRIPT') : currentMode;
+    const password = mode === 'IMAP' ? cleanPassword(b.password) : '';
+    if (isNew && mode === 'IMAP' && !password) return { error: 'Enter the App Password of this Gmail account.' };
     if (password && password.length < 8) return { error: 'That does not look like an App Password (16 letters from Google Account > Security > App passwords).' };
     const wanted = Array.from(new Set((Array.isArray(b.locations) ? b.locations : [b.locations]).filter(Boolean).map(String)));
     if (!wanted.length) return { error: 'Tick at least one bunk.' };
@@ -54,7 +65,7 @@ async function readMailboxBody(req, isNew) {
     const bad = wanted.filter(l => !allowed.includes(l));
     if (bad.length) return { error: `You cannot add ${bad.join(', ')} (not your bunk, or no IOCL SAP account).` };
     const lookbackDays = Math.min(Math.max(parseInt(b.lookback_days, 10) || 30, 1), 365);
-    return { email, password, locations: wanted, lookbackDays, active: b.active === 'N' ? 'N' : 'Y' };
+    return { email, mode, password, locations: wanted, lookbackDays, active: b.active === 'N' ? 'N' : 'Y' };
 }
 
 function fyRange(d) {
@@ -243,15 +254,21 @@ module.exports = {
     // POST /oil-invoices/api/mailboxes { email, password, locations[], lookback_days }
     createMailbox: async (req, res) => {
         try {
-            if (!secretBox.isConfigured()) return res.status(400).json({ success: false, error: 'Password storage is not set up on this server (PORTAL_CRED_KEY missing).' });
             const v = await readMailboxBody(req, true);
             if (v.error) return res.status(400).json({ success: false, error: v.error });
             if (await MailboxDao.getMailboxByEmail(v.email)) {
                 return res.status(400).json({ success: false, error: `${v.email} is already set up. Edit it there (tick your bunk) instead of adding it again.` });
             }
+            if (v.mode === 'SCRIPT') {
+                const key = newScriptKey();
+                const id = await MailboxDao.createMailbox({ email: v.email, mode: 'SCRIPT', tokenHash: sha256(key), lookbackDays: v.lookbackDays },
+                    v.locations, req.user.User_Name);
+                return res.json({ success: true, mailbox_id: id, email: v.email, script: EmailService.buildScript(inboundUrl(req), key, v.lookbackDays) });
+            }
+            if (!secretBox.isConfigured()) return res.status(400).json({ success: false, error: 'Password storage is not set up on this server (PORTAL_CRED_KEY missing).' });
             const test = await EmailService.testLogin(v.email, v.password);
             if (!test.ok) return res.status(400).json({ success: false, error: test.error });
-            const id = await MailboxDao.createMailbox({ email: v.email, passwordEnc: secretBox.encrypt(v.password), lookbackDays: v.lookbackDays },
+            const id = await MailboxDao.createMailbox({ email: v.email, mode: 'IMAP', passwordEnc: secretBox.encrypt(v.password), lookbackDays: v.lookbackDays },
                 v.locations, req.user.User_Name);
             res.json({ success: true, mailbox_id: id });
         } catch (e) {
@@ -266,7 +283,7 @@ module.exports = {
             const id = Number(req.params.id);
             const box = await MailboxDao.getMailbox(id);
             if (!box || !canManage(req.user, box)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
-            const v = await readMailboxBody(req, false);
+            const v = await readMailboxBody(req, false, box.access_mode);
             if (v.error) return res.status(400).json({ success: false, error: v.error });
             let passwordEnc = null;
             if (v.password) {
@@ -303,12 +320,44 @@ module.exports = {
             const id = Number(req.params.id);
             const box = await MailboxDao.getMailbox(id);
             if (!box || !box.locations.includes(req.user.location_code)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            if (box.access_mode === 'SCRIPT') {
+                return res.status(400).json({ success: false, error: 'This mailbox sends by itself every hour. To send now: open the PetroMath script at script.google.com, choose "sendInvoices" and press Run.' });
+            }
             const r = await EmailService.runMailbox(id, req.user.User_Name);
             if (r.status !== 'OK') return res.status(400).json({ success: false, error: r.message });
             res.json({ success: true, message: r.message, counts: r.counts });
         } catch (e) {
             console.error('Oil invoices runMailbox:', e.message);
             res.status(500).json({ success: false, error: 'Could not read the mailbox.' });
+        }
+    },
+
+    // POST /oil-invoices/api/mailboxes/:id/script -> a new Google script (new key; the old script stops working)
+    newScript: async (req, res) => {
+        try {
+            const id = Number(req.params.id);
+            const box = await MailboxDao.getMailbox(id);
+            if (!box || !canManage(req.user, box) || box.access_mode !== 'SCRIPT') return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            const key = newScriptKey();
+            await MailboxDao.setTokenHash(id, sha256(key), req.user.User_Name);
+            res.json({ success: true, email: box.email_address, script: EmailService.buildScript(inboundUrl(req), key, box.lookback_days) });
+        } catch (e) {
+            console.error('Oil invoices newScript:', e.message);
+            res.status(500).json({ success: false, error: 'Could not make the script.' });
+        }
+    },
+
+    // POST /oil-invoices/inbound (no login; header X-PetroMath-Key) <- the Google script in the Gmail account
+    inbound: async (req, res) => {
+        try {
+            const key = String(req.get('X-PetroMath-Key') || '');
+            const box = key.length >= 20 ? await MailboxDao.getMailboxByTokenHash(sha256(key)) : null;
+            if (!box) return res.status(401).json({ success: false, error: 'Unknown key. Make a new script in PetroMath (IOCL Invoices > Email Import).' });
+            const r = await EmailService.receiveFromScript(box, req.body || {});
+            res.json({ success: true, ...r });
+        } catch (e) {
+            console.error('Oil invoices inbound:', e.message);
+            res.status(500).json({ success: false, error: 'PetroMath could not take the mail; it will be sent again.' });
         }
     },
 };

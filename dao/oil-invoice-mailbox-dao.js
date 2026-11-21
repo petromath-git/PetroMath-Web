@@ -16,7 +16,7 @@ const withLocations = async (boxes) => {
     return boxes;
 };
 
-const MAILBOX_COLUMNS = `m.mailbox_id, m.email_address, m.imap_host, m.imap_port, m.lookback_days, m.active_flag,
+const MAILBOX_COLUMNS = `m.mailbox_id, m.email_address, m.access_mode, m.imap_host, m.imap_port, m.lookback_days, m.active_flag,
     m.last_run_at, m.last_status, m.last_message, m.updated_by, m.updation_date`;
 
 const OilInvoiceMailboxDao = {
@@ -44,18 +44,31 @@ const OilInvoiceMailboxDao = {
         return m || null;
     },
 
-    // Active mailboxes for the scheduler; a failed login pauses one until its password is saved again.
+    // Active IMAP mailboxes for the scheduler; a failed login pauses one until its password is saved again.
     getMailboxesToRun: async () => withLocations(await select(`
         SELECT ${MAILBOX_COLUMNS} FROM m_oil_invoice_mailbox m
-        WHERE m.active_flag = 'Y' AND COALESCE(m.last_status, '') <> 'LOGIN_FAILED'
+        WHERE m.active_flag = 'Y' AND m.access_mode = 'IMAP' AND COALESCE(m.last_status, '') <> 'LOGIN_FAILED'
         ORDER BY m.mailbox_id
     `)),
 
+    // SCRIPT mailbox by the SHA-256 of the key its Google script sends.
+    getMailboxByTokenHash: async (tokenHash) => {
+        const [m] = await withLocations(await select(`SELECT ${MAILBOX_COLUMNS} FROM m_oil_invoice_mailbox m
+            WHERE m.token_hash = :tokenHash AND m.access_mode = 'SCRIPT'`, { tokenHash }));
+        return m || null;
+    },
+
+    setTokenHash: (mailboxId, tokenHash, by) => db.sequelize.query(`
+        UPDATE m_oil_invoice_mailbox SET token_hash = :tokenHash, updated_by = :by, last_status = NULL,
+               last_message = 'New script made; paste it in the Google script and press Run on setup' WHERE mailbox_id = :mailboxId
+    `, { replacements: { mailboxId, tokenHash, by } }),
+
     createMailbox: (m, locations, by) => db.sequelize.transaction(async (t) => {
         const [mailboxId] = await db.sequelize.query(`
-            INSERT INTO m_oil_invoice_mailbox (email_address, password_enc, lookback_days, active_flag, created_by, updated_by)
-            VALUES (:email, :passwordEnc, :lookbackDays, 'Y', :by, :by)
-        `, { replacements: { email: m.email, passwordEnc: m.passwordEnc, lookbackDays: m.lookbackDays, by }, type: QueryTypes.INSERT, transaction: t });
+            INSERT INTO m_oil_invoice_mailbox (email_address, access_mode, password_enc, token_hash, lookback_days, active_flag, created_by, updated_by)
+            VALUES (:email, :mode, :passwordEnc, :tokenHash, :lookbackDays, 'Y', :by, :by)
+        `, { replacements: { email: m.email, mode: m.mode, passwordEnc: m.passwordEnc || null, tokenHash: m.tokenHash || null,
+            lookbackDays: m.lookbackDays, by }, type: QueryTypes.INSERT, transaction: t });
         for (const loc of locations) {
             await db.sequelize.query(`INSERT INTO m_oil_invoice_mailbox_location (mailbox_id, location_code, created_by) VALUES (:mailboxId, :loc, :by)`,
                 { replacements: { mailboxId, loc, by }, transaction: t });
