@@ -146,6 +146,8 @@ require('./services/deadline-reminder-scheduler').start();
 require('./services/rental-draft-scheduler').start();
 // Financial year and new product maps for each location, 00:10 IST daily (prod only) - see services/gl-daily-setup-scheduler.js
 require('./services/gl-daily-setup-scheduler').start();
+// IOCL charge invoices from the forwarding Gmail mailboxes, hourly 07:25-22:25 IST (prod only) - see services/oil-invoice-email-scheduler.js
+require('./services/oil-invoice-email-scheduler').start();
 // Bank holidays from RBI's list, monthly - see services/bank-holiday-service.js
 require('./services/bank-holiday-service').start();
 
@@ -306,6 +308,7 @@ const bankMasterRoutes = require('./routes/bank-master-routes');
 const expenseMasterRoutes = require('./routes/expense-master-routes');
 const rentalRoutes = require('./routes/rental-routes');
 const ttRoutes = require('./routes/tt-routes');
+const oilInvoiceRoutes = require('./routes/oil-invoice-routes');
 const deadlineRoutes = require('./routes/deadline-routes');
 const pushRoutes = require('./routes/push-routes');
 const oilCompanyAccountRoutes = require('./routes/oil-company-account-routes');
@@ -631,6 +634,7 @@ app.use('/bank-master', bankMasterRoutes);
 app.use('/expense-master', expenseMasterRoutes);
 app.use('/rental', rentalRoutes);
 app.use('/tt', ttRoutes);
+app.use('/oil-invoices', oilInvoiceRoutes);
 app.use('/deadline', deadlineRoutes);
 app.use('/push', pushRoutes);
 app.use('/oil-company-accounts', oilCompanyAccountRoutes);

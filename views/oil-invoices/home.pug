@@ -1,0 +1,457 @@
+extends ../layout
+include ../mixins/card-toggle-mobile
+
+//- IOCL Invoices (tkt #484): register of IOCL's charge invoices (LFR, E-Lock, participation fee,
+//- merchant consent incentive, VMUS ...) linked to their SAP debits, and the LFR fuel-invoice check.
+
+mixin sapBadge(i)
+    if i.t_bank_id
+        span.badge.badge-light.border(title=(i.sap_remarks || '')) #{fmtDate(i.sap_date)} · ₹#{fmtAmt(i.sap_amount)}
+    else if i.match_by === 'NONE'
+        span.badge.badge-light.border.text-muted(title="Not debited to the SAP account (deducted from the tank truck freight payment)") Not on SAP
+    else
+        span.badge.badge-warning(title="No SAP debit of this amount yet — upload the SAP statement, or link it by hand") Not found
+
+block content
+    style.
+        .oi-tabs .nav-link { font-weight: 600; }
+        .stat-tile { border: 1px solid #dee2e6; border-radius: 0.5rem; padding: 8px 12px; background: #fff; }
+        .stat-tile .lbl { font-size: 11px; color: #6c757d; text-transform: uppercase; }
+        .stat-tile .val { font-size: 16px; font-weight: 700; }
+        .num { text-align: right; white-space: nowrap; }
+        .oi-group td { background: #f1f4f8; font-weight: 600; }
+        @media (max-width: 575px) {
+            .stat-tile .val { font-size: 13px; }
+            .oi-hide-sm { display: none; }
+        }
+
+    div#messageAlert.alert.alert-dismissible.fade(role="alert" style="display: none;")
+        span#messageText
+        button.close(type="button" data-dismiss="alert" aria-label="Close")
+            span(aria-hidden="true") &times;
+
+    .container-fluid.py-3
+        .mb-2
+            h4.mb-0.text-primary IOCL Invoices
+            if account
+                small.text-muted SAP account #{account.account_number} · invoices for the charges IOCL debits to it
+
+        if notIocl
+            .alert.alert-info
+                | #{user.location_code} has no IOCL SAP account (Masters &gt; Oil Company Accounts), so there are no IOCL invoices to keep here.
+        else
+            ul.nav.nav-tabs.oi-tabs.mb-3
+                each t in tabs
+                    li.nav-item
+                        a.nav-link(class=(tab === t[0] ? 'active' : '') href=`/oil-invoices?tab=${t[0]}&from=${fromDate}&to=${toDate}`)= t[1]
+
+            form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/oil-invoices" class=(tab === 'email' ? 'd-none' : ''))
+                input(type="hidden" name="tab" value=tab)
+                .mr-2.mb-2
+                    label.small.mb-1 From
+                    input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                .mr-2.mb-2
+                    label.small.mb-1 To
+                    input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                .mb-2
+                    button.btn.btn-sm.btn-secondary(type="submit") Show
+
+            //- ───────────────────────── Invoices ─────────────────────────
+            if tab === 'invoices'
+                .card.mb-3
+                    .card-body.py-2
+                        .font-weight-bold.mb-1
+                            i.bi.bi-upload.mr-1
+                            | Upload IOCL invoice PDFs
+                        .small.text-muted.mb-2
+                            | The PDFs as IOCL emails them: LFR (License Fee Recovery) and the "GST INVOICE" ones (E-Lock, XtraPower participation fee, merchant consent incentive, VMUS…). Choose several at once (up to #{maxFiles}). Invoices already uploaded are skipped.
+                        .d-flex.flex-wrap.align-items-center
+                            input.form-control-file.mr-2.mb-1#invoiceFiles(type="file" multiple accept=".pdf,application/pdf" style="max-width:340px")
+                            button.btn.btn-outline-primary.btn-sm.mb-1#previewBtn(type="button")
+                                i.bi.bi-eye.mr-1
+                                | Read files
+                        #previewArea.mt-2
+
+                if byType.length
+                    .row.no-gutters.mb-3
+                        each t in byType
+                            .col-6.col-md-2.p-1
+                                .stat-tile
+                                    .lbl= t.charge_name
+                                    .val ₹#{fmtAmt(t.total)}
+                                    .small.text-muted #{t.count} invoice(s)#{t.unlinked ? ' · ' + t.unlinked + ' not on SAP yet' : ''}
+
+                if !invoices.length
+                    .text-muted.small No IOCL invoices dated between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                else
+                    table.table.table-sm.table-hover.m-stack.m-collapse
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Invoice No
+                                th Invoice For
+                                th.oi-hide-sm Details
+                                th.num Taxable
+                                th.num GST
+                                th.num Total
+                                th SAP debit
+                                th
+                        tbody
+                            each i in invoices
+                                tr
+                                    td.m-title.text-nowrap #{fmtDate(i.invoice_date)} · #{i.charge_name || i.charge_code}
+                                    td(data-label="Invoice No")
+                                        span.text-nowrap= i.invoice_no
+                                        if i.sap_ref
+                                            .small.text-muted(title="LFR: SAP invoice no / others: FI document no")= i.sap_ref
+                                    td.m-hide= i.charge_name || i.charge_code
+                                    td.oi-hide-sm.small(data-label="Details")
+                                        = i.description
+                                        if i.line_count
+                                            |  · #{i.line_count} rows, #{Number(i.total_kl || 0).toFixed(0)} KL
+                                    td.num(data-label="Taxable")= fmtAmt(i.taxable_value)
+                                    td.num(data-label="GST")= fmtAmt(Number(i.cgst_amount) + Number(i.sgst_amount) + Number(i.igst_amount))
+                                    td.num.m-summary(data-label="Total")= fmtAmt(i.total_amount)
+                                    td(data-label="SAP debit")
+                                        +sapBadge(i)
+                                    td.m-actions.text-nowrap
+                                        if i.doc_id
+                                            a.btn.btn-outline-secondary.btn-sm.mr-1(href=`/oil-invoices/${i.invoice_id}/pdf` target="_blank" rel="noopener" title="Invoice PDF")
+                                                i.bi.bi-file-earmark-pdf
+                                        if i.line_count
+                                            button.btn.btn-outline-dark.btn-sm.mr-1.rows-btn(type="button" title="Fuel invoices charged" data-id=i.invoice_id)
+                                                i.bi.bi-list-ul
+                                        if i.match_by !== 'NONE'
+                                            button.btn.btn-outline-primary.btn-sm.mr-1.link-btn(type="button" title="Link to a SAP debit" data-id=i.invoice_id data-no=i.invoice_no data-amount=i.total_amount)
+                                                i.bi.bi-link-45deg
+                                        button.btn.btn-outline-danger.btn-sm.delete-btn(type="button" title="Delete invoice" data-id=i.invoice_id data-no=i.invoice_no)
+                                            i.bi.bi-trash
+                    p.small.text-muted
+                        | Each invoice is linked to the SAP debit it is for: LFR by its SAP invoice number in the SAP narration, the others by charge, amount and nearest date. Uploading the SAP statement later links them on the next visit.
+                        |  This is a register only — the SAP debit books the charge as before; GST on these charges is not claimed.
+
+            //- ───────────────────────── SAP charges ─────────────────────────
+            if tab === 'sap'
+                p.small.text-muted.mb-2
+                    | Charge debits on the IOCL SAP account (#{account.account_number}) between #{fmtDate(fromDate)} and #{fmtDate(toDate)}, and whether the invoice for each has been uploaded.
+                if sap.summary.length
+                    .row.no-gutters.mb-3
+                        each s in sap.summary
+                            .col-6.col-md-2.p-1
+                                .stat-tile
+                                    .lbl= s.charge_name
+                                    .val ₹#{fmtAmt(s.amount)}
+                                    .small(class=(s.missing ? 'text-danger' : 'text-muted')) #{s.withInvoice}/#{s.count} with invoice#{s.missing ? ' · ' + s.missing + ' missing' : ''}
+                if !sap.rows.length
+                    .text-muted.small No charge debits on the SAP account in this period.
+                else
+                    table.table.table-sm.table-hover.m-stack.m-collapse
+                        thead.thead-light
+                            tr
+                                th Date
+                                th Charge
+                                th.oi-hide-sm SAP narration
+                                th.num Amount
+                                th Invoice
+                        tbody
+                            each r in sap.rows
+                                tr
+                                    td.m-title.text-nowrap #{fmtDate(r.trans_date)} · #{r.charge_name}
+                                    td.m-hide= r.charge_name
+                                    td.oi-hide-sm.small(data-label="SAP narration")= r.remarks
+                                    td.num.m-summary(data-label="Amount")= fmtAmt(r.debit_amount)
+                                    td(data-label="Invoice")
+                                        if r.invoice_id
+                                            a(href=`/oil-invoices/${r.invoice_id}/pdf` target="_blank" rel="noopener")= r.invoice_no
+                                            span.small.text-muted  #{fmtDate(r.invoice_date)}
+                                        else
+                                            span.badge.badge-warning No invoice
+
+            //- ───────────────────────── LFR check ─────────────────────────
+            if tab === 'lfr'
+                p.small.text-muted.mb-2
+                    | Each LFR invoice lists the fuel invoices IOCL charged the license fee on. Every one should be in Tank Receipts; a missing one is a fuel purchase not entered in PetroMath.
+                if !lfr.invoices.length
+                    .text-muted.small No LFR invoices dated between #{fmtDate(fromDate)} and #{fmtDate(toDate)}. Upload them in the Invoices tab.
+                each inv in lfr.invoices
+                    .card.mb-3.m-card
+                        .card-header.py-2.d-flex.flex-wrap.align-items-center
+                            strong.mr-2 LFR #{inv.invoice_no} · #{fmtDate(inv.lfr_date)}
+                            span.small.text-muted.mr-auto period #{fmtDate(inv.period_from)} – #{fmtDate(inv.period_to)} · #{inv.purchases.length} fuel invoice(s)
+                            if inv.missing
+                                span.badge.badge-danger.mr-1 #{inv.missing} not in Tank Receipts
+                            if inv.klDiff
+                                span.badge.badge-warning.mr-1 #{inv.klDiff} KL differ
+                            if inv.notOnLfr.length
+                                span.badge.badge-info.mr-1 #{inv.notOnLfr.length} not on any LFR
+                            if !inv.missing && !inv.klDiff && !inv.notOnLfr.length
+                                span.badge.badge-success All match
+                        .card-body.p-2
+                            table.table.table-sm.mb-2.m-stack
+                                thead.thead-light
+                                    tr
+                                        th Fuel invoice
+                                        th Date
+                                        th Products
+                                        th.num LFR KL
+                                        th.num LFR ₹
+                                        th Tank Receipts
+                                tbody
+                                    each p in inv.purchases
+                                        tr(class=(p.status === 'MISSING' ? 'table-danger' : (p.status === 'KL_DIFF' ? 'table-warning' : '')))
+                                            td.m-title= p.purchase_invoice_no
+                                            td(data-label="Date")= fmtDate(p.purchase_invoice_date)
+                                            td(data-label="Products")= p.products
+                                            td.num(data-label="LFR KL")= Number(p.lfr_kl).toFixed(3)
+                                            td.num(data-label="LFR ₹")= fmtAmt(p.lfr_amount)
+                                            td(data-label="Tank Receipts")
+                                                if p.status === 'MISSING'
+                                                    span.text-danger.font-weight-bold Not entered
+                                                else
+                                                    span #{fmtDate(p.tank.invoice_date)} · #{Number(p.tank_kl).toFixed(3)} KL
+                                                    if p.status === 'KL_DIFF'
+                                                        span.small.text-muted  (#{p.tank.products})
+                            if inv.notOnLfr.length
+                                .small.font-weight-bold.mb-1 IOCL fuel invoices in Tank Receipts dated in this period but on no LFR invoice
+                                table.table.table-sm.mb-0.m-stack
+                                    tbody
+                                        each t in inv.notOnLfr
+                                            tr
+                                                td.m-title= t.invoice_number
+                                                td(data-label="Date")= fmtDate(t.invoice_date)
+                                                td(data-label="Products")= t.products
+                                                td.num(data-label="KL")= Number(t.kl || 0).toFixed(3)
+                if lfr.invoices.length
+                    p.small.text-muted
+                        | KL differ: LFR is charged on the KL in its rows (worked out from the rate per KL); Tank Receipts holds the KL of the whole invoice, which can include products IOCL charges no LFR on.
+
+            //- ───────────────────────── Email import ─────────────────────────
+            if tab === 'email'
+                p.small.text-muted.mb-2
+                    | IOCL's invoice mails for #{user.location_code} are read automatically every hour. Charge invoices (LFR, E-Lock, XtraPower, merchant consent …) are saved in the Invoices tab; the other PDFs are only listed here.
+
+                .d-flex.align-items-center.mb-1
+                    .font-weight-bold.mr-auto PDFs read from email
+                    if showOther
+                        a.small(href="/oil-invoices?tab=email") Hide other PDFs
+                    else
+                        a.small(href="/oil-invoices?tab=email&other=1") Show other PDFs too (fuel invoices, receipts …)
+                if !log.length
+                    .small.text-muted Nothing read for #{user.location_code} yet.
+                else
+                    table.table.table-sm.table-hover.m-stack.m-collapse
+                        thead.thead-light
+                            tr
+                                th Read on
+                                th Mail
+                                th PDF
+                                th Result
+                        tbody
+                            each g in log
+                                tr(class=(g.status === 'BLOCKED' || g.status === 'ERROR' ? 'table-warning' : (g.status === 'NOT_INVOICE' ? 'text-muted' : '')))
+                                    td.m-title.text-nowrap= fmtDateTime(g.creation_date)
+                                    td.small(data-label="Mail")
+                                        div= g.subject
+                                        .text-muted= fmtDateTime(g.mail_date)
+                                    td.small(data-label="PDF")= g.file_name
+                                    td.small.m-summary(data-label="Result")
+                                        if g.status === 'IMPORTED'
+                                            span.badge.badge-success.mr-1 Imported
+                                        else if g.status === 'EXISTS'
+                                            span.badge.badge-secondary.mr-1 Already in
+                                        else if g.status === 'BLOCKED'
+                                            span.badge.badge-danger.mr-1 Not saved
+                                        else if g.status === 'ERROR'
+                                            span.badge.badge-danger.mr-1 Not read
+                                        else
+                                            span.badge.badge-light.border.mr-1 Other PDF
+                                        if g.invoice_id
+                                            a.mr-1(href=`/oil-invoices/${g.invoice_id}/pdf` target="_blank" rel="noopener")= g.invoice_no
+                                        else if g.invoice_no
+                                            span.mr-1= g.invoice_no
+                                        if g.status !== 'IMPORTED' && g.status !== 'EXISTS'
+                                            div= g.detail
+                    p.small.text-muted A PDF marked "Not saved" or "Not read" is not tried again: download it from the mail and upload it in the Invoices tab once the problem is fixed.
+
+            //- Fuel invoices on one LFR invoice
+            .modal.fade#rowsModal(tabindex="-1")
+                .modal-dialog.modal-xl
+                    .modal-content
+                        .modal-header
+                            h5.modal-title#rowsTitle Rows
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body#rowsBody
+
+            //- Link to a SAP debit by hand
+            .modal.fade#linkModal(tabindex="-1")
+                .modal-dialog
+                    .modal-content
+                        .modal-header
+                            h5.modal-title#linkTitle Link to SAP debit
+                            button.close(type="button" data-dismiss="modal") &times;
+                        .modal-body#linkBody
+                        .modal-footer
+                            button.btn.btn-outline-secondary.btn-sm#unlinkBtn(type="button") Unlink
+                            button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Close
+
+        +cardToggleMobile('table.m-collapse > tbody > tr:not(.m-static)')
+
+        script.
+            (function () {
+                function showMessage(text, ok) {
+                    var el = document.getElementById('messageAlert');
+                    el.className = 'alert alert-dismissible fade show ' + (ok ? 'alert-success' : 'alert-danger');
+                    document.getElementById('messageText').textContent = text;
+                    el.style.display = 'block';
+                    window.scrollTo(0, 0);
+                }
+                async function call(method, url, body, isForm) {
+                    var r = await fetch(url, isForm ? { method: method, body: body } : {
+                        method: method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined
+                    });
+                    var data = {};
+                    try { data = await r.json(); } catch (e) { /* non-JSON error page */ }
+                    if (!r.ok || !data.success) throw new Error(data.error || ('Request failed (' + r.status + ')'));
+                    return data;
+                }
+                function fmt(n) { return Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+                function esc(s) {
+                    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                }
+                var pending = sessionStorage.getItem('oilInvMessage');
+                if (pending) { sessionStorage.removeItem('oilInvMessage'); showMessage(pending, true); }
+
+                // ── Upload: read the files, show what would be saved, then save ──
+                var fileInput = document.getElementById('invoiceFiles');
+                var previewArea = document.getElementById('previewArea');
+                var previewBtn = document.getElementById('previewBtn');
+                var STATUS = {
+                    NEW: '<span class="badge badge-success">New</span>',
+                    EXISTS: '<span class="badge badge-secondary">Already uploaded</span>',
+                    BLOCKED: '<span class="badge badge-danger">Cannot save</span>',
+                    ERROR: '<span class="badge badge-danger">Not read</span>'
+                };
+                function filesForm() {
+                    var fd = new FormData();
+                    Array.prototype.forEach.call(fileInput.files, function (f) { fd.append('files', f); });
+                    return fd;
+                }
+                if (previewBtn) previewBtn.addEventListener('click', async function () {
+                    if (!fileInput.files.length) return showMessage('Choose the invoice PDF(s) first.', false);
+                    previewBtn.disabled = true;
+                    previewArea.innerHTML = '<span class="text-muted small">Reading…</span>';
+                    try {
+                        var d = await call('POST', '/oil-invoices/api/preview', filesForm(), true);
+                        var html = '', newCount = 0;
+                        if (d.skippedFiles) html += '<div class="alert alert-warning small py-1 mb-1">' + d.skippedFiles + ' file(s) beyond the limit were not read.</div>';
+                        html += '<div class="table-responsive"><table class="table table-sm table-bordered bg-white mb-2"><thead class="thead-light"><tr>' +
+                            '<th>File</th><th>Invoice For</th><th>Invoice No</th><th>Date</th><th>Details</th><th class="num">Taxable</th><th class="num">GST</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>';
+                        d.files.forEach(function (f) {
+                            if (f.status === 'NEW') newCount++;
+                            var i = f.invoice || {};
+                            var notes = [];
+                            if (f.error) notes.push('<div class="small text-danger">' + esc(f.error) + '</div>');
+                            f.problems.forEach(function (p) { notes.push('<div class="small text-danger">' + esc(p) + '</div>'); });
+                            f.warnings.forEach(function (w) { notes.push('<div class="small text-warning">' + esc(w) + '</div>'); });
+                            html += '<tr><td class="small">' + esc(f.file_name) + '</td><td>' + esc(f.charge_name || '') + '</td>' +
+                                '<td>' + esc(i.invoice_no || '') + (i.sap_ref ? '<div class="small text-muted">' + esc(i.sap_ref) + '</div>' : '') + '</td>' +
+                                '<td class="text-nowrap">' + esc(i.date || '') + '</td>' +
+                                '<td class="small">' + esc(i.description || i.service || '') + (i.rows ? ' · ' + i.rows + ' rows, ' + Number(i.kl || 0).toFixed(0) + ' KL' : '') + '</td>' +
+                                '<td class="num">' + (f.invoice ? fmt(i.taxable) : '') + '</td><td class="num">' + (f.invoice ? fmt(i.gst) : '') + '</td>' +
+                                '<td class="num">' + (f.invoice ? fmt(i.total) : '') + '</td><td>' + STATUS[f.status] + notes.join('') + '</td></tr>';
+                        });
+                        html += '</tbody></table></div>';
+                        if (newCount) html += '<button type="button" class="btn btn-success btn-sm" id="saveBtn"><i class="bi bi-check2 mr-1"></i>Save ' + newCount + ' new invoice' + (newCount > 1 ? 's' : '') + '</button>';
+                        else html += '<div class="small text-muted">Nothing new to save.</div>';
+                        previewArea.innerHTML = html;
+                        var saveBtn = document.getElementById('saveBtn');
+                        if (saveBtn) saveBtn.addEventListener('click', async function () {
+                            saveBtn.disabled = true;
+                            try {
+                                var s = await call('POST', '/oil-invoices/api/save', filesForm(), true);
+                                var msg = 'Saved ' + s.saved.length + ' invoice(s)' + (s.saved.length ? ': ' + s.saved.join(', ') : '') + '. ' +
+                                    s.linked + ' linked to their SAP debit.';
+                                if (s.skipped.length) msg += ' Skipped: ' + s.skipped.map(function (k) { return k.file + ' (' + k.reason + ')'; }).join(', ') + '.';
+                                sessionStorage.setItem('oilInvMessage', msg);
+                                window.location.reload();
+                            } catch (e) { saveBtn.disabled = false; showMessage(e.message, false); }
+                        });
+                    } catch (e) {
+                        previewArea.innerHTML = '';
+                        showMessage(e.message, false);
+                    } finally { previewBtn.disabled = false; }
+                });
+
+                // ── LFR rows ──
+                document.querySelectorAll('.rows-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        try {
+                            var inv = (await call('GET', '/oil-invoices/api/invoices/' + btn.dataset.id)).invoice;
+                            document.getElementById('rowsTitle').textContent = 'LFR ' + inv.invoice_no + ' · ' + inv.date_display + ' · SAP ' + (inv.sap_ref || '');
+                            var html = '<div class="table-responsive"><table class="table table-sm table-striped mb-0"><thead class="thead-light"><tr>' +
+                                '<th>#</th><th>Delivery</th><th>Fuel invoice</th><th>Date</th><th>Product</th><th class="num">KL</th><th class="num">Rate/KL</th>' +
+                                '<th class="num">Net</th><th class="num">GST</th><th class="num">Amount</th></tr></thead><tbody>';
+                            var kl = 0, amt = 0;
+                            inv.lines.forEach(function (l) {
+                                kl += Number(l.qty_kl || 0); amt += Number(l.line_amount);
+                                html += '<tr><td>' + l.sno + '</td><td>' + esc(l.delivery_no) + '</td><td>' + esc(l.purchase_invoice_no) + '</td>' +
+                                    '<td class="text-nowrap">' + esc(l.purchase_invoice_date_display) + '</td><td>' + esc(l.product || '') + '</td>' +
+                                    '<td class="num">' + Number(l.qty_kl || 0).toFixed(3) + '</td><td class="num">' + fmt(l.rate_per_kl) + '</td>' +
+                                    '<td class="num">' + fmt(l.net_amount) + '</td><td class="num">' + fmt(Number(l.cgst_amount) + Number(l.sgst_amount) + Number(l.igst_amount)) + '</td>' +
+                                    '<td class="num">' + fmt(l.line_amount) + '</td></tr>';
+                            });
+                            html += '<tr class="font-weight-bold"><td colspan="5">Total</td><td class="num">' + kl.toFixed(3) + '</td><td colspan="3"></td><td class="num">' + fmt(amt) + '</td></tr></tbody></table></div>';
+                            document.getElementById('rowsBody').innerHTML = html;
+                            $('#rowsModal').modal('show');
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+
+                // ── Link to a SAP debit by hand ──
+                var linkInvoiceId = null;
+                async function saveLink(tBankId) {
+                    try {
+                        await call('POST', '/oil-invoices/api/invoices/' + linkInvoiceId + '/link', { t_bank_id: tBankId || '' });
+                        sessionStorage.setItem('oilInvMessage', tBankId ? 'Invoice linked to the SAP debit.' : 'Invoice unlinked.');
+                        window.location.reload();
+                    } catch (e) { $('#linkModal').modal('hide'); showMessage(e.message, false); }
+                }
+                document.querySelectorAll('.link-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        linkInvoiceId = btn.dataset.id;
+                        document.getElementById('linkTitle').textContent = 'Link ' + btn.dataset.no + ' (₹' + fmt(btn.dataset.amount) + ')';
+                        var body = document.getElementById('linkBody');
+                        body.innerHTML = '<span class="small text-muted">Loading…</span>';
+                        $('#linkModal').modal('show');
+                        try {
+                            var d = await call('GET', '/oil-invoices/api/invoices/' + linkInvoiceId + '/candidates');
+                            if (!d.candidates.length) {
+                                body.innerHTML = '<div class="small text-muted">No free SAP debit of ₹' + fmt(btn.dataset.amount) + ' on the IOCL account. Upload the SAP statement that has it.</div>';
+                                return;
+                            }
+                            body.innerHTML = '<div class="small mb-2">SAP debits of the same amount not linked to another invoice:</div>' +
+                                d.candidates.map(function (c) {
+                                    return '<button type="button" class="btn btn-outline-primary btn-sm btn-block text-left cand-btn" data-id="' + c.t_bank_id + '">' +
+                                        esc(c.date) + ' · ₹' + fmt(c.debit_amount) + '<div class="small text-muted">' + esc(c.remarks || '') + '</div></button>';
+                                }).join('');
+                            body.querySelectorAll('.cand-btn').forEach(function (b) { b.addEventListener('click', function () { saveLink(b.dataset.id); }); });
+                        } catch (e) { body.innerHTML = '<div class="small text-danger">' + esc(e.message) + '</div>'; }
+                    });
+                });
+                var unlinkBtn = document.getElementById('unlinkBtn');
+                if (unlinkBtn) unlinkBtn.addEventListener('click', function () { saveLink(null); });
+
+                // ── Delete ──
+                document.querySelectorAll('.delete-btn').forEach(function (btn) {
+                    btn.addEventListener('click', async function () {
+                        if (!confirm('Delete invoice ' + btn.dataset.no + ' and its PDF? You can upload it again.')) return;
+                        try {
+                            await call('POST', '/oil-invoices/api/invoices/' + btn.dataset.id + '/delete');
+                            sessionStorage.setItem('oilInvMessage', 'Invoice ' + btn.dataset.no + ' deleted.');
+                            window.location.reload();
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
+            })();

@@ -28,10 +28,10 @@ router.get('/:doc_id', isLoginEnsured, async (req, res) => {
         if (doc.entity_type === 'LUBE_INVOICE' && doc.location_code !== req.user.location_code) {
             return res.status(404).send('Document not found');
         }
-        // Support ticket / dealer lead attachments are served by their own routes
-        // (/dev-tracker/:id/attachments, /dealer-leads/admin/:id/attachments),
-        // which check the user can see that ticket / lead.
-        if (doc.entity_type === 'SUPPORT_TICKET' || doc.entity_type === 'DEALER_LEAD') {
+        // Support ticket / dealer lead attachments and IOCL charge invoices are served by
+        // their own routes (/dev-tracker/:id/attachments, /dealer-leads/admin/:id/attachments,
+        // /oil-invoices/:id/pdf), which check the user can see that ticket / lead / invoice.
+        if (doc.entity_type === 'SUPPORT_TICKET' || doc.entity_type === 'DEALER_LEAD' || doc.entity_type === 'OIL_CO_INVOICE') {
             return res.status(404).send('Document not found');
         }
 
