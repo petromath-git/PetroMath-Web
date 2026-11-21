@@ -238,4 +238,108 @@ async function testLogin(email, password, host = 'imap.gmail.com', port = 993) {
     }
 }
 
-module.exports = { runMailbox, runAll, testLogin, pdfParts, DONE_LABEL };
+// ── SCRIPT mailboxes: the Google Apps Script in the Gmail account posts each mail's PDFs ──
+// payload: { message_id, subject, from, date, attachments: [{ part, name, data (base64) }] } or { ping: true }.
+// Returns { done } — done = every PDF of the mail is logged, so the script may label the mail read.
+async function receiveFromScript(box, payload) {
+    if (box.active_flag !== 'Y') return { done: false, status: 'OFF', message: 'This mailbox is switched off in PetroMath.' };
+    if (payload && payload.ping) {
+        await MailboxDao.setRunResult(box.mailbox_id, 'OK', `Google script checked in${payload.sent ? `, sent ${Number(payload.sent)} mail(s)` : ''}.`);
+        return { done: true };
+    }
+    const key = String((payload && payload.message_id) || '').trim();
+    const files = Array.isArray(payload && payload.attachments) ? payload.attachments.slice(0, 20) : [];
+    if (!key) return { done: false, status: 'BAD', message: 'message_id missing' };
+    const locations = (await MailboxDao.getIoclLocations(box.locations)).map(r => r.location_code);
+    if (!locations.length) return { done: false, status: 'BAD', message: 'None of the ticked bunks has an IOCL SAP account.' };
+
+    const logged = await MailboxDao.getLoggedParts(box.mailbox_id, [key]);
+    const mailDate = payload.date && !isNaN(new Date(payload.date)) ? new Date(payload.date) : null;
+    const results = [];
+    let done = true;
+    for (const f of files) {
+        const part = String(f.part || '').substring(0, 30) || '1';
+        const fileName = String(f.name || `attachment-${part}.pdf`).substring(0, 200);
+        if (logged.has(`${key}|${part}`)) { results.push({ file: fileName, status: 'ALREADY_READ' }); continue; }
+        let result;
+        try {
+            const buffer = Buffer.from(String(f.data || ''), 'base64');
+            result = buffer.length > MAX_PDF_BYTES ? { status: 'ERROR', detail: 'PDF larger than 5 MB' }
+                : await importPdf(buffer, fileName, locations, 'EMAIL');
+        } catch (e) {
+            console.error(`OilInvoiceEmail: script mailbox ${box.email_address} ${fileName}:`, e.message);
+            done = false; // DB trouble: the script sends the mail again next hour
+            results.push({ file: fileName, status: 'RETRY' });
+            continue;
+        }
+        await MailboxDao.addLog({ mailbox_id: box.mailbox_id, message_key: key, part_id: part, mail_date: mailDate,
+            mail_from: payload.from, subject: payload.subject, file_name: fileName, created_by: 'SCRIPT', ...result });
+        results.push({ file: fileName, status: result.status });
+    }
+    return { done, results };
+}
+
+// The Apps Script the user pastes at script.google.com (signed in as the mailbox's Gmail).
+function buildScript(url, token, lookbackDays) {
+    return `// PetroMath — sends IOCL invoice PDFs from this Gmail to PetroMath.
+// One-time: paste this whole file, Save, choose "setup" in the toolbar and press Run, then Allow.
+// After that it runs by itself every hour. Mails it has sent get the label ${DONE_LABEL}.
+// Keep this file private: the key below lets it post invoices to your bunks.
+var PETROMATH_URL = ${JSON.stringify(url)};
+var PETROMATH_KEY = ${JSON.stringify(token)};
+var LABEL = ${JSON.stringify(DONE_LABEL)};
+var SEARCH = 'has:attachment filename:pdf newer_than:${Number(lookbackDays) || 30}d -label:' + LABEL;
+
+function setup() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'sendInvoices') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sendInvoices').timeBased().everyHours(1).create();
+  sendInvoices();
+}
+
+function post_(body) {
+  var r = UrlFetchApp.fetch(PETROMATH_URL, {
+    method: 'post', contentType: 'application/json', payload: JSON.stringify(body),
+    headers: { 'X-PetroMath-Key': PETROMATH_KEY }, muteHttpExceptions: true, followRedirects: false
+  });
+  var text = r.getContentText();
+  if (r.getResponseCode() !== 200) throw new Error('PetroMath answered ' + r.getResponseCode() + ': ' + text.substring(0, 200));
+  return JSON.parse(text);
+}
+
+function sendInvoices() {
+  var label = GmailApp.getUserLabelByName(LABEL) || GmailApp.createLabel(LABEL);
+  var threads = GmailApp.search(SEARCH, 0, 40);
+  var sent = 0;
+  threads.forEach(function (thread) {
+    var allDone = true;
+    thread.getMessages().forEach(function (m) {
+      var pdfs = m.getAttachments().filter(function (a) {
+        return /pdf/i.test(a.getContentType()) || /\\.pdf$/i.test(a.getName());
+      });
+      if (!pdfs.length) return;
+      var id = m.getHeader('Message-ID') || m.getId();
+      pdfs.forEach(function (a, i) { // one PDF per request keeps each one small
+        try {
+          var res = post_({
+            message_id: id, subject: m.getSubject(), from: m.getFrom(), date: m.getDate().toISOString(),
+            attachments: [{ part: String(i + 1), name: a.getName(), data: Utilities.base64Encode(a.getBytes()) }]
+          });
+          if (!res.done) allDone = false;
+        } catch (e) {
+          allDone = false;
+          console.log('Not sent: ' + m.getSubject() + ' / ' + a.getName() + ' - ' + e.message);
+        }
+      });
+      sent++;
+    });
+    if (allDone) thread.addLabel(label);
+  });
+  post_({ ping: true, sent: sent });
+  console.log('Sent ' + sent + ' mail(s) to PetroMath.');
+}
+`;
+}
+
+module.exports = { runMailbox, runAll, testLogin, receiveFromScript, buildScript, pdfParts, DONE_LABEL };

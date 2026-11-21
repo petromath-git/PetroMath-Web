@@ -228,14 +228,8 @@ block content
             //- ───────────────────────── Email import ─────────────────────────
             if tab === 'email'
                 p.small.text-muted.mb-2
-                    | Forward IOCL's invoice mails (from B2BPRD@indianoil.in) to a Gmail mailbox and add it here. PetroMath reads it
-                    if autoRuns
-                        |  every hour (07:25–22:25)
-                    else
-                        |  when you press <b>Check now</b> (this server does not read mailboxes on its own)
-                    | , saves the charge invoices (LFR, E-Lock, XtraPower, merchant consent …) at the bunk whose GSTIN is on the invoice, and leaves the other PDFs (fuel invoices, payment receipts) alone. Read mails get the Gmail label <b>PetroMath-Read</b>; nothing is deleted.
-                if !keyConfigured
-                    .alert.alert-warning.small Password storage is not set up on this server (PORTAL_CRED_KEY missing), so a mailbox cannot be added.
+                    | Forward IOCL's invoice mails (from B2BPRD@indianoil.in) to a Gmail mailbox and add it here. A small Google script in that Gmail sends the PDFs to PetroMath every hour — no Gmail password is given to PetroMath.
+                    |  PetroMath saves the charge invoices (LFR, E-Lock, XtraPower, merchant consent …) at the bunk whose GSTIN is on the invoice and leaves the other PDFs (fuel invoices, payment receipts) alone. Sent mails get the Gmail label <b>PetroMath-Read</b>; nothing is deleted.
 
                 .card.mb-3
                     .card-body.py-2
@@ -243,7 +237,7 @@ block content
                             .font-weight-bold.mr-auto
                                 i.bi.bi-envelope-at.mr-1
                                 | Mailboxes for #{user.location_code}
-                            if keyConfigured && tickable.length
+                            if tickable.length
                                 button.btn.btn-outline-primary.btn-sm#addMailboxBtn(type="button")
                                     i.bi.bi-plus-lg.mr-1
                                     | Add mailbox
@@ -261,12 +255,18 @@ block content
                                         span.badge.badge-warning.mr-2 Last check failed
                                     else if m.last_status === 'OK'
                                         span.badge.badge-success.mr-2 OK
-                                    span.small.text-muted.mr-auto bunks: #{m.locations.join(', ')} · last #{m.lookback_days} days
-                                    button.btn.btn-primary.btn-sm.mr-1.mb-1.run-mailbox-btn(type="button" data-id=m.mailbox_id)
-                                        i.bi.bi-arrow-repeat.mr-1
-                                        | Check now
+                                    span.small.text-muted.mr-auto #{m.access_mode === 'SCRIPT' ? 'Google script' : 'App Password'} · bunks: #{m.locations.join(', ')} · last #{m.lookback_days} days
+                                    if m.access_mode === 'SCRIPT'
+                                        if m.canManage
+                                            button.btn.btn-outline-primary.btn-sm.mr-1.mb-1.new-script-btn(type="button" data-id=m.mailbox_id data-email=m.email_address title="Make the script again (the old one stops working)")
+                                                i.bi.bi-code-slash.mr-1
+                                                | Script
+                                    else
+                                        button.btn.btn-primary.btn-sm.mr-1.mb-1.run-mailbox-btn(type="button" data-id=m.mailbox_id)
+                                            i.bi.bi-arrow-repeat.mr-1
+                                            | Check now
                                     if m.canManage
-                                        button.btn.btn-outline-secondary.btn-sm.mr-1.mb-1.edit-mailbox-btn(type="button" data-id=m.mailbox_id data-email=m.email_address
+                                        button.btn.btn-outline-secondary.btn-sm.mr-1.mb-1.edit-mailbox-btn(type="button" data-id=m.mailbox_id data-email=m.email_address data-mode=m.access_mode
                                             data-locations=m.locations.join(',') data-lookback=m.lookback_days data-active=m.active_flag)
                                             i.bi.bi-pencil
                                         button.btn.btn-outline-danger.btn-sm.mb-1.delete-mailbox-btn(type="button" data-id=m.mailbox_id data-email=m.email_address)
@@ -293,7 +293,7 @@ block content
                         tbody
                             each g in log
                                 tr(class=(g.status === 'BLOCKED' || g.status === 'ERROR' ? 'table-warning' : (g.status === 'NOT_INVOICE' ? 'text-muted' : '')))
-                                    td.m-title.text-nowrap #{fmtDateTime(g.creation_date)}#{g.created_by === 'AUTO' ? '' : ' · ' + g.created_by}
+                                    td.m-title.text-nowrap #{fmtDateTime(g.creation_date)}#{(g.created_by === 'AUTO' || g.created_by === 'SCRIPT') ? '' : ' · ' + g.created_by}
                                     td.small(data-label="Mail")
                                         div= g.subject
                                         .text-muted #{fmtDateTime(g.mail_date)} · #{g.email_address}
@@ -330,7 +330,13 @@ block content
                                 .form-group
                                     label.small.mb-1 Gmail address
                                     input.form-control.form-control-sm#mbEmail(type="email" autocomplete="off" placeholder="name@gmail.com")
-                                .form-group
+                                .form-group#mbModeGroup
+                                    label.small.mb-1 How PetroMath gets the mails
+                                    select.form-control.form-control-sm#mbMode
+                                        option(value="SCRIPT") Google script in the Gmail (no password — recommended)
+                                        if keyConfigured
+                                            option(value="IMAP") App Password (PetroMath logs in to Gmail)
+                                .form-group#mbPasswordGroup
                                     label.small.mb-1#mbPasswordLabel App Password
                                     input.form-control.form-control-sm#mbPassword(type="password" autocomplete="new-password" placeholder="16 letters")
                                     small.form-text.text-muted
@@ -353,7 +359,35 @@ block content
                                             option(value="N") Off
                             .modal-footer
                                 button.btn.btn-secondary.btn-sm(type="button" data-dismiss="modal") Cancel
-                                button.btn.btn-primary.btn-sm#mbSaveBtn(type="button") Check login &amp; save
+                                button.btn.btn-primary.btn-sm#mbSaveBtn(type="button") Save
+
+                //- The Google script to paste
+                .modal.fade#scriptModal(tabindex="-1" data-backdrop="static")
+                    .modal-dialog.modal-lg
+                        .modal-content
+                            .modal-header
+                                h5.modal-title Google script for
+                                    span#scriptEmail
+                                button.close(type="button" data-dismiss="modal") &times;
+                            .modal-body
+                                ol.small.pl-3.mb-2
+                                    li
+                                        | On the computer, sign in to Gmail as
+                                        b#scriptEmail2
+                                        | , then open
+                                        a(href="https://script.google.com/home/projects/create" target="_blank" rel="noopener") script.google.com → New project
+                                        | .
+                                    li Delete what is in the editor, click <b>Copy script</b> below and paste it there. Name the project "PetroMath" and press Save (the disk icon).
+                                    li In the toolbar, choose <b>setup</b> in the function list and press <b>Run</b>.
+                                    li Google asks for permission: <b>Review permissions</b> → choose the account → <b>Advanced</b> → <b>Go to PetroMath (unsafe)</b> → <b>Allow</b>. ("Unsafe" only means Google has not reviewed your own script.)
+                                    li Done. It sends the PDFs now and every hour after. Come back here and refresh: the mails appear below.
+                                .alert.alert-warning.small.py-1 This is shown only now. It contains the mailbox's key — don't share it. If it is lost, press "Script" again for a new one (the old one then stops working).
+                                textarea.form-control.text-monospace#scriptText(rows="10" readonly style="font-size:11px")
+                            .modal-footer
+                                button.btn.btn-primary.btn-sm#copyScriptBtn(type="button")
+                                    i.bi.bi-clipboard.mr-1
+                                    | Copy script
+                                button.btn.btn-secondary.btn-sm#scriptDoneBtn(type="button") Done
 
             //- Fuel invoices on one LFR invoice
             .modal.fade#rowsModal(tabindex="-1")
@@ -527,6 +561,36 @@ block content
 
                 // ── Email import: mailboxes ──
                 var editMailboxId = null;
+                function showPasswordField() {
+                    var mode = document.getElementById('mbMode');
+                    if (mode) document.getElementById('mbPasswordGroup').style.display = mode.value === 'IMAP' ? '' : 'none';
+                }
+                var mbMode = document.getElementById('mbMode');
+                if (mbMode) mbMode.addEventListener('change', showPasswordField);
+                function showScript(email, script) {
+                    document.getElementById('scriptEmail').textContent = email;
+                    document.getElementById('scriptEmail2').textContent = email;
+                    document.getElementById('scriptText').value = script;
+                    $('#scriptModal').modal('show');
+                }
+                var copyScriptBtn = document.getElementById('copyScriptBtn');
+                if (copyScriptBtn) copyScriptBtn.addEventListener('click', async function () {
+                    var t = document.getElementById('scriptText');
+                    try { await navigator.clipboard.writeText(t.value); } catch (e) { t.select(); document.execCommand('copy'); }
+                    copyScriptBtn.innerHTML = '<i class="bi bi-check2 mr-1"></i>Copied';
+                });
+                var scriptDoneBtn = document.getElementById('scriptDoneBtn');
+                if (scriptDoneBtn) scriptDoneBtn.addEventListener('click', function () { window.location.reload(); });
+                $('#scriptModal').on('hidden.bs.modal', function () { window.location.reload(); });
+                document.querySelectorAll('.new-script-btn').forEach(function (b) {
+                    b.addEventListener('click', async function () {
+                        if (!confirm('Make a new script for ' + b.dataset.email + '? The script now in that Gmail stops working until you paste the new one.')) return;
+                        try {
+                            var d = await call('POST', '/oil-invoices/api/mailboxes/' + b.dataset.id + '/script');
+                            showScript(d.email, d.script);
+                        } catch (e) { showMessage(e.message, false); }
+                    });
+                });
                 function openMailbox(btn) {
                     editMailboxId = btn ? btn.dataset.id : null;
                     var locs = btn ? btn.dataset.locations.split(',') : [!{JSON.stringify(String(user.location_code)).replace(/</g, '\\u003c')}];
@@ -536,6 +600,9 @@ block content
                     email.disabled = !!btn;
                     document.getElementById('mbPassword').value = '';
                     document.getElementById('mbPasswordLabel').textContent = btn ? 'New App Password (leave blank to keep the saved one)' : 'App Password';
+                    document.getElementById('mbMode').value = btn ? btn.dataset.mode : 'SCRIPT';
+                    document.getElementById('mbModeGroup').style.display = btn ? 'none' : '';
+                    showPasswordField();
                     document.querySelectorAll('.mb-loc').forEach(function (c) { c.checked = locs.indexOf(c.value) >= 0; });
                     document.getElementById('mbLookback').value = btn ? btn.dataset.lookback : 30;
                     document.getElementById('mbActive').value = btn ? btn.dataset.active : 'Y';
@@ -549,21 +616,27 @@ block content
                 if (mbSaveBtn) mbSaveBtn.addEventListener('click', async function () {
                     var body = {
                         email: document.getElementById('mbEmail').value,
+                        mode: document.getElementById('mbMode').value,
                         password: document.getElementById('mbPassword').value,
                         locations: Array.prototype.filter.call(document.querySelectorAll('.mb-loc'), function (c) { return c.checked; }).map(function (c) { return c.value; }),
                         lookback_days: document.getElementById('mbLookback').value,
                         active: document.getElementById('mbActive').value
                     };
                     mbSaveBtn.disabled = true;
-                    mbSaveBtn.textContent = 'Checking login…';
+                    mbSaveBtn.textContent = body.mode === 'IMAP' && body.password ? 'Checking login…' : 'Saving…';
                     try {
-                        await call('POST', '/oil-invoices/api/mailboxes' + (editMailboxId ? '/' + editMailboxId : ''), body);
-                        sessionStorage.setItem('oilInvMessage', 'Mailbox saved. Press "Check now" to read it.');
+                        var d = await call('POST', '/oil-invoices/api/mailboxes' + (editMailboxId ? '/' + editMailboxId : ''), body);
+                        if (d.script) {
+                            $('#mailboxModal').modal('hide');
+                            showScript(d.email, d.script);
+                            return;
+                        }
+                        sessionStorage.setItem('oilInvMessage', 'Mailbox saved.');
                         window.location.reload();
                     } catch (e) {
                         $('#mailboxModal').modal('hide');
                         showMessage(e.message, false);
-                    } finally { mbSaveBtn.disabled = false; mbSaveBtn.textContent = 'Check login & save'; }
+                    } finally { mbSaveBtn.disabled = false; mbSaveBtn.textContent = 'Save'; }
                 });
                 document.querySelectorAll('.delete-mailbox-btn').forEach(function (b) {
                     b.addEventListener('click', async function () {
