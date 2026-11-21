@@ -288,6 +288,7 @@ async function parseOilChargeInvoice(buffer) {
     }
     const e = new Error('This PDF is not an IOCL charge invoice (LFR "TAX INVOICE" or "GST INVOICE").');
     e.code = 'NOT_CHARGE_INVOICE'; // e.g. a fuel invoice or payment receipt in the same mailbox (email import skips these)
+    e.gstins = Array.from(new Set((text.toUpperCase().match(/\b\d{2}[A-Z]{5}\d{4}[A-Z][0-9A-Z]Z[0-9A-Z]\b/g) || []))); // email import: whose PDF it is
     throw e;
 }
 

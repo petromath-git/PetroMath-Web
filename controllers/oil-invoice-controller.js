@@ -5,6 +5,7 @@
 //   invoices  upload PDFs (several at once), list with the SAP debit each is linked to
 //   sap       charge debits on the SAP account, with or without an invoice
 //   lfr       the fuel invoices each LFR invoice charges, checked against Tank Receipts
+//   email     the PDFs read from email for this bunk (mailboxes: /oil-invoices/mailboxes, Administration)
 const crypto = require('crypto');
 const dateFormat = require('dateformat');
 const OilInvoiceDao = require('../dao/oil-invoice-dao');
@@ -101,15 +102,10 @@ module.exports = {
                 return res.render('oil-invoices/home', { ...data, lfr });
             }
             if (tab === 'email') {
+                // only this bunk's PDFs; the mailboxes themselves are set up in Administration > IOCL Mail Import
                 const showOther = req.query.other === '1';
-                const [mailboxes, log, tickable] = await Promise.all([
-                    MailboxDao.getMailboxesForLocation(locationCode),
-                    MailboxDao.getLogForLocation(locationCode, showOther, 300),
-                    tickableLocations(req.user),
-                ]);
-                mailboxes.forEach(m => { m.canManage = canManage(req.user, m); });
-                return res.render('oil-invoices/home', { ...data, mailboxes, log, tickable, showOther, fmtDateTime,
-                    keyConfigured: secretBox.isConfigured(), autoRuns: process.env.ENVIRONMENT === 'prod' });
+                const log = await MailboxDao.getLogForLocation(locationCode, showOther, 300);
+                return res.render('oil-invoices/home', { ...data, log, showOther, fmtDateTime });
             }
             const [invoices, types] = await Promise.all([
                 OilInvoiceDao.getInvoices(locationCode, fromDate, toDate), OilInvoiceDao.getChargeTypes(),
@@ -120,6 +116,27 @@ module.exports = {
                     unlinked: list.filter(i => !i.t_bank_id && t.match_by !== 'NONE').length };
             }).filter(t => t.count);
             return res.render('oil-invoices/home', { ...data, invoices, byType });
+        } catch (e) {
+            next(e);
+        }
+    },
+
+    // GET /oil-invoices/mailboxes — Administration > IOCL Mail Import (menu OIL_INVOICE_MAILBOXES, SuperUser)
+    getMailboxesPage: async (req, res, next) => {
+        try {
+            const showOther = req.query.other === '1';
+            const mailboxId = Number(req.query.mailbox) || null;
+            const [all, log, tickable] = await Promise.all([
+                MailboxDao.getAllMailboxes(),
+                MailboxDao.getLogAll(mailboxId, showOther, 500),
+                tickableLocations(req.user),
+            ]);
+            const mailboxes = all.filter(m => !m.locations.length || m.locations.some(l => security.canAccessLocation(req.user, l)));
+            mailboxes.forEach(m => { m.canManage = canManage(req.user, m); });
+            const ids = new Set(mailboxes.map(m => m.mailbox_id));
+            res.render('oil-invoices/mailboxes', { title: 'IOCL Mail Import', user: req.user, mobileReady: true, fmtDateTime,
+                mailboxes, log: log.filter(g => ids.has(g.mailbox_id)), tickable, showOther, mailboxId,
+                keyConfigured: secretBox.isConfigured(), autoRuns: process.env.ENVIRONMENT === 'prod' });
         } catch (e) {
             next(e);
         }
@@ -319,7 +336,7 @@ module.exports = {
         try {
             const id = Number(req.params.id);
             const box = await MailboxDao.getMailbox(id);
-            if (!box || !box.locations.includes(req.user.location_code)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            if (!box || !canManage(req.user, box)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
             if (box.access_mode === 'SCRIPT') {
                 return res.status(400).json({ success: false, error: 'This mailbox sends by itself every hour. To send now: open the PetroMath script at script.google.com, choose "sendInvoices" and press Run.' });
             }
@@ -352,7 +369,7 @@ module.exports = {
         try {
             const key = String(req.get('X-PetroMath-Key') || '');
             const box = key.length >= 20 ? await MailboxDao.getMailboxByTokenHash(sha256(key)) : null;
-            if (!box) return res.status(401).json({ success: false, error: 'Unknown key. Make a new script in PetroMath (IOCL Invoices > Email Import).' });
+            if (!box) return res.status(401).json({ success: false, error: 'Unknown key. Make a new script in PetroMath (Administration > IOCL Mail Import).' });
             const r = await EmailService.receiveFromScript(box, req.body || {});
             res.json({ success: true, ...r });
         } catch (e) {

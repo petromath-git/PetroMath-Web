@@ -98,7 +98,23 @@ CREATE TABLE IF NOT EXISTS t_oil_invoice_email_log (
     KEY idx_oil_email_mailbox (mailbox_id, creation_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- 4. Menu: Administration > IOCL Mail Import (/oil-invoices/mailboxes), SuperUser only.
+--    Bunk users don't set up mailboxes; they see their own PDFs on IOCL Invoices > Email Import.
+INSERT INTO m_menu_items
+    (menu_code, menu_name, icon, url_path, parent_code, sequence, group_code, effective_start_date, created_by)
+SELECT 'OIL_INVOICE_MAILBOXES', 'IOCL Mail Import', 'bi-envelope-at', '/oil-invoices/mailboxes', NULL, 990, 'ADMIN', CURDATE(), 'system'
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM m_menu_items WHERE menu_code = 'OIL_INVOICE_MAILBOXES' OR url_path = '/oil-invoices/mailboxes');
+
+INSERT INTO m_menu_access_global (role, menu_code, allowed, effective_start_date, created_by)
+SELECT 'SuperUser', 'OIL_INVOICE_MAILBOXES', 1, CURDATE(), 'system'
+FROM DUAL
+WHERE NOT EXISTS (SELECT 1 FROM m_menu_access_global g WHERE g.role = 'SuperUser' AND g.menu_code = 'OIL_INVOICE_MAILBOXES');
+
+CALL RefreshMenuCache();
+
 -- Verify
+SELECT menu_code, menu_name, url_path, group_code FROM m_menu_items WHERE menu_code = 'OIL_INVOICE_MAILBOXES';
 SHOW TABLES LIKE 'm_oil_invoice_mailbox%';
 SELECT COLUMN_NAME, IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
   AND TABLE_NAME = 'm_oil_invoice_mailbox' AND COLUMN_NAME IN ('access_mode', 'password_enc', 'token_hash');

@@ -128,19 +128,33 @@ const OilInvoiceMailboxDao = {
         }
     },
 
-    // What this location sees: PDFs imported for it, plus PDFs from its mailboxes that no bunk took.
+    // What a bunk's users see: only the PDFs that are this bunk's (by the GSTIN on the PDF). PDFs no
+    // bunk could be told for are on the Administration page only.
     getLogForLocation: (locationCode, includeOther, limit) => select(`
-        SELECT g.log_id, g.mailbox_id, m.email_address, g.mail_date, g.mail_from, g.subject, g.file_name, g.status,
+        SELECT g.log_id, g.mailbox_id, g.mail_date, g.subject, g.file_name, g.status,
                g.location_code, g.invoice_no, g.invoice_id, g.detail, g.created_by, g.creation_date
         FROM t_oil_invoice_email_log g
-        JOIN m_oil_invoice_mailbox m ON m.mailbox_id = g.mailbox_id
-        WHERE (g.location_code = :locationCode
-               OR (g.location_code IS NULL AND EXISTS (SELECT 1 FROM m_oil_invoice_mailbox_location l
-                                                        WHERE l.mailbox_id = g.mailbox_id AND l.location_code = :locationCode)))
+        WHERE g.location_code = :locationCode
           ${includeOther ? '' : "AND g.status <> 'NOT_INVOICE'"}
         ORDER BY g.creation_date DESC, g.log_id DESC
         LIMIT ${Number(limit) || 200}
     `, { locationCode }),
+
+    // Administration: every mailbox's log (or one mailbox's), newest first.
+    getLogAll: (mailboxId, includeOther, limit) => select(`
+        SELECT g.log_id, g.mailbox_id, m.email_address, g.mail_date, g.mail_from, g.subject, g.file_name, g.status,
+               g.location_code, g.invoice_no, g.invoice_id, g.detail, g.created_by, g.creation_date
+        FROM t_oil_invoice_email_log g
+        JOIN m_oil_invoice_mailbox m ON m.mailbox_id = g.mailbox_id
+        WHERE 1 = 1
+          ${mailboxId ? 'AND g.mailbox_id = :mailboxId' : ''}
+          ${includeOther ? '' : "AND g.status <> 'NOT_INVOICE'"}
+        ORDER BY g.creation_date DESC, g.log_id DESC
+        LIMIT ${Number(limit) || 300}
+    `, { mailboxId: mailboxId || null }),
+
+    // Administration: all mailboxes.
+    getAllMailboxes: async () => withLocations(await select(`SELECT ${MAILBOX_COLUMNS} FROM m_oil_invoice_mailbox m ORDER BY m.email_address`)),
 
     // Locations (of the given list, or all when null) that have an IOCL SAP account: the ones a mailbox can serve.
     getIoclLocations: (codes) => select(`

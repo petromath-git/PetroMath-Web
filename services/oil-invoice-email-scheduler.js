@@ -1,7 +1,7 @@
 // services/oil-invoice-email-scheduler.js — IOCL Invoices email import (tkt #484).
 // Every hour at :25 from 07:25 to 22:25 IST, reads each active mailbox (m_oil_invoice_mailbox) and
 // imports the IOCL charge invoices in it — see services/oil-invoice-email-service.js.
-// Only on the prod server (.env ENVIRONMENT=prod); on beta use "Check now" on /oil-invoices?tab=email.
+// Only on the prod server (.env ENVIRONMENT=prod); on beta use "Check now" on /oil-invoices/mailboxes.
 // A mailbox whose login failed is skipped until its App Password is saved again.
 const cron = require('node-cron');
 const service = require('./oil-invoice-email-service');
