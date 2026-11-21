@@ -15,6 +15,12 @@
 --                                       mail is never imported twice and the
 --                                       user sees what happened to each PDF.
 --
+-- Two ways a mailbox reaches PetroMath (access_mode):
+--   SCRIPT  a Google Apps Script inside the Gmail account posts each new PDF
+--           to /oil-invoices/inbound with the mailbox's key (only its SHA-256
+--           is stored). No Gmail password anywhere — the default.
+--   IMAP    PetroMath logs in with an App Password and reads the mailbox.
+--
 -- No menu change: it is a tab on /oil-invoices (menu OIL_CO_INVOICES).
 -- Safe to re-run.
 -- ============================================================================
@@ -24,7 +30,9 @@ CREATE TABLE IF NOT EXISTS m_oil_invoice_mailbox (
     email_address       VARCHAR(150)  NOT NULL,
     imap_host           VARCHAR(100)  NOT NULL DEFAULT 'imap.gmail.com',
     imap_port           INT           NOT NULL DEFAULT 993,
-    password_enc        VARCHAR(500)  NOT NULL COMMENT 'App Password, utils/secret-box (PORTAL_CRED_KEY)',
+    access_mode         VARCHAR(10)   NOT NULL DEFAULT 'SCRIPT' COMMENT 'SCRIPT (Google Apps Script posts the PDFs) / IMAP (App Password)',
+    password_enc        VARCHAR(500)  NULL COMMENT 'IMAP: App Password, utils/secret-box (PORTAL_CRED_KEY)',
+    token_hash          CHAR(64)      NULL COMMENT 'SCRIPT: SHA-256 of the key in the Google script',
     lookback_days       INT           NOT NULL DEFAULT 30 COMMENT 'mails older than this are not read',
     active_flag         CHAR(1)       NOT NULL DEFAULT 'Y',
     last_run_at         DATETIME      NULL,
@@ -35,8 +43,28 @@ CREATE TABLE IF NOT EXISTS m_oil_invoice_mailbox (
     creation_date       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updation_date       TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (mailbox_id),
-    UNIQUE KEY uniq_oil_mailbox_email (email_address)
+    UNIQUE KEY uniq_oil_mailbox_email (email_address),
+    UNIQUE KEY uniq_oil_mailbox_token (token_hash)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Upgrade a table created by the first version of this file (IMAP only, beta 21-Nov-2026)
+DROP PROCEDURE IF EXISTS tmp_oil_mailbox_upgrade;
+DELIMITER //
+CREATE PROCEDURE tmp_oil_mailbox_upgrade()
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+                   AND TABLE_NAME = 'm_oil_invoice_mailbox' AND COLUMN_NAME = 'access_mode') THEN
+        ALTER TABLE m_oil_invoice_mailbox
+            ADD COLUMN access_mode VARCHAR(10) NOT NULL DEFAULT 'SCRIPT' COMMENT 'SCRIPT (Google Apps Script posts the PDFs) / IMAP (App Password)' AFTER imap_port,
+            ADD COLUMN token_hash CHAR(64) NULL COMMENT 'SCRIPT: SHA-256 of the key in the Google script' AFTER password_enc,
+            MODIFY COLUMN password_enc VARCHAR(500) NULL COMMENT 'IMAP: App Password, utils/secret-box (PORTAL_CRED_KEY)',
+            ADD UNIQUE KEY uniq_oil_mailbox_token (token_hash);
+        UPDATE m_oil_invoice_mailbox SET access_mode = 'IMAP' WHERE password_enc IS NOT NULL;
+    END IF;
+END //
+DELIMITER ;
+CALL tmp_oil_mailbox_upgrade();
+DROP PROCEDURE IF EXISTS tmp_oil_mailbox_upgrade;
 
 CREATE TABLE IF NOT EXISTS m_oil_invoice_mailbox_location (
     mailbox_id          INT           NOT NULL,
@@ -72,4 +100,6 @@ CREATE TABLE IF NOT EXISTS t_oil_invoice_email_log (
 
 -- Verify
 SHOW TABLES LIKE 'm_oil_invoice_mailbox%';
+SELECT COLUMN_NAME, IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+  AND TABLE_NAME = 'm_oil_invoice_mailbox' AND COLUMN_NAME IN ('access_mode', 'password_enc', 'token_hash');
 SHOW TABLES LIKE 't_oil_invoice_email_log';

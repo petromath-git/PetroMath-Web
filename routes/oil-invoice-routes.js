@@ -5,6 +5,7 @@ const router = express.Router();
 const login = require('connect-ensure-login');
 const isLoginEnsured = login.ensureLoggedIn('/login');
 const multer = require('multer');
+const rateLimit = require('express-rate-limit');
 const security = require('../utils/app-security');
 const ctrl = require('../controllers/oil-invoice-controller');
 const { MAX_FILES } = require('../services/oil-invoice-service');
@@ -40,5 +41,13 @@ router.post('/api/mailboxes', canUse, ctrl.createMailbox);
 router.post('/api/mailboxes/:id(\\d+)', canUse, ctrl.updateMailbox);
 router.post('/api/mailboxes/:id(\\d+)/delete', canUse, ctrl.deleteMailbox);
 router.post('/api/mailboxes/:id(\\d+)/run', canUse, ctrl.runMailbox);
+router.post('/api/mailboxes/:id(\\d+)/script', canUse, ctrl.newScript);
+
+// The Google script in a forwarding Gmail posts here: no login, its key (X-PetroMath-Key) says which mailbox.
+const inboundLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000, max: 300, standardHeaders: true, legacyHeaders: false,
+    handler: (req, res) => res.status(429).json({ success: false, error: 'Too many requests; try again later.' }),
+});
+router.post('/inbound', inboundLimiter, ctrl.inbound);
 
 module.exports = router;
