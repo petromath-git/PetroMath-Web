@@ -34,6 +34,7 @@
     "global-cache": "^1.2.1",
     "helmet": "^8.3.0",
     "http-errors": "~1.6.3",
+    "imapflow": "2.10.2",
     "jsonwebtoken": "^9.0.2",
     "method-override": "^3.0.0",
     "mocha": "latest",

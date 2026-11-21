@@ -146,6 +146,8 @@ require('./services/deadline-reminder-scheduler').start();
 require('./services/rental-draft-scheduler').start();
 // Financial year and new product maps for each location, 00:10 IST daily (prod only) - see services/gl-daily-setup-scheduler.js
 require('./services/gl-daily-setup-scheduler').start();
+// IOCL charge invoices from the forwarding Gmail mailboxes, hourly 07:25-22:25 IST (prod only) - see services/oil-invoice-email-scheduler.js
+require('./services/oil-invoice-email-scheduler').start();
 // Bank holidays from RBI's list, monthly - see services/bank-holiday-service.js
 require('./services/bank-holiday-service').start();
 
