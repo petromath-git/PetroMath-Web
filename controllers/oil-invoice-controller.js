@@ -10,11 +10,52 @@ const OilInvoiceDao = require('../dao/oil-invoice-dao');
 const OilInvoiceService = require('../services/oil-invoice-service');
 const gstUtils = require('../utils/gst-utils');
 const { sendDocument } = require('../utils/attachment-upload');
+const security = require('../utils/app-security');
+const secretBox = require('../utils/secret-box');
+const MailboxDao = require('../dao/oil-invoice-mailbox-dao');
+const EmailService = require('../services/oil-invoice-email-service');
 
 const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtDate = (d) => d ? dateFormat(d instanceof Date ? d : `${String(d).substring(0, 10)}T00:00:00`, 'dd-mmm-yyyy') : '';
-const TABS = [['invoices', 'Invoices'], ['sap', 'SAP Charges'], ['lfr', 'LFR Check']];
+// date + time in IST, e.g. 21-Nov-2026 09:11
+const fmtDateTime = (d) => {
+    if (!d) return '';
+    const t = new Date(d);
+    if (isNaN(t)) return '';
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(t).map(x => [x.type, x.value]));
+    return `${p.day}-${p.month}-${p.year} ${p.hour}:${p.minute}`;
+};
+const TABS = [['invoices', 'Invoices'], ['sap', 'SAP Charges'], ['lfr', 'LFR Check'], ['email', 'Email Import']];
+
+// Bunks this user may tick on a mailbox: the ones they can open that have an IOCL SAP account.
+async function tickableLocations(user) {
+    const rows = await MailboxDao.getIoclLocations(security.getAccessibleLocations(user));
+    return rows.map(r => r.location_code);
+}
+// A user may change a mailbox only if they can open every bunk on it.
+const canManage = (user, box) => box.locations.every(l => security.canAccessLocation(user, l));
+
+const cleanPassword = (p) => String(p || '').replace(/\s+/g, '');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Validates the body of a mailbox save. Returns { error } or { email, password, locations, lookbackDays, active }.
+async function readMailboxBody(req, isNew) {
+    const b = req.body || {};
+    const email = String(b.email || '').trim().toLowerCase();
+    if (isNew && !EMAIL_RE.test(email)) return { error: 'Enter the Gmail address the invoices are forwarded to.' };
+    const password = cleanPassword(b.password);
+    if (isNew && !password) return { error: 'Enter the App Password of this Gmail account.' };
+    if (password && password.length < 8) return { error: 'That does not look like an App Password (16 letters from Google Account > Security > App passwords).' };
+    const wanted = Array.from(new Set((Array.isArray(b.locations) ? b.locations : [b.locations]).filter(Boolean).map(String)));
+    if (!wanted.length) return { error: 'Tick at least one bunk.' };
+    const allowed = await tickableLocations(req.user);
+    const bad = wanted.filter(l => !allowed.includes(l));
+    if (bad.length) return { error: `You cannot add ${bad.join(', ')} (not your bunk, or no IOCL SAP account).` };
+    const lookbackDays = Math.min(Math.max(parseInt(b.lookback_days, 10) || 30, 1), 365);
+    return { email, password, locations: wanted, lookbackDays, active: b.active === 'N' ? 'N' : 'Y' };
+}
 
 function fyRange(d) {
     const fy = gstUtils.getFinancialYear(d || new Date());
@@ -47,6 +88,17 @@ module.exports = {
             if (tab === 'lfr') {
                 const lfr = await OilInvoiceService.getLfrCheck(locationCode, fromDate, toDate);
                 return res.render('oil-invoices/home', { ...data, lfr });
+            }
+            if (tab === 'email') {
+                const showOther = req.query.other === '1';
+                const [mailboxes, log, tickable] = await Promise.all([
+                    MailboxDao.getMailboxesForLocation(locationCode),
+                    MailboxDao.getLogForLocation(locationCode, showOther, 300),
+                    tickableLocations(req.user),
+                ]);
+                mailboxes.forEach(m => { m.canManage = canManage(req.user, m); });
+                return res.render('oil-invoices/home', { ...data, mailboxes, log, tickable, showOther, fmtDateTime,
+                    keyConfigured: secretBox.isConfigured(), autoRuns: process.env.ENVIRONMENT === 'prod' });
             }
             const [invoices, types] = await Promise.all([
                 OilInvoiceDao.getInvoices(locationCode, fromDate, toDate), OilInvoiceDao.getChargeTypes(),
@@ -184,6 +236,79 @@ module.exports = {
         } catch (e) {
             console.error('Oil invoices link:', e);
             res.status(500).json({ success: false, error: 'Could not link the SAP debit.' });
+        }
+    },
+
+    // ── Email import ─────────────────────────────────────────────────────────
+    // POST /oil-invoices/api/mailboxes { email, password, locations[], lookback_days }
+    createMailbox: async (req, res) => {
+        try {
+            if (!secretBox.isConfigured()) return res.status(400).json({ success: false, error: 'Password storage is not set up on this server (PORTAL_CRED_KEY missing).' });
+            const v = await readMailboxBody(req, true);
+            if (v.error) return res.status(400).json({ success: false, error: v.error });
+            if (await MailboxDao.getMailboxByEmail(v.email)) {
+                return res.status(400).json({ success: false, error: `${v.email} is already set up. Edit it there (tick your bunk) instead of adding it again.` });
+            }
+            const test = await EmailService.testLogin(v.email, v.password);
+            if (!test.ok) return res.status(400).json({ success: false, error: test.error });
+            const id = await MailboxDao.createMailbox({ email: v.email, passwordEnc: secretBox.encrypt(v.password), lookbackDays: v.lookbackDays },
+                v.locations, req.user.User_Name);
+            res.json({ success: true, mailbox_id: id });
+        } catch (e) {
+            console.error('Oil invoices createMailbox:', e.message);
+            res.status(500).json({ success: false, error: 'Could not save the mailbox.' });
+        }
+    },
+
+    // POST /oil-invoices/api/mailboxes/:id { password (blank = keep), locations[], lookback_days, active }
+    updateMailbox: async (req, res) => {
+        try {
+            const id = Number(req.params.id);
+            const box = await MailboxDao.getMailbox(id);
+            if (!box || !canManage(req.user, box)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            const v = await readMailboxBody(req, false);
+            if (v.error) return res.status(400).json({ success: false, error: v.error });
+            let passwordEnc = null;
+            if (v.password) {
+                if (!secretBox.isConfigured()) return res.status(400).json({ success: false, error: 'Password storage is not set up on this server (PORTAL_CRED_KEY missing).' });
+                const test = await EmailService.testLogin(box.email_address, v.password, box.imap_host, box.imap_port);
+                if (!test.ok) return res.status(400).json({ success: false, error: test.error });
+                passwordEnc = secretBox.encrypt(v.password);
+            }
+            await MailboxDao.updateMailbox(id, { passwordEnc, lookbackDays: v.lookbackDays, active: v.active }, v.locations, req.user.User_Name);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Oil invoices updateMailbox:', e.message);
+            res.status(500).json({ success: false, error: 'Could not save the mailbox.' });
+        }
+    },
+
+    // POST /oil-invoices/api/mailboxes/:id/delete (the import log goes with it; imported invoices stay)
+    deleteMailbox: async (req, res) => {
+        try {
+            const id = Number(req.params.id);
+            const box = await MailboxDao.getMailbox(id);
+            if (!box || !canManage(req.user, box)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            await MailboxDao.deleteMailbox(id);
+            res.json({ success: true });
+        } catch (e) {
+            console.error('Oil invoices deleteMailbox:', e.message);
+            res.status(500).json({ success: false, error: 'Could not remove the mailbox.' });
+        }
+    },
+
+    // POST /oil-invoices/api/mailboxes/:id/run -> read the mailbox now
+    runMailbox: async (req, res) => {
+        try {
+            const id = Number(req.params.id);
+            const box = await MailboxDao.getMailbox(id);
+            if (!box || !box.locations.includes(req.user.location_code)) return res.status(404).json({ success: false, error: 'Mailbox not found.' });
+            const r = await EmailService.runMailbox(id, req.user.User_Name);
+            if (r.status !== 'OK') return res.status(400).json({ success: false, error: r.message });
+            res.json({ success: true, message: r.message, counts: r.counts });
+        } catch (e) {
+            console.error('Oil invoices runMailbox:', e.message);
+            res.status(500).json({ success: false, error: 'Could not read the mailbox.' });
         }
     },
 };

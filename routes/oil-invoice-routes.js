@@ -35,5 +35,10 @@ router.get('/api/invoices/:id(\\d+)', canUse, ctrl.getInvoice);
 router.get('/api/invoices/:id(\\d+)/candidates', canUse, ctrl.getCandidates);
 router.post('/api/invoices/:id(\\d+)/link', canUse, ctrl.link);
 router.post('/api/invoices/:id(\\d+)/delete', canUse, ctrl.deleteInvoice);
+// Email import (forwarding Gmail mailboxes)
+router.post('/api/mailboxes', canUse, ctrl.createMailbox);
+router.post('/api/mailboxes/:id(\\d+)', canUse, ctrl.updateMailbox);
+router.post('/api/mailboxes/:id(\\d+)/delete', canUse, ctrl.deleteMailbox);
+router.post('/api/mailboxes/:id(\\d+)/run', canUse, ctrl.runMailbox);
 
 module.exports = router;

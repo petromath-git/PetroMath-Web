@@ -286,7 +286,9 @@ async function parseOilChargeInvoice(buffer) {
     if (/GST INVOICE/i.test(text) && /Service Head Name/i.test(text) && /INDIANOIL|INDIAN OIL/i.test(text)) {
         return { oil_company: 'IOCL', ...parseGstInvoice(pages) };
     }
-    throw new Error('This PDF is not an IOCL charge invoice (LFR "TAX INVOICE" or "GST INVOICE").');
+    const e = new Error('This PDF is not an IOCL charge invoice (LFR "TAX INVOICE" or "GST INVOICE").');
+    e.code = 'NOT_CHARGE_INVOICE'; // e.g. a fuel invoice or payment receipt in the same mailbox (email import skips these)
+    throw e;
 }
 
 module.exports = { parseOilChargeInvoice, isoDate, toNumber };
