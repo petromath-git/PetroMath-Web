@@ -9,7 +9,7 @@ const select = (sql, replacements, transaction) =>
 const receiptLabel = (oilCompany) => `TT FREIGHT - ${oilCompany}`;
 
 const INVOICE_COLUMNS = [
-    'location_code', 'vendor_id', 'bill_no', 'bill_date', 'period_from', 'period_to', 'generated_on', 'reverse_charge',
+    'location_code', 'vendor_id', 'bill_no', 'bill_date', 'bill_type', 'doc_type', 'ref_doc_no', 'period_from', 'period_to', 'generated_on', 'reverse_charge',
     'recipient_name', 'recipient_gstin', 'recipient_address', 'sac_code', 'gst_rate', 'gross_amount', 'penalty_amount',
     'taxable_value', 'cgst_amount', 'sgst_amount', 'igst_amount', 'bill_cgst', 'bill_sgst', 'bill_igst', 'invoice_value',
     'tds_percent', 'tds_amount', 'net_receivable', 'trip_count', 'total_kl', 'vehicles', 'file_name', 'notes',
@@ -28,11 +28,13 @@ const TtDao = {
     getVendors: (locationCode) => select(`
         SELECT v.*, DATE_FORMAT(v.start_date, '%Y-%m-%d') AS start_date_iso,
                dl.ledger_name AS debtor_ledger, il.ledger_name AS income_ledger, tl.ledger_name AS tds_ledger,
+               ol.ledger_name AS toll_ledger,
                CONCAT(b.bank_name, ' - ', b.account_number) AS receipt_bank,
                (SELECT COUNT(*) FROM t_tt_invoice i WHERE i.vendor_id = v.vendor_id) AS invoice_count
         FROM m_tt_vendor v
         LEFT JOIN gl_ledgers dl ON dl.ledger_id = v.debtor_ledger_id
         LEFT JOIN gl_ledgers il ON il.ledger_id = v.income_ledger_id
+        LEFT JOIN gl_ledgers ol ON ol.ledger_id = v.toll_ledger_id
         LEFT JOIN gl_ledgers tl ON tl.ledger_id = v.tds_ledger_id
         LEFT JOIN m_bank b ON b.bank_id = v.receipt_bank_id
         WHERE v.location_code = :locationCode
@@ -57,7 +59,8 @@ const TtDao = {
         await db.sequelize.query(`
             UPDATE m_tt_vendor
             SET vendor_name = :vendor_name, sac_code = :sac_code, gst_rate = :gst_rate, tds_percent = :tds_percent,
-                debtor_ledger_id = :debtor_ledger_id, income_ledger_id = :income_ledger_id, tds_ledger_id = :tds_ledger_id,
+                debtor_ledger_id = :debtor_ledger_id, income_ledger_id = :income_ledger_id, toll_ledger_id = :toll_ledger_id,
+                tds_ledger_id = :tds_ledger_id,
                 receipt_bank_id = :receipt_bank_id, start_date = :start_date, active_flag = :active_flag, notes = :notes,
                 updated_by = :by
             WHERE location_code = :locationCode AND vendor_id = :vendorId
@@ -521,6 +524,140 @@ const TtDao = {
               AND DATE(b.trans_date) BETWEEN :fromDate AND :toDate
         ) x ORDER BY txn_date
     `, { locationCode, vendorId, fromDate, toDate }),
+
+    // ── Payment advices (BPCL AP210) ────────────────────────────────────────
+    getAdviceByClearingDoc: async (locationCode, vendorId, clearingDocNo) => {
+        const [a] = await select(`
+            SELECT advice_id FROM t_tt_payment_advice
+            WHERE location_code = :locationCode AND vendor_id = :vendorId AND clearing_doc_no = :clearingDocNo
+        `, { locationCode, vendorId, clearingDocNo });
+        return a || null;
+    },
+
+    // Bill lines of the vendor for the given shipments: { 'shipment|material': [line] }
+    getBillLinesByShipment: async (locationCode, vendorId, shipments) => {
+        if (!shipments.length) return {};
+        const rows = await select(`
+            SELECT l.line_id, l.invoice_id, l.delivery_invoice_no, l.material_code, l.qty_kl, l.gross_amount, i.bill_no, i.tds_amount
+            FROM t_tt_invoice_line l
+            JOIN t_tt_invoice i ON i.invoice_id = l.invoice_id
+            WHERE i.location_code = :locationCode AND i.vendor_id = :vendorId AND i.bill_type = 'FREIGHT'
+              AND l.delivery_invoice_no IN (:shipments)
+        `, { locationCode, vendorId, shipments });
+        const map = {};
+        rows.forEach(r => { const k = `${r.delivery_invoice_no}|${r.material_code || ''}`; (map[k] = map[k] || []).push(r); });
+        return map;
+    },
+
+    createAdvice: (locationCode, a, lines, by) => db.sequelize.transaction(async (t) => {
+        const cols = ['location_code', 'vendor_id', 'clearing_doc_no', 'clearing_date', 'advice_period', 'gross_amount',
+            'loss_recovery', 'tds_amount', 'net_amount', 'freight_amount', 'toll_amount', 'other_credit', 'fleet_card_amount',
+            'other_recovery', 'file_name', 'created_by', 'updated_by'];
+        const row = { ...a, location_code: locationCode, created_by: by, updated_by: by };
+        const [adviceId] = await db.sequelize.query(`
+            INSERT INTO t_tt_payment_advice (${cols.join(', ')}) VALUES (${cols.map(c => ':' + c).join(', ')})
+        `, { replacements: Object.fromEntries(cols.map(c => [c, row[c] === undefined ? null : row[c]])), type: QueryTypes.INSERT, transaction: t });
+        const lcols = ['advice_id', 'sno', 'line_kind', 'txn_date', 'doc_no', 'vehicle_no', 'material_code', 'qty_kl', 'rate',
+            'distance', 'party_name', 'tracking_no', 'credit_amount', 'debit_amount', 'invoice_id', 'invoice_line_id'];
+        for (const l of lines) {
+            const r = { ...l, advice_id: adviceId };
+            await db.sequelize.query(`
+                INSERT INTO t_tt_payment_advice_line (${lcols.join(', ')}) VALUES (${lcols.map(c => ':' + c).join(', ')})
+            `, { replacements: Object.fromEntries(lcols.map(c => [c, r[c] === undefined ? null : r[c]])), type: QueryTypes.INSERT, transaction: t });
+        }
+        return adviceId;
+    }),
+
+    // Ties freight lines saved before their bill was uploaded (shipment + product, one bill line once)
+    relinkAdviceLines: (locationCode) => db.sequelize.query(`
+        UPDATE t_tt_payment_advice_line al
+        JOIN t_tt_payment_advice a ON a.advice_id = al.advice_id
+        JOIN t_tt_invoice i ON i.location_code = a.location_code AND i.vendor_id = a.vendor_id AND i.bill_type = 'FREIGHT'
+        JOIN t_tt_invoice_line l ON l.invoice_id = i.invoice_id
+             AND l.delivery_invoice_no = al.doc_no AND COALESCE(l.material_code, '') = COALESCE(al.material_code, '')
+        SET al.invoice_id = l.invoice_id, al.invoice_line_id = l.line_id
+        WHERE a.location_code = :locationCode AND al.line_kind = 'FREIGHT' AND al.invoice_line_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM (SELECT invoice_line_id FROM t_tt_payment_advice_line WHERE invoice_line_id IS NOT NULL) x
+                          WHERE x.invoice_line_id = l.line_id)
+    `, { replacements: { locationCode }, type: QueryTypes.UPDATE }),
+
+    // A bill line that was deleted with its bill leaves the advice line pointing nowhere
+    unlinkOrphanAdviceLines: (locationCode) => db.sequelize.query(`
+        UPDATE t_tt_payment_advice_line al
+        JOIN t_tt_payment_advice a ON a.advice_id = al.advice_id
+        LEFT JOIN t_tt_invoice_line l ON l.line_id = al.invoice_line_id
+        SET al.invoice_id = NULL, al.invoice_line_id = NULL
+        WHERE a.location_code = :locationCode AND al.invoice_line_id IS NOT NULL AND l.line_id IS NULL
+    `, { replacements: { locationCode }, type: QueryTypes.UPDATE }),
+
+    // Advices with link counts and the bank credit that matches the net amount (receipt bank,
+    // same amount, clearing date -2..+7 days)
+    getAdvices: (locationCode, fromDate, toDate) => select(`
+        SELECT a.*, DATE_FORMAT(a.clearing_date, '%Y-%m-%d') AS clearing_date_iso, v.oil_company, v.tds_percent,
+               (SELECT COUNT(*) FROM t_tt_payment_advice_line al WHERE al.advice_id = a.advice_id AND al.line_kind = 'FREIGHT') AS freight_lines,
+               (SELECT COUNT(*) FROM t_tt_payment_advice_line al WHERE al.advice_id = a.advice_id AND al.line_kind = 'FREIGHT' AND al.invoice_line_id IS NULL) AS unlinked_lines,
+               (SELECT GROUP_CONCAT(DISTINCT i.bill_no ORDER BY i.bill_no SEPARATOR ', ')
+                  FROM t_tt_payment_advice_line al JOIN t_tt_invoice i ON i.invoice_id = al.invoice_id
+                 WHERE al.advice_id = a.advice_id) AS bill_nos,
+               (SELECT COALESCE(SUM(al.credit_amount - l.gross_amount), 0)
+                  FROM t_tt_payment_advice_line al JOIN t_tt_invoice_line l ON l.line_id = al.invoice_line_id
+                 WHERE al.advice_id = a.advice_id) AS amount_diff,
+               -- TDS BPCL should have kept: the bills' own TDS (BPCL rounds it per invoice) plus TDS % on
+               -- freight lines not on an uploaded bill
+               (SELECT COALESCE(SUM(i.tds_amount), 0) FROM t_tt_invoice i
+                 WHERE i.invoice_id IN (SELECT al.invoice_id FROM t_tt_payment_advice_line al WHERE al.advice_id = a.advice_id))
+               + ROUND((SELECT COALESCE(SUM(al.credit_amount), 0) FROM t_tt_payment_advice_line al
+                         WHERE al.advice_id = a.advice_id AND al.line_kind = 'FREIGHT' AND al.invoice_line_id IS NULL) * v.tds_percent / 100)
+                 AS tds_expected,
+               bt.t_bank_id AS bank_txn_id, DATE_FORMAT(bt.trans_date, '%Y-%m-%d') AS bank_date, bt.ledger_name AS bank_label,
+               mb.bank_name AS bank_name
+        FROM t_tt_payment_advice a
+        JOIN m_tt_vendor v ON v.vendor_id = a.vendor_id
+        LEFT JOIN t_bank_transaction bt ON bt.t_bank_id = (
+            SELECT b.t_bank_id FROM t_bank_transaction b
+            WHERE b.bank_id = v.receipt_bank_id AND b.credit_amount = a.net_amount
+              AND DATE(b.trans_date) BETWEEN DATE_SUB(a.clearing_date, INTERVAL 2 DAY) AND DATE_ADD(a.clearing_date, INTERVAL 7 DAY)
+            ORDER BY ABS(DATEDIFF(DATE(b.trans_date), a.clearing_date)), b.t_bank_id LIMIT 1)
+        LEFT JOIN m_bank mb ON mb.bank_id = bt.bank_id
+        WHERE a.location_code = :locationCode AND a.clearing_date BETWEEN :fromDate AND :toDate
+        ORDER BY a.clearing_date, a.advice_id
+    `, { locationCode, fromDate, toDate }),
+
+    getAdvice: async (locationCode, adviceId) => {
+        const [a] = await select(`
+            SELECT a.*, v.oil_company, v.vendor_code FROM t_tt_payment_advice a JOIN m_tt_vendor v ON v.vendor_id = a.vendor_id
+            WHERE a.location_code = :locationCode AND a.advice_id = :adviceId
+        `, { locationCode, adviceId });
+        if (!a) return null;
+        a.lines = await select(`
+            SELECT al.*, i.bill_no, l.gross_amount AS bill_amount
+            FROM t_tt_payment_advice_line al
+            LEFT JOIN t_tt_invoice i ON i.invoice_id = al.invoice_id
+            LEFT JOIN t_tt_invoice_line l ON l.line_id = al.invoice_line_id
+            WHERE al.advice_id = :adviceId ORDER BY al.sno
+        `, { adviceId });
+        return a;
+    },
+
+    deleteAdvice: async (locationCode, adviceId) => {
+        const [a] = await select(`SELECT advice_id FROM t_tt_payment_advice WHERE location_code = :locationCode AND advice_id = :adviceId`,
+            { locationCode, adviceId });
+        if (!a) return false;
+        await db.sequelize.query(`DELETE FROM t_tt_payment_advice WHERE advice_id = :adviceId`,
+            { replacements: { adviceId }, type: QueryTypes.DELETE });
+        return true;
+    },
+
+    // Freight bills with how much of them a payment advice has covered: paid = all lines tied
+    getBillPaidStatus: (locationCode, invoiceIds) => invoiceIds.length ? select(`
+        SELECT l.invoice_id, COUNT(*) AS line_count, SUM(al.line_id IS NOT NULL) AS paid_lines,
+               MAX(a.clearing_date) AS paid_on, GROUP_CONCAT(DISTINCT a.clearing_doc_no) AS clearing_docs
+        FROM t_tt_invoice_line l
+        LEFT JOIN t_tt_payment_advice_line al ON al.invoice_line_id = l.line_id
+        LEFT JOIN t_tt_payment_advice a ON a.advice_id = al.advice_id
+        WHERE l.invoice_id IN (:invoiceIds)
+        GROUP BY l.invoice_id
+    `, { invoiceIds }) : Promise.resolve([]),
 
     // ── GST: freight bills of a period (GSTR-1 b2b, reverse charge) ─────────
     getGstInvoices: (locationCode, fromDate, toDate) => select(`

@@ -20,7 +20,7 @@ const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDi
 const fmtDate = (d) => d ? dateFormat(d instanceof Date ? d : `${String(d).substring(0, 10)}T00:00:00`, 'dd-mmm-yyyy') : '';
 
 const PAGES = {
-    bills:  { title: 'Tank Truck Freight', basePath: '/tt', tabs: [['bills', 'Freight Bills'], ['card', 'Fleet Card'], ['recon', 'Reconciliation'], ['statement', 'Statement'], ['deleted', 'Deleted']] },
+    bills:  { title: 'Tank Truck Freight', basePath: '/tt', tabs: [['bills', 'Freight Bills'], ['payments', 'Payments'], ['card', 'Fleet Card'], ['recon', 'Reconciliation'], ['statement', 'Statement'], ['deleted', 'Deleted']] },
     master: { title: 'Tank Truck Master', basePath: '/tt/master', tabs: [['vendors', 'Oil Company Vendor'], ['trucks', 'Trucks'], ['cards', 'Fleet Cards']] },
 };
 
@@ -39,6 +39,7 @@ function validateVendor(body) {
         tds_percent: body.tds_percent === '' || body.tds_percent == null ? 0 : Number(body.tds_percent),
         debtor_ledger_id: body.debtor_ledger_id ? Number(body.debtor_ledger_id) : null,
         income_ledger_id: body.income_ledger_id ? Number(body.income_ledger_id) : null,
+        toll_ledger_id: body.toll_ledger_id ? Number(body.toll_ledger_id) : null,
         tds_ledger_id: body.tds_ledger_id ? Number(body.tds_ledger_id) : null,
         receipt_bank_id: body.receipt_bank_id ? Number(body.receipt_bank_id) : null,
         start_date: clean(body.start_date),
@@ -86,12 +87,28 @@ async function renderPage(req, res, next, pageKey) {
         };
         if (!vendors.length) return res.render('tt/home', { ...common, notSetUp: true });
 
-        const tab = page.tabs.some(t => t[0] === req.query.tab) ? req.query.tab : page.tabs[0][0];
+        // Payments (payment advice upload) is BPCL's AP210 Excel: only where a BPCL vendor is set up
+        const hasBpcl = vendors.some(v => v.oil_company === 'BPCL');
+        const tabs = page.tabs.filter(t => t[0] !== 'payments' || hasBpcl);
+        const tab = tabs.some(t => t[0] === req.query.tab) ? req.query.tab : tabs[0][0];
         const fy = fyRange(isIsoDate(req.query.from) ? new Date(req.query.from) : new Date());
         const fromDate = isIsoDate(req.query.from) ? req.query.from : fy.from;
         const toDate = isIsoDate(req.query.to) ? req.query.to : fy.to;
         const vendor = vendors.find(v => v.vendor_id === Number(req.query.vendor)) || vendors.find(v => v.active_flag === 'Y') || vendors[0];
-        const data = { ...common, tab, vendors, vendor, fromDate, toDate };
+        const data = { ...common, tab, tabs, vendors, vendor, fromDate, toDate };
+        if (hasBpcl && (tab === 'payments' || tab === 'bills' || tab === 'recon')) {
+            // Freight lines paid before their bill was uploaded get tied up now
+            await TtDao.unlinkOrphanAdviceLines(locationCode);
+            await TtDao.relinkAdviceLines(locationCode);
+        }
+
+        if (tab === 'payments') {
+            const advices = await TtDao.getAdvices(locationCode, fromDate, toDate);
+            const sum = (k) => round2(advices.reduce((s, a) => s + Number(a[k]), 0));
+            const adviceTotals = { gross: sum('gross_amount'), freight: sum('freight_amount'), toll: sum('toll_amount'),
+                card: sum('fleet_card_amount'), other: sum('other_recovery'), tds: sum('tds_amount'), net: sum('net_amount') };
+            return res.render('tt/home', { ...data, advices, adviceTotals, receiptLabel: TtDao.receiptLabel(vendor.oil_company) });
+        }
 
         if (pageKey === 'master') {
             const [vehicles, ledgers, banks, cards, expenseLedgers] = await Promise.all([
@@ -108,6 +125,11 @@ async function renderPage(req, res, next, pageKey) {
             return res.render('tt/home', { ...data, cards, statements });
         }
 
+        if (tab === 'recon' && vendor.oil_company === 'BPCL') {
+            const bpclRecon = await TtService.buildBpclReconciliation(locationCode, vendor, fromDate, toDate);
+            return res.render('tt/home', { ...data, bpclRecon, receiptLabel: TtDao.receiptLabel(vendor.oil_company) });
+        }
+
         if (tab === 'recon') {
             const recon = await TtService.buildReconciliation(locationCode, vendor.vendor_id, fromDate, toDate);
             const cards = await TtDao.getCards(locationCode);
@@ -120,6 +142,17 @@ async function renderPage(req, res, next, pageKey) {
                 TtDao.getInvoices(locationCode, fromDate, toDate),
                 TtDao.getReceiptsOnIncomeLabels(locationCode, vendor.vendor_id),
             ]);
+            if (hasBpcl) {
+                const paid = await TtDao.getBillPaidStatus(locationCode, bills.filter(b => b.bill_type !== 'TOLL').map(b => b.invoice_id));
+                const byId = new Map(paid.map(p => [p.invoice_id, p]));
+                bills.forEach(b => {
+                    const p = byId.get(b.invoice_id);
+                    if (!p || !Number(p.paid_lines)) return;
+                    b.paid = Number(p.paid_lines) >= Number(p.line_count) ? 'FULL' : 'PART';
+                    b.paid_on = p.paid_on;
+                    b.clearing_docs = p.clearing_docs;
+                });
+            }
             // Month subtotals, like the freight worksheet: two half-month bills, one payment
             const months = [];
             for (const b of bills) {
@@ -237,6 +270,61 @@ module.exports = {
         } catch (e) {
             console.error('TT deleteInvoice:', e);
             res.status(500).json({ success: false, error: 'Could not delete the bill.' });
+        }
+    },
+
+    // POST /tt/api/advice/preview (multipart file) -> what the BPCL payment advice holds
+    previewAdvice: async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the BPCL payment advice Excel file.' });
+            const r = await TtService.buildAdviceFromExcel(req.user.location_code, req.file.buffer);
+            res.json({
+                success: true, status: r.status, errors: r.errors, warnings: r.warnings, totals: r.totals, checks: r.checks,
+                header: { ...r.header, clearing_date_display: fmtDate(r.header.clearing_date) },
+                lines: r.lines.map(l => ({ ...l, date: fmtDate(l.txn_date) })),
+            });
+        } catch (e) {
+            console.error('TT previewAdvice:', e);
+            res.status(400).json({ success: false, error: e.message || 'Could not read the file.' });
+        }
+    },
+
+    // POST /tt/api/advice (multipart file) -> saves the payment advice
+    saveAdvice: async (req, res) => {
+        try {
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the BPCL payment advice Excel file.' });
+            const r = await TtService.saveAdviceFromExcel(req.user.location_code, req.file.buffer, req.file.originalname, req.user.User_Name);
+            res.json({ success: true, ...r });
+        } catch (e) {
+            console.error('TT saveAdvice:', e);
+            const dup = e.parent && e.parent.code === 'ER_DUP_ENTRY';
+            res.status(400).json({ success: false, error: dup ? 'This payment was saved a moment ago. Reload the page.' : (e.message || 'Could not save the payment advice.') });
+        }
+    },
+
+    // GET /tt/api/advice/:id -> advice with its lines
+    getAdvice: async (req, res) => {
+        try {
+            const a = await TtDao.getAdvice(req.user.location_code, Number(req.params.id));
+            if (!a) return res.status(404).json({ success: false, error: 'Payment advice not found.' });
+            a.clearing_date_display = fmtDate(a.clearing_date);
+            a.lines.forEach(l => { l.date = fmtDate(l.txn_date); });
+            res.json({ success: true, advice: a });
+        } catch (e) {
+            console.error('TT getAdvice:', e);
+            res.status(500).json({ success: false, error: 'Could not load the payment advice.' });
+        }
+    },
+
+    // DELETE /tt/api/advice/:id — register only (no GL), so a plain delete
+    deleteAdvice: async (req, res) => {
+        try {
+            const ok = await TtDao.deleteAdvice(req.user.location_code, Number(req.params.id));
+            if (!ok) return res.status(404).json({ success: false, error: 'Payment advice not found.' });
+            res.json({ success: true });
+        } catch (e) {
+            console.error('TT deleteAdvice:', e);
+            res.status(500).json({ success: false, error: 'Could not delete the payment advice.' });
         }
     },
 
