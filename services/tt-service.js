@@ -6,14 +6,35 @@
 //   CGST / SGST    = taxable x rate / 2 each (IGST if the bill printed IGST), rounded to paise:
 //                    what GSTR-1 reports. The bill's own figures (sum of per-trip rounding,
 //                    a few paise off) are kept as bill_cgst / bill_sgst.
-//   TDS            = taxable x TDS %, rounded to the rupee (as IOCL deducts it)
+//   TDS            = taxable x TDS %, rounded to the rupee (as IOCL deducts it). Toll invoices
+//                    (BPCL DOC YB) carry no TDS: BPCL deducts it on freight only (Sep-2026
+//                    payment advice: 2% of freight exactly, tolls in the same payment untouched).
 //   net receivable = taxable - TDS (GST is paid by the oil company under reverse charge)
 const TtDao = require('../dao/tt-dao');
 const GstConfigDao = require('../dao/gst-config-dao');
 const { parseIoclTransportBill } = require('./tt-invoice-parser');
+const { parseBpclTransportStatement } = require('./tt-bpcl-invoice-parser');
+const { parseBpclPaymentAdvice } = require('./tt-bpcl-advice-parser');
 const { parseXtrapowerStatement } = require('./xtrapower-statement-parser');
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+
+// IOCL Transportation Bill or BPCL monthly statement, whichever the file is
+async function parseFreightPdf(buffer) {
+    try {
+        return await parseIoclTransportBill(buffer);
+    } catch (e) {
+        if (!/not an IOCL Transportation Bill/i.test(e.message)) throw e;
+    }
+    try {
+        return await parseBpclTransportStatement(buffer);
+    } catch (e) {
+        if (/not a BPCL tank truck statement/i.test(e.message)) {
+            throw new Error('This PDF is neither an IOCL Transportation Bill nor a BPCL tank truck statement.');
+        }
+        throw e;
+    }
+}
 
 function computeAmounts(totals, gstRate, tdsPercent) {
     const taxable = r2(totals.gross - totals.penalty);
@@ -42,7 +63,7 @@ function computeAmounts(totals, gstRate, tdsPercent) {
 // status: NEW (will be saved), EXISTS (already uploaded), BEFORE_START (dated before the vendor's
 // start date), BLOCKED (see problems). Throws only when the file can't be read at all.
 async function buildFromPdf(locationCode, buffer, fileName) {
-    const parsed = await parseIoclTransportBill(buffer);
+    const parsed = await parseFreightPdf(buffer);
     const h = parsed.header;
     const errors = [];
     const warnings = parsed.warnings.slice();
@@ -66,14 +87,20 @@ async function buildFromPdf(locationCode, buffer, fileName) {
     const existing = await TtDao.getExistingBillNos(locationCode, parsed.bills.map(b => b.bill_no));
     const startDate = vendor ? String(vendor.start_date instanceof Date ? vendor.start_date.toISOString().slice(0, 10) : vendor.start_date).slice(0, 10) : null;
 
+    if (vendor && parsed.bills.some(b => b.bill_type === 'TOLL') && !vendor.toll_ledger_id) {
+        warnings.push('The file has toll invoices and the vendor has no toll ledger set in Tank Truck Master, so toll will post to the freight income ledger.');
+    }
+
     const bills = parsed.bills.map(b => {
-        const amounts = computeAmounts(b.totals, vendor ? Number(vendor.gst_rate) : 5, vendor ? Number(vendor.tds_percent) : 0);
+        const billType = b.bill_type || 'FREIGHT';
+        const tdsPercent = billType === 'TOLL' ? 0 : (vendor ? Number(vendor.tds_percent) : 0);
+        const amounts = computeAmounts(b.totals, vendor ? Number(vendor.gst_rate) : 5, tdsPercent);
         const problems = [];
         let status = 'NEW';
         if (existing.has(b.bill_no)) status = 'EXISTS';
         else if (startDate && b.bill_date < startDate) status = 'BEFORE_START';
         if (b.bill_no.length > 16) problems.push(`Bill number ${b.bill_no} is longer than 16 characters; the GST portal will not take it.`);
-        if (!h.recipient_gstin) problems.push('Recipient (IOCL terminal) GSTIN not found on the bill.');
+        if (!h.recipient_gstin) problems.push(`Recipient (${parsed.oil_company} terminal) GSTIN not found on the bill.`);
         if (Math.abs(amounts.bill_cgst - amounts.cgst_amount) > 1 || Math.abs(amounts.bill_sgst - amounts.sgst_amount) > 1) {
             warnings.push(`Bill ${b.bill_no}: GST printed (${amounts.bill_cgst} + ${amounts.bill_sgst}) differs by more than ₹1 from ${vendor ? vendor.gst_rate : 5}% of the taxable value (${amounts.cgst_amount} + ${amounts.sgst_amount}). Check the GST rate in Tank Truck Master.`);
         }
@@ -83,8 +110,11 @@ async function buildFromPdf(locationCode, buffer, fileName) {
             vendor_id: vendor ? vendor.vendor_id : null,
             bill_no: b.bill_no,
             bill_date: b.bill_date,
-            period_from: h.period_from,
-            period_to: h.period_to,
+            bill_type: billType,
+            doc_type: b.doc_type || null,
+            ref_doc_no: b.fi_doc_no || null,
+            period_from: b.period_from || h.period_from,
+            period_to: b.period_to || h.period_to,
             generated_on: h.generated_on,
             reverse_charge: b.reverse_charge,
             recipient_name: h.recipient_name,
@@ -198,6 +228,136 @@ async function saveCardFromPdf(locationCode, buffer, fileName, by) {
     return { statement_id: id, period_from: s.period_from };
 }
 
+// ── BPCL payment advice (AP210 Excel) ───────────────────────────────────────
+// Returns { header, vendor, lines (with the bill they settle), totals, checks, status, errors[], warnings[] }.
+// status: NEW, EXISTS (this clearing document is already uploaded).
+async function buildAdviceFromExcel(locationCode, buffer) {
+    const parsed = parseBpclPaymentAdvice(buffer);
+    const h = parsed.header;
+    const errors = [];
+    const warnings = parsed.warnings.slice();
+
+    const vendor = await TtDao.getVendorByCode(locationCode, parsed.oil_company, h.vendor_code);
+    if (!vendor) {
+        errors.push(`No active BPCL transporter with vendor code ${h.vendor_code} is set up for ${locationCode}. Upload it at the location it belongs to, or add the vendor in Tank Truck Master.`);
+        return { header: h, vendor: null, lines: parsed.lines, totals: parsed.totals, checks: {}, status: 'NEW', errors, warnings };
+    }
+    const status = (await TtDao.getAdviceByClearingDoc(locationCode, vendor.vendor_id, h.clearing_doc_no)) ? 'EXISTS' : 'NEW';
+
+    // Freight lines -> bill lines, by shipment + product; each bill line used once
+    const freight = parsed.lines.filter(l => l.line_kind === 'FREIGHT');
+    const byShip = await TtDao.getBillLinesByShipment(locationCode, vendor.vendor_id, Array.from(new Set(freight.map(l => l.doc_no).filter(Boolean))));
+    const used = new Set();
+    let unmatched = 0, amountDiff = 0;
+    const lines = parsed.lines.map(l => {
+        if (l.line_kind !== 'FREIGHT') return { ...l, invoice_id: null, invoice_line_id: null, bill_no: null };
+        const cands = (byShip[`${l.doc_no}|${l.material_code || ''}`] || []).filter(c => !used.has(c.line_id));
+        const hit = cands.find(c => Math.abs(Number(c.gross_amount) - l.credit_amount) <= 0.05) || cands[0];
+        if (!hit) { unmatched++; return { ...l, invoice_id: null, invoice_line_id: null, bill_no: null }; }
+        used.add(hit.line_id);
+        const diff = r2(l.credit_amount - Number(hit.gross_amount));
+        if (Math.abs(diff) > 0.05) {
+            amountDiff = r2(amountDiff + diff);
+            warnings.push(`Shipment ${l.doc_no} (${l.material_code}): paid ${l.credit_amount.toFixed(2)}, bill ${hit.bill_no} shows ${Number(hit.gross_amount).toFixed(2)}.`);
+        }
+        return { ...l, invoice_id: hit.invoice_id, invoice_line_id: hit.line_id, bill_no: hit.bill_no };
+    });
+    if (unmatched) {
+        warnings.push(`${unmatched} of ${freight.length} freight line(s) are not on any uploaded bill yet. Upload BPCL's statement PDF for those trips; they are tied up automatically when it is uploaded.`);
+    }
+
+    const t = parsed.totals;
+    const tdsPercent = Number(vendor.tds_percent) || 0;
+    // BPCL rounds TDS per invoice (Aug-2026: 1,348 + 1,155 + 4 x 193 = 3,275, where 2% of the
+    // month's freight would be 3,273), so the expected TDS is the bills' own TDS, plus TDS % on
+    // freight lines whose bill is not uploaded yet.
+    const billTds = new Map();
+    Object.values(byShip).forEach(rows => rows.forEach(r => billTds.set(r.invoice_id, Number(r.tds_amount) || 0)));
+    const linkedInvoices = new Set(lines.filter(l => l.invoice_id).map(l => l.invoice_id));
+    const unlinkedFreight = r2(lines.filter(l => l.line_kind === 'FREIGHT' && !l.invoice_line_id).reduce((s, l) => s + l.credit_amount, 0));
+    const tdsExpected = Array.from(linkedInvoices).reduce((s, id) => s + (billTds.get(id) || 0), 0) + Math.round(unlinkedFreight * tdsPercent / 100);
+    const checks = {
+        tds_expected: tdsExpected,
+        tds_percent: tdsPercent,
+        tds_diff: r2(h.tds_amount - tdsExpected),
+        amount_diff: amountDiff,
+        bills: Array.from(new Set(lines.map(l => l.bill_no).filter(Boolean))).sort(),
+    };
+    if (Math.abs(checks.tds_diff) >= 1) {
+        warnings.push(`TDS deducted is ${h.tds_amount.toFixed(2)}; the bills' TDS (${tdsPercent}% per invoice) comes to ${tdsExpected.toFixed(2)}, a difference of ${checks.tds_diff.toFixed(2)}.`);
+    }
+    if (Math.abs(t.other_recovery) >= 0.01) {
+        warnings.push(`Loss Recovery is ${h.loss_recovery.toFixed(2)} but the fleet card lines add up to ${t.fleet_card.toFixed(2)}; ${t.other_recovery.toFixed(2)} is recovered for something the file does not list.`);
+    }
+    return { header: h, vendor, lines, totals: t, checks, status, errors, warnings };
+}
+
+async function saveAdviceFromExcel(locationCode, buffer, fileName, by) {
+    const r = await buildAdviceFromExcel(locationCode, buffer);
+    if (r.errors.length) throw Object.assign(new Error(r.errors.join(' ')), { userFacing: true });
+    if (r.status === 'EXISTS') throw Object.assign(new Error(`Payment ${r.header.clearing_doc_no} is already uploaded.`), { userFacing: true });
+    const h = r.header, t = r.totals;
+    const id = await TtDao.createAdvice(locationCode, {
+        vendor_id: r.vendor.vendor_id, clearing_doc_no: h.clearing_doc_no, clearing_date: h.clearing_date,
+        advice_period: h.advice_period, gross_amount: h.gross_amount, loss_recovery: h.loss_recovery,
+        tds_amount: h.tds_amount, net_amount: h.net_amount, freight_amount: t.freight, toll_amount: t.toll,
+        other_credit: t.other_credit, fleet_card_amount: t.fleet_card, other_recovery: t.other_recovery,
+        file_name: fileName ? String(fileName).substring(0, 200) : null,
+    }, r.lines.map(l => ({
+        ...l,
+        doc_no: l.doc_no ? l.doc_no.substring(0, 20) : null,
+        vehicle_no: l.vehicle_no ? l.vehicle_no.substring(0, 20) : null,
+        material_code: l.material_code ? l.material_code.substring(0, 20) : null,
+        tracking_no: l.tracking_no ? l.tracking_no.substring(0, 30) : null,
+    })), by);
+    return { advice_id: id, clearing_doc_no: h.clearing_doc_no, bills: r.checks.bills };
+}
+
+// ── BPCL reconciliation: from the payment advices ───────────────────────────
+// BPCL says on each payment which trips it pays for and what it keeps back, so no month
+// matching is needed: per payment, what should reach the bank (net) against the bank credit
+// found; then the freight bills no payment covers yet, and toll billed against toll paid (toll
+// lines on the advice carry a tracking no, not the invoice, so toll is compared in total).
+async function buildBpclReconciliation(locationCode, vendor, fromDate, toDate) {
+    const [advices, allBills] = await Promise.all([
+        TtDao.getAdvices(locationCode, fromDate, toDate),
+        TtDao.getInvoices(locationCode, fromDate, toDate),
+    ]);
+    const bills = allBills.filter(b => b.vendor_id === vendor.vendor_id);
+    const payments = advices.filter(a => a.vendor_id === vendor.vendor_id).map(a => {
+        const bank = a.bank_txn_id ? Number(a.net_amount) : 0;
+        return {
+            ...a,
+            bank,
+            difference: r2(Number(a.net_amount) - bank),
+            tdsDiff: r2(Number(a.tds_amount) - Number(a.tds_expected)),
+            untagged: a.bank_txn_id && a.bank_label !== TtDao.receiptLabel(vendor.oil_company),
+        };
+    });
+    const freightBills = bills.filter(b => b.bill_type !== 'TOLL');
+    const paid = await TtDao.getBillPaidStatus(locationCode, freightBills.map(b => b.invoice_id));
+    const byId = new Map(paid.map(p => [p.invoice_id, p]));
+    const unpaid = freightBills.map(b => {
+        const p = byId.get(b.invoice_id);
+        const paidLines = p ? Number(p.paid_lines) : 0, lines = p ? Number(p.line_count) : 0;
+        return { ...b, paidLines, lines };
+    }).filter(b => b.paidLines < b.lines);
+    const sum = (rows, f) => r2(rows.reduce((s, x) => s + f(x), 0));
+    const totals = {
+        freight: sum(payments, a => Number(a.freight_amount)), toll: sum(payments, a => Number(a.toll_amount)),
+        tds: sum(payments, a => Number(a.tds_amount)), card: sum(payments, a => Number(a.fleet_card_amount)),
+        other: sum(payments, a => Number(a.other_recovery)), net: sum(payments, a => Number(a.net_amount)),
+        bank: sum(payments, a => a.bank), difference: sum(payments, a => a.difference),
+    };
+    const toll = {
+        billed: sum(bills.filter(b => b.bill_type === 'TOLL'), b => Number(b.taxable_value)),
+        billCount: bills.filter(b => b.bill_type === 'TOLL').length,
+        paid: totals.toll,
+    };
+    toll.difference = r2(toll.billed - toll.paid);
+    return { payments, totals, unpaid, unpaidTotal: sum(unpaid, b => Number(b.net_receivable)), toll };
+}
+
 // ── Reconciliation (the freight worksheet) ──────────────────────────────────
 // One row per bill month: what the bills of that month left due (taxable - TDS) against what
 // came in the following month, to the bank (tagged "TT FREIGHT - <oil co>") and onto the card
@@ -249,4 +409,5 @@ async function buildReconciliation(locationCode, vendorId, fromDate, toDate) {
     return { rows: list, totals };
 }
 
-module.exports = { buildFromPdf, saveFromPdf, computeAmounts, buildCardFromPdf, saveCardFromPdf, buildReconciliation };
+module.exports = { buildFromPdf, saveFromPdf, computeAmounts, buildCardFromPdf, saveCardFromPdf, buildReconciliation,
+    buildAdviceFromExcel, saveAdviceFromExcel, buildBpclReconciliation };
