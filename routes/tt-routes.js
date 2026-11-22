@@ -1,6 +1,7 @@
-// routes/tt-routes.js — Tank Truck Freight. Access by menu grant (granted to MC and MME):
-//   TT_FREIGHT (Transactions) - /tt: freight bills upload, statement, deleted
-//   TT_MASTER  (Masters)      - /tt/master: oil company vendor settings + trucks
+// routes/tt-routes.js — Tank Truck Freight. Access by menu grant (MC, MME, SFS), both menus under
+// the Truck Management head:
+//   TT_FREIGHT - /tt: freight bills upload, BPCL payment advices, fleet card, statement, deleted
+//   TT_MASTER  - /tt/master: oil company vendor settings + trucks
 const express = require('express');
 const router = express.Router();
 const login = require('connect-ensure-login');
@@ -20,6 +21,11 @@ router.post('/api/upload/preview', canBills, upload.single('file'), ctrl.preview
 router.post('/api/upload', canBills, upload.single('file'), ctrl.saveUpload);
 router.get('/api/invoices/:id(\\d+)', canBills, ctrl.getInvoice);
 router.post('/api/invoices/:id(\\d+)/delete', canBills, ctrl.deleteInvoice);
+
+router.post('/api/advice/preview', canBills, upload.single('file'), ctrl.previewAdvice);
+router.post('/api/advice', canBills, upload.single('file'), ctrl.saveAdvice);
+router.get('/api/advice/:id(\\d+)', canBills, ctrl.getAdvice);
+router.delete('/api/advice/:id(\\d+)', canBills, ctrl.deleteAdvice);
 
 router.post('/api/card/preview', canBills, upload.single('file'), ctrl.previewCard);
 router.post('/api/card', canBills, upload.single('file'), ctrl.saveCard);

@@ -1853,15 +1853,18 @@ async function processRentalInvoiceEvent(event, processedBy) {
 
 // ─── TT_INVOICE Handler ───────────────────────────────────────────────────────
 // Oil-co TT debtor DR (taxable - TDS) + TDS Receivable DR (TDS) → TT freight income CR (taxable).
+// A toll bill (BPCL DOC YB, no TDS) credits the vendor's toll ledger instead, if one is set.
 // GST is under reverse charge (the oil company pays it), so it is not in the dealer's books.
 
 async function processTtInvoiceEvent(event, processedBy) {
     const { location_code, fy_id, source_id: invoiceId, event_date } = event;
 
     const rows = await query(`
-        SELECT ti.bill_no, ti.taxable_value, ti.tds_amount, ti.net_receivable, ti.trip_count, ti.total_kl,
+        SELECT ti.bill_no, ti.bill_type, ti.taxable_value, ti.tds_amount, ti.net_receivable, ti.trip_count, ti.total_kl,
                ti.vehicles, ti.period_from, ti.period_to,
-               v.oil_company, v.debtor_ledger_id, v.income_ledger_id, v.tds_ledger_id
+               v.oil_company, v.debtor_ledger_id, v.tds_ledger_id,
+               CASE WHEN ti.bill_type = 'TOLL' THEN COALESCE(v.toll_ledger_id, v.income_ledger_id)
+                    ELSE v.income_ledger_id END AS income_ledger_id
         FROM t_tt_invoice ti
         JOIN m_tt_vendor v ON v.vendor_id = ti.vendor_id
         WHERE ti.invoice_id = :invoiceId
@@ -1875,7 +1878,7 @@ async function processTtInvoiceEvent(event, processedBy) {
     const taxable = Math.round(parseFloat(row.taxable_value) * 100) / 100;
     const tds = Math.round(parseFloat(row.tds_amount || 0) * 100) / 100;
     const fmt = (d) => d ? String(d instanceof Date ? d.toISOString() : d).substring(0, 10) : '';
-    const narration = `TT freight bill ${row.bill_no} | ${row.oil_company} | ${row.vehicles || ''} | ` +
+    const narration = `TT ${row.bill_type === 'TOLL' ? 'toll' : 'freight'} bill ${row.bill_no} | ${row.oil_company} | ${row.vehicles || ''} | ` +
         `${row.trip_count} trips ${fmt(row.period_from)} to ${fmt(row.period_to)} | ₹${taxable.toFixed(2)}`;
 
     const lines = [{ ledger_id: row.debtor_ledger_id, dr_amount: Math.round((taxable - tds) * 100) / 100, cr_amount: 0, narration }];
