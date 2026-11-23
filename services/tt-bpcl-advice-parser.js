@@ -68,7 +68,7 @@ function parseBpclPaymentAdvice(buffer) {
 
     const top = [].concat(...grid.slice(0, 6));
     const title = top.find(c => /AP210 for Vendor/i.test(String(c || '')));
-    if (!title) throw new Error('This is not a BPCL payment advice (no "AP210 for Vendor" title found).');
+    if (!title) throw new Error('This Excel is not a payment advice that can be read here (no "AP210 for Vendor" title found).');
     const tm = /AP210 for Vendor\s*0*(\d+)\s*for\s*(\d{2})\/(\d{4})/i.exec(String(title));
     const header = {
         vendor_code: tm ? tm[1] : null,

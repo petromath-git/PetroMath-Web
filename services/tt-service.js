@@ -49,7 +49,7 @@ async function parseCardPdf(buffer) {
         return await parseSmartfleetStatement(buffer);
     } catch (e) {
         if (/not a SmartFleet Account Statement/i.test(e.message)) {
-            throw new Error('This PDF is neither an XTRAPOWER Monthly Statement nor a SmartFleet Account Statement.');
+            throw new Error('This PDF is not a fleet card statement that can be read here. Upload the monthly statement PDF as downloaded from the fleet card portal.');
         }
         throw e;
     }
@@ -87,7 +87,7 @@ async function parseFreightPdf(buffer) {
         return await parseBpclTransportStatement(buffer);
     } catch (e) {
         if (/not a BPCL tank truck statement/i.test(e.message)) {
-            throw new Error('This PDF is neither an IOCL Transportation Bill nor a BPCL tank truck statement.');
+            throw new Error('This PDF is not a tank truck freight bill or statement that can be read here. Upload the PDF as received from the oil company.');
         }
         throw e;
     }
@@ -224,11 +224,10 @@ async function buildCardFromPdf(locationCode, buffer) {
     const errors = [];
     const warnings = parsed.warnings.slice();
     const card = await TtDao.getCardByCustomerId(locationCode, s.customer_id);
-    const label = program === 'SMARTFLEET' ? 'SmartFleet account' : 'XTRAPOWER customer';
     if (!card) {
-        errors.push(`${label} ${s.customer_id} (${s.customer_name || ''}) is not set up as a fleet card for ${locationCode}. Add it in Masters > Tank Truck Master > Fleet Cards, or upload it at the location it belongs to.`);
+        errors.push(`Fleet card ${s.customer_id} (${s.customer_name || ''}) is not set up as a fleet card for ${locationCode}. Add it in Masters > Tank Truck Master > Fleet Cards, or upload it at the location it belongs to.`);
     } else if ((card.program || 'XTRAPOWER') !== program) {
-        errors.push(`Card ${s.customer_id} is set up as a ${card.program || 'XTRAPOWER'} card, but this is a ${program} statement.`);
+        errors.push(`Card ${s.customer_id} is set up for a different fleet card type than this statement. Check the card in Tank Truck Master.`);
     } else {
         const needLoyalty = program !== 'SMARTFLEET';
         if (!card.wallet_ledger_id || !card.diesel_ledger_id || (needLoyalty && (!card.points_ledger_id || !card.loyalty_income_ledger_id))) {
@@ -274,7 +273,7 @@ async function buildCardFromPdf(locationCode, buffer) {
             });
             const missing = recharges.filter(t => !t.advice);
             if (missing.length) {
-                warnings.push(`${missing.length} recharge(s) (${missing.map(t => t.amount.toFixed(2)).join(', ')}) are not on an uploaded BPCL payment yet. Upload the payment Excel in the Payments tab to tie them up.`);
+                warnings.push(`${missing.length} recharge(s) (${missing.map(t => t.amount.toFixed(2)).join(', ')}) are not on an uploaded payment advice yet. Upload the payment Excel in the Payments tab to tie them up.`);
             }
         }
     }
@@ -320,7 +319,7 @@ async function buildAdviceFromExcel(locationCode, buffer) {
 
     const vendor = await TtDao.getVendorByCode(locationCode, parsed.oil_company, h.vendor_code);
     if (!vendor) {
-        errors.push(`No active BPCL transporter with vendor code ${h.vendor_code} is set up for ${locationCode}. Upload it at the location it belongs to, or add the vendor in Tank Truck Master.`);
+        errors.push(`No active ${parsed.oil_company || 'oil company'} transporter with vendor code ${h.vendor_code} is set up for ${locationCode}. Upload it at the location it belongs to, or add the vendor in Tank Truck Master.`);
         return { header: h, vendor: null, lines: parsed.lines, totals: parsed.totals, checks: {}, status: 'NEW', errors, warnings };
     }
     const status = (await TtDao.getAdviceByClearingDoc(locationCode, vendor.vendor_id, h.clearing_doc_no)) ? 'EXISTS' : 'NEW';
@@ -344,7 +343,7 @@ async function buildAdviceFromExcel(locationCode, buffer) {
         return { ...l, invoice_id: hit.invoice_id, invoice_line_id: hit.line_id, bill_no: hit.bill_no };
     });
     if (unmatched) {
-        warnings.push(`${unmatched} of ${freight.length} freight line(s) are not on any uploaded bill yet. Upload BPCL's statement PDF for those trips; they are tied up automatically when it is uploaded.`);
+        warnings.push(`${unmatched} of ${freight.length} freight line(s) are not on any uploaded bill yet. Upload the oil company's statement PDF for those trips; they are tied up automatically when it is uploaded.`);
     }
 
     const t = parsed.totals;
@@ -380,7 +379,7 @@ async function buildAdviceFromExcel(locationCode, buffer) {
         const paise = t.other_recovery > 0 && t.other_recovery < card.lines;
         warnings.push(`Loss Recovery is ${h.loss_recovery.toFixed(2)} but the fleet card lines add up to ${t.fleet_card.toFixed(2)}; ` +
             (paise
-                ? `the ${t.other_recovery.toFixed(2)} is most likely the paise of the card recharges (this file drops them). Upload the SmartFleet statements in the Fleet Card tab to confirm.`
+                ? `the ${t.other_recovery.toFixed(2)} is most likely the paise of the card recharges (this file drops them). Upload the fleet card statements in the Fleet Card tab to confirm.`
                 : `${t.other_recovery.toFixed(2)} is recovered for something the file does not list.`));
     }
     return { header: h, vendor, lines, totals: t, checks, status, errors, warnings };
