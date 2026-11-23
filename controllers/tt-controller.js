@@ -276,7 +276,7 @@ module.exports = {
     // POST /tt/api/advice/preview (multipart file) -> what the BPCL payment advice holds
     previewAdvice: async (req, res) => {
         try {
-            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the BPCL payment advice Excel file.' });
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the payment advice Excel file.' });
             const r = await TtService.buildAdviceFromExcel(req.user.location_code, req.file.buffer);
             res.json({
                 success: true, status: r.status, errors: r.errors, warnings: r.warnings, totals: r.totals, checks: r.checks,
@@ -292,7 +292,7 @@ module.exports = {
     // POST /tt/api/advice (multipart file) -> saves the payment advice
     saveAdvice: async (req, res) => {
         try {
-            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the BPCL payment advice Excel file.' });
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the payment advice Excel file.' });
             const r = await TtService.saveAdviceFromExcel(req.user.location_code, req.file.buffer, req.file.originalname, req.user.User_Name);
             res.json({ success: true, ...r });
         } catch (e) {
@@ -346,7 +346,8 @@ module.exports = {
                     pointsToCard: sum('POINTS_TO_CARD'), loyalty: pts('LOYALTY_AWARD'), loyaltyTds: pts('LOYALTY_TDS') },
                 txns: r.txns.map(t => ({ sno: t.sno, kind: t.kind, date: fmtDate(t.txn_date), merchant: t.merchant, vehicle_no: t.vehicle_no || t.card_name || null,
                     product: t.product, currency: t.currency, amount: t.amount, rupees: t.rupees, balance: t.balance, ref: t.txn_ref,
-                    points: t.points, advice: t.advice ? `${t.advice.clearing_doc_no} (${fmtDate(t.advice.clearing_date)})` : null })),
+                    points: t.points, advice: t.advice ? `${t.advice.clearing_doc_no} (${fmtDate(t.advice.clearing_date)})` : null,
+                    advice_pending: s.program === 'SMARTFLEET' && t.kind === 'RECHARGE' && !t.advice })),
             });
         } catch (e) {
             console.error('TT previewCard:', e);
@@ -388,6 +389,7 @@ module.exports = {
                     const t = recharges.find(x => x.txn_id === r.txn_id);
                     if (t && l) t.advice = `${l.clearing_doc_no} (${fmtDate(l.clearing_date)})`;
                 });
+                recharges.forEach(t => { t.advice_pending = !t.advice; });
             }
             res.json({ success: true, statement: s });
         } catch (e) {
