@@ -252,7 +252,7 @@ async function parseSmartfleetStatement(buffer) {
         const sign = r.kind === 'RECHARGE' || r.kind === 'REVERSAL' ? 1 : r.kind === 'SALE' ? -1 : 0;
         if (sign === 0) throw new Error(`Row ${r.stmt_sno} (${r.txn_type}, ${r.amount}): unknown card transaction type.`);
         bal = r2(bal + sign * r.amount);
-        return { ...r, sno: k + 1, balance: bal, txn_ref: r.kind === 'RECHARGE' ? (r.merchant || null) : null, merchant: r.kind === 'RECHARGE' ? 'BPCL' : r.merchant };
+        return { ...r, sno: k + 1, balance: bal, txn_ref: r.kind === 'RECHARGE' ? (r.merchant || null) : null, merchant: r.kind === 'RECHARGE' ? 'Freight payment' : r.merchant };
     });
     const sum = (k, f = 'amount') => r2(txns.filter(t => t.kind === k).reduce((s, t) => s + t[f], 0));
     if (Math.abs(sum('RECHARGE') - summary.ccms.recharge) > 0.01) {
@@ -272,9 +272,9 @@ async function parseSmartfleetStatement(buffer) {
     if (summary.loyalty) {
         const L = summary.loyalty;
         const earned = r2(txns.reduce((s, t) => s + (t.points || 0), 0));
-        if (Math.abs(earned - L.award) > 1) warnings.push(`Petromiles on the rows add up to ${earned}, the summary accruals are ${L.award}.`);
+        if (Math.abs(earned - L.award) > 1) warnings.push(`Reward points on the rows add up to ${earned}, the summary accruals are ${L.award}.`);
         const pclose = r2(L.opening + L.award + L.reversal + L.transferred - L.redemption + L.others);
-        if (Math.abs(pclose - L.closing) > 1) warnings.push(`Petromiles summary does not add up: ${pclose} vs closing ${L.closing}.`);
+        if (Math.abs(pclose - L.closing) > 1) warnings.push(`Reward points summary does not add up: ${pclose} vs closing ${L.closing}.`);
     }
     return { summary, txns, warnings };
 }
