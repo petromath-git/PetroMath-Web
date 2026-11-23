@@ -328,10 +328,10 @@ module.exports = {
         }
     },
 
-    // POST /tt/api/card/preview (multipart file) -> what the XTRAPOWER statement holds
+    // POST /tt/api/card/preview (multipart file) -> what the XTRAPOWER / SmartFleet statement holds
     previewCard: async (req, res) => {
         try {
-            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the XTRAPOWER statement PDF.' });
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the fleet card statement PDF.' });
             const r = await TtService.buildCardFromPdf(req.user.location_code, req.file.buffer);
             const s = r.summary;
             const sum = (k) => round2(r.txns.filter(t => t.kind === k).reduce((a, t) => a + t.rupees, 0));
@@ -340,12 +340,13 @@ module.exports = {
             const pts = (k) => round2(r.txns.filter(t => t.kind === k).reduce((a, t) => a + t.amount, 0) / ppr);
             res.json({
                 success: true, status: r.status, errors: r.errors, warnings: r.warnings,
-                summary: { customer_id: s.customer_id, customer_name: s.customer_name, period: `${fmtDate(s.period_from)} to ${fmtDate(s.period_to)}`,
+                summary: { program: s.program, customer_id: s.customer_id, customer_name: s.customer_name, period: `${fmtDate(s.period_from)} to ${fmtDate(s.period_to)}`,
                     ccms: s.ccms, loyalty: s.loyalty },
                 booked: { recharge: sum('RECHARGE'), diesel: round2(sum('SALE') + sum('SALE_COMPLETE') - sum('REVERSAL')),
                     pointsToCard: sum('POINTS_TO_CARD'), loyalty: pts('LOYALTY_AWARD'), loyaltyTds: pts('LOYALTY_TDS') },
-                txns: r.txns.map(t => ({ sno: t.sno, kind: t.kind, date: fmtDate(t.txn_date), merchant: t.merchant, vehicle_no: t.vehicle_no,
-                    product: t.product, currency: t.currency, amount: t.amount, rupees: t.rupees, balance: t.balance, ref: t.txn_ref })),
+                txns: r.txns.map(t => ({ sno: t.sno, kind: t.kind, date: fmtDate(t.txn_date), merchant: t.merchant, vehicle_no: t.vehicle_no || t.card_name || null,
+                    product: t.product, currency: t.currency, amount: t.amount, rupees: t.rupees, balance: t.balance, ref: t.txn_ref,
+                    points: t.points, advice: t.advice ? `${t.advice.clearing_doc_no} (${fmtDate(t.advice.clearing_date)})` : null })),
             });
         } catch (e) {
             console.error('TT previewCard:', e);
@@ -356,7 +357,7 @@ module.exports = {
     // POST /tt/api/card (multipart file) -> saves the statement
     saveCard: async (req, res) => {
         try {
-            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the XTRAPOWER statement PDF.' });
+            if (!req.file) return res.status(400).json({ success: false, error: 'Choose the fleet card statement PDF.' });
             const r = await TtService.saveCardFromPdf(req.user.location_code, req.file.buffer, req.file.originalname, req.user.User_Name);
             res.json({ success: true, ...r });
         } catch (e) {
@@ -373,6 +374,21 @@ module.exports = {
             if (!s) return res.status(404).json({ success: false, error: 'Statement not found.' });
             s.period = `${fmtDate(s.period_from)} to ${fmtDate(s.period_to)}`;
             s.txns.forEach(t => { t.date = fmtDate(t.txn_date); });
+            // SmartFleet: which BPCL payment each recharge came out of
+            const card = s.program === 'SMARTFLEET' ? await TtDao.getCard(req.user.location_code, s.card_id) : null;
+            const recharges = s.txns.filter(t => t.kind === 'RECHARGE');
+            if (card && card.vendor_id && recharges.length) {
+                const iso = (d) => (d instanceof Date ? d.toISOString() : String(d)).slice(0, 10);
+                const shift = (d, n) => new Date(Date.parse(iso(d)) + n * 86400000).toISOString().slice(0, 10);
+                const lines = await TtDao.getAdviceFleetLines(req.user.location_code, card.vendor_id, shift(s.period_from, -3), shift(s.period_to, 3));
+                const hit = TtService.matchCardRecharges(lines.map(l => ({ ...l, key: l.line_id })),
+                    recharges.map(t => ({ ...t, txn_date: iso(t.txn_date) })));
+                hit.forEach((r, lineId) => {
+                    const l = lines.find(x => x.line_id === lineId);
+                    const t = recharges.find(x => x.txn_id === r.txn_id);
+                    if (t && l) t.advice = `${l.clearing_doc_no} (${fmtDate(l.clearing_date)})`;
+                });
+            }
             res.json({ success: true, statement: s });
         } catch (e) {
             console.error('TT getCardStatement:', e);
@@ -397,7 +413,10 @@ module.exports = {
         try {
             const locationCode = req.user.location_code;
             const cardId = Number(req.params.id);
-            if (!(await TtDao.getCard(locationCode, cardId))) return res.status(404).json({ success: false, error: 'Card not found.' });
+            const existing = await TtDao.getCard(locationCode, cardId);
+            if (!existing) return res.status(404).json({ success: false, error: 'Card not found.' });
+            // SmartFleet Petromiles are not booked (value not known), so its loyalty ledgers are optional
+            const loyaltyOptional = existing.program === 'SMARTFLEET';
             const b = req.body;
             const id = (v) => (v ? Number(v) : null);
             const d = {
@@ -410,8 +429,9 @@ module.exports = {
             if (!d.vendor_id) return res.status(400).json({ success: false, error: 'Link the card to the oil company vendor whose freight is paid onto it.' });
             const [ledgers, expenses] = await Promise.all([TtDao.getLedgerChoices(locationCode), TtDao.getExpenseLedgers(locationCode)]);
             const kindOf = (lid) => (ledgers.find(l => l.ledger_id === lid) || {}).kind;
-            if (kindOf(d.wallet_ledger_id) !== 'asset' || kindOf(d.points_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'Card and loyalty points ledgers must be asset ledgers.' });
-            if (kindOf(d.loyalty_income_ledger_id) !== 'income') return res.status(400).json({ success: false, error: 'Loyalty income ledger must be an income ledger.' });
+            if (kindOf(d.wallet_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'Card ledger must be an asset ledger.' });
+            if ((!loyaltyOptional || d.points_ledger_id) && kindOf(d.points_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'Loyalty points ledger must be an asset ledger.' });
+            if ((!loyaltyOptional || d.loyalty_income_ledger_id) && kindOf(d.loyalty_income_ledger_id) !== 'income') return res.status(400).json({ success: false, error: 'Loyalty income ledger must be an income ledger.' });
             if (d.tds_ledger_id && kindOf(d.tds_ledger_id) !== 'asset') return res.status(400).json({ success: false, error: 'TDS ledger must be an asset ledger (e.g. TDS RECEIVABLE).' });
             if (!expenses.some(l => l.ledger_id === d.diesel_ledger_id)) return res.status(400).json({ success: false, error: 'Diesel ledger must be an expense ledger of this location.' });
             if (d.vendor_id && !(await TtDao.getVendor(locationCode, d.vendor_id))) return res.status(400).json({ success: false, error: 'Vendor not found.' });
