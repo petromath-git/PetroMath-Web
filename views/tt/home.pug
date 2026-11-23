@@ -269,15 +269,19 @@ block content
                     p.small.text-muted
                         | To bank = freight + toll − fleet card − other recovery − TDS. The bank credit is looked for on #{vendor.receipt_bank || 'the vendor\'s receipt bank'} for the same amount within a week of the clearing date; tag it #[strong #{receiptLabel}] in Bank Reconciliation.
 
-            //- ───────────────────────── Fleet card (XTRAPOWER) ─────────────────────────
+            //- ───────────────────────── Fleet card (XTRAPOWER / SmartFleet) ─────────────────────────
             if tab === 'card'
+                - var smartfleet = vendor.oil_company === 'BPCL'
                 .card.mb-3
                     .card-body.py-2
                         .font-weight-bold.mb-1
                             i.bi.bi-credit-card.mr-1
-                            | Upload XTRAPOWER monthly statement PDF
+                            | Upload #{smartfleet ? 'SmartFleet account statement' : 'XTRAPOWER monthly statement'} PDF
                         .small.text-muted.mb-2
-                            | From the XTRAPOWER portal, one file per card per month. It books the card part of #{vendor.oil_company}'s payment (Recharge), the diesel bought on the card (Sale) and the loyalty points (100 points = ₹1) with the TDS #{vendor.oil_company} posts on them.
+                            if smartfleet
+                                | From the SmartFleet portal (Account Statement), one file per month. It books the card part of BPCL's payment (Recharge, the "Loss Recovery" on the payment Excel) and the diesel bought on the card (Sale). Petromiles are kept as points only; they are not booked as income.
+                            else
+                                | From the XTRAPOWER portal, one file per card per month. It books the card part of #{vendor.oil_company}'s payment (Recharge), the diesel bought on the card (Sale) and the loyalty points (100 points = ₹1) with the TDS #{vendor.oil_company} posts on them.
                         .d-flex.flex-wrap.align-items-center
                             input.form-control-file.mr-2.mb-1#cardFile(type="file" accept=".pdf,application/pdf" style="max-width:340px")
                             button.btn.btn-outline-primary.btn-sm.mb-1#cardPreviewBtn(type="button")
@@ -297,7 +301,7 @@ block content
                         button.btn.btn-sm.btn-secondary(type="submit") Show
 
                 if !statements.length
-                    .text-muted.small No XTRAPOWER statements between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
+                    .text-muted.small No fleet card statements between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
                 else
                     .table-responsive
                         table.table.table-sm.table-hover
@@ -322,8 +326,11 @@ block content
                                         td.num= fmtAmt(st.ccms_recharge)
                                         td.num= fmtAmt(st.ccms_sale)
                                         td.num= fmtAmt(st.ccms_closing)
-                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_rs)
-                                        td.num.tt-hide-sm= fmtAmt(st.loyalty_tds_rs)
+                                        if st.program === 'SMARTFLEET'
+                                            td.num.tt-hide-sm.text-muted(colspan="2" title="Petromiles earned this month (points, not booked)") #{Number(st.pts_award).toLocaleString('en-IN')} Petromiles
+                                        else
+                                            td.num.tt-hide-sm= fmtAmt(st.loyalty_rs)
+                                            td.num.tt-hide-sm= fmtAmt(st.loyalty_tds_rs)
                                         td
                                             +glBadge(st)
                                         td.text-nowrap
@@ -332,7 +339,10 @@ block content
                                             button.btn.btn-outline-danger.btn-sm.delete-card-btn(type="button" title="Delete statement" data-id=st.statement_id data-month=fmtDate(st.period_from).substring(3))
                                                 i.bi.bi-trash
                     p.small.text-muted
-                        | Posts on the next Create Accounting run: Recharge → card Dr / #{vendor.debtor_ledger || 'debtor'} Cr · Diesel → TANK TRUCK DIESEL Dr / card Cr · Loyalty → XTRAPOWER LOYALTY POINTS Dr / XTRAPOWER LOYALTY INCOME Cr, and its TDS → TDS RECEIVABLE Dr / points Cr.
+                        if smartfleet
+                            | Posts on the next Create Accounting run: Recharge → card Dr / #{vendor.debtor_ledger || 'debtor'} Cr · Diesel → TANK TRUCK DIESEL Dr / card Cr.
+                        else
+                            | Posts on the next Create Accounting run: Recharge → card Dr / #{vendor.debtor_ledger || 'debtor'} Cr · Diesel → TANK TRUCK DIESEL Dr / card Cr · Loyalty → XTRAPOWER LOYALTY POINTS Dr / XTRAPOWER LOYALTY INCOME Cr, and its TDS → TDS RECEIVABLE Dr / points Cr.
 
             //- ───────────────────────── Reconciliation ─────────────────────────
             //- BPCL: from the payment advices (each one names the trips it pays and what it keeps back)
@@ -385,8 +395,15 @@ block content
                                             if Number(a.unlinked_lines)
                                                 .small.text-warning #{a.unlinked_lines} trip(s) not on a bill
                                         td.num= fmtAmt(a.toll_amount)
-                                        td.num= fmtAmt(a.fleet_card_amount)
-                                        td.num.tt-hide-sm(class=(Math.abs(Number(a.other_recovery)) >= 0.01 ? 'text-warning' : ''))= fmtAmt(a.other_recovery)
+                                        td.num
+                                            | #{fmtAmt(a.fleet_card_amount)}
+                                            if a.cardLines
+                                                if a.cardMatched === a.cardLines
+                                                    .small(class=(Math.abs(a.cardDiff) < 0.01 ? 'text-success' : 'text-warning') title="Recharges on the uploaded SmartFleet statements") card #{fmtAmt(a.cardRecharged)}
+                                                else
+                                                    .small.text-warning #{a.cardLines - a.cardMatched} recharge(s) not on a card statement
+                                        - var paiseOnly = a.cardDiff !== null && Math.abs(a.cardDiff) < 0.01
+                                        td.num.tt-hide-sm(class=(Math.abs(Number(a.other_recovery)) >= 0.01 && !paiseOnly ? 'text-warning' : '') title=(paiseOnly ? 'Paise of the card recharges (the Excel drops them)' : null))= fmtAmt(a.other_recovery)
                                         td.num
                                             | #{fmtAmt(a.tds_amount)}
                                             if Math.abs(a.tdsDiff) >= 1
@@ -411,6 +428,7 @@ block content
                                     td.num= fmtAmt(R.totals.difference)
                     p.small.text-muted
                         | Difference = due to bank − the bank credit found (same amount, within a week of the clearing date). A difference means the credit is not in the uploaded bank statement yet. A yellow row also means the credit is not tagged #{receiptLabel}.
+                        |  Fleet card: the payment file drops the paise of each card recharge, so "card" under it is the exact recharge from the SmartFleet statements (Fleet Card tab); when it covers fleet card + other, the other is just those paise.
 
                 h6.mt-3 Freight bills not paid yet
                 if !R.unpaid.length
@@ -579,7 +597,7 @@ block content
                                 td.num= fmtAmt(statement.closing)
                 p.small.text-muted
                     | Received = bank credits tagged #[strong= receiptLabel] on the bank statement (#{vendor.receipt_bank || 'no receipt bank set'})
-                    | and card recharges from the uploaded XTRAPOWER statements (Fleet Card tab).
+                    | and card recharges from the uploaded fleet card statements (Fleet Card tab).
 
             //- ───────────────────────── Deleted ─────────────────────────
             if tab === 'deleted'
@@ -779,11 +797,12 @@ block content
             //- ───────────────────────── Master: fleet cards ─────────────────────────
             if tab === 'cards'
                 if !cards.length
-                    .text-muted.small No XTRAPOWER fleet card is set up for #{user.location_code}.
+                    .text-muted.small No fleet card is set up for #{user.location_code}.
                 each c in cards
                     - var assets = ledgers.filter(function (x) { return x.kind === 'asset'; })
+                    - var isSf = c.program === 'SMARTFLEET'
                     form.card.mb-3.card-form(data-id=c.card_id)
-                        .card-header.py-2.font-weight-bold XTRAPOWER customer #{c.customer_id}
+                        .card-header.py-2.font-weight-bold #{isSf ? 'SmartFleet account' : 'XTRAPOWER customer'} #{c.customer_id}
                             if c.active_flag !== 'Y'
                                 span.badge.badge-secondary.ml-2 Inactive
                         .card-body
@@ -843,7 +862,10 @@ block content
                                     select.form-control.form-control-sm(name="active_flag")
                                         option(value="Y" selected=(c.active_flag === 'Y')) Active
                                         option(value="N" selected=(c.active_flag !== 'Y')) Inactive
-                            .small.text-muted.mb-2 #{c.statement_count} statement(s) uploaded. Loyalty: #{c.points_per_rupee} points = ₹1.
+                            if isSf
+                                .small.text-muted.mb-2 #{c.statement_count} statement(s) uploaded. Petromiles are kept as points only, so the loyalty ledgers can stay empty.
+                            else
+                                .small.text-muted.mb-2 #{c.statement_count} statement(s) uploaded. Loyalty: #{c.points_per_rupee} points = ₹1.
                             button.btn.btn-primary.btn-sm(type="submit") Save
 
             //- Trips of one bill
@@ -1049,7 +1071,8 @@ block content
                         '<th>#</th><th>Date</th><th>Type</th><th>Shipment / doc</th><th>Truck</th><th>Product</th><th class="num">KL</th>' +
                         '<th class="num">Paid</th><th class="num">Kept back</th><th>Bill</th></tr></thead><tbody>';
                     lines.forEach(function (l) {
-                        var bill = l.line_kind !== 'FREIGHT' ? (l.tracking_no ? '<span class="small text-muted">' + esc(l.tracking_no) + '</span>' : '')
+                        var bill = l.line_kind === 'FLEET_CARD' ? (l.card_recharge != null ? '<span class="small text-muted">card recharge ' + fmt(l.card_recharge) + '</span>' : '')
+                            : l.line_kind !== 'FREIGHT' ? (l.tracking_no ? '<span class="small text-muted">' + esc(l.tracking_no) + '</span>' : '')
                             : l.bill_no ? esc(l.bill_no) + (l.bill_amount != null && Math.abs(Number(l.bill_amount) - Number(l.credit_amount)) > 0.05 ? ' <span class="text-warning small">billed ' + fmt(l.bill_amount) + '</span>' : '')
                             : '<span class="text-warning small">not on an uploaded bill</span>';
                         html += '<tr><td>' + l.sno + '</td><td class="text-nowrap">' + esc(l.date) + '</td><td>' + esc(ADVICE_KIND[l.line_kind] || l.line_kind) + '</td>' +
@@ -1079,6 +1102,10 @@ block content
                             ' = gross <strong>' + fmt(h.gross_amount) + '</strong></td></tr>' +
                             '<tr><td>Kept back: fleet card ' + fmt(t.fleet_card) + (Math.abs(t.other_recovery) >= 0.01 ? ' + other ' + fmt(t.other_recovery) : '') +
                             ' = loss recovery ' + fmt(h.loss_recovery) + ' · TDS ' + fmt(h.tds_amount) + (c.tds_expected != null ? ' (bills\' TDS ' + fmt(c.tds_expected) + ')' : '') + '</td></tr>' +
+                            (c.card && c.card.lines ? '<tr><td>SmartFleet card: ' + c.card.matched + ' of ' + c.card.lines + ' fleet card line(s) found on uploaded card statements' +
+                                (c.card.matched ? ', recharged ₹' + fmt(c.card.recharged) : '') +
+                                (c.card.matched === c.card.lines && Math.abs(c.card.recharged - (t.fleet_card + t.other_recovery)) < 0.01 ? ' <span class="text-success">= fleet card + other, so the other is the paise of the recharges</span>' : '') +
+                                '</td></tr>' : '') +
                             '<tr><td>To bank <strong>₹' + fmt(h.net_amount) + '</strong>' + (c.bills && c.bills.length ? ' · bills ' + esc(c.bills.join(', ')) : '') + '</td></tr>' +
                             '</tbody></table></div>';
                         html += '<details class="mb-2"><summary class="small">' + d.lines.length + ' lines</summary>' + adviceRows(d.lines) + '</details>';
@@ -1134,7 +1161,10 @@ block content
                     txns.forEach(function (t) {
                         var pts = /^LOYALTY/.test(t.kind);
                         html += '<tr' + (pts ? ' class="text-muted"' : '') + '><td>' + t.sno + '</td><td class="text-nowrap">' + esc(t.date) + '</td>' +
-                            '<td>' + esc(KIND[t.kind] || t.kind) + '</td><td>' + esc(t.merchant) + '</td><td>' + esc(t.vehicle_no || '') + '</td>' +
+                            '<td>' + esc(KIND[t.kind] || t.kind) + '</td><td>' + esc(t.merchant) +
+                            (t.advice ? '<div class="small text-muted">BPCL payment ' + esc(t.advice) + '</div>' : t.kind === 'RECHARGE' && t.merchant === 'BPCL' ? '<div class="small text-warning">not on an uploaded BPCL payment</div>' : '') +
+                            (t.points ? '<div class="small text-muted">' + Number(t.points).toLocaleString('en-IN') + ' Petromiles</div>' : '') +
+                            '</td><td>' + esc(t.vehicle_no || '') + '</td>' +
                             '<td>' + esc(t.product || '') + '</td><td class="num">' + (pts ? Number(t.amount).toLocaleString('en-IN') + ' pts' : fmt(t.amount)) + '</td>' +
                             '<td class="num">' + fmt(t.rupees) + '</td><td class="num">' + (pts ? '' : fmt(t.balance)) + '</td></tr>';
                     });
@@ -1145,20 +1175,23 @@ block content
                 function cardForm() { var fd = new FormData(); fd.append('file', cardFile.files[0]); return fd; }
                 var cardPreviewBtn = document.getElementById('cardPreviewBtn');
                 if (cardPreviewBtn) cardPreviewBtn.addEventListener('click', async function () {
-                    if (!cardFile.files.length) return showMessage('Choose the XTRAPOWER statement PDF first.', false);
+                    if (!cardFile.files.length) return showMessage('Choose the card statement PDF first.', false);
                     cardPreviewBtn.disabled = true;
                     cardArea.innerHTML = '<span class="text-muted small">Reading…</span>';
                     try {
                         var d = await call('POST', '/tt/api/card/preview', cardForm(), true);
                         var s = d.summary, c = s.ccms, L = s.loyalty, b = d.booked, html = '';
-                        html += '<div class="small mb-2"><strong>XTRAPOWER ' + esc(s.customer_id) + '</strong> ' + esc(s.customer_name || '') + ' · ' + esc(s.period) + '</div>';
+                        var sf = s.program === 'SMARTFLEET';
+                        html += '<div class="small mb-2"><strong>' + (sf ? 'SmartFleet ' : 'XTRAPOWER ') + esc(s.customer_id) + '</strong> ' + esc(s.customer_name || '') + ' · ' + esc(s.period) + '</div>';
                         d.errors.forEach(function (e) { html += '<div class="alert alert-danger small py-1 mb-1">' + esc(e) + '</div>'; });
                         d.warnings.forEach(function (w) { html += '<div class="alert alert-warning small py-1 mb-1">' + esc(w) + '</div>'; });
+                        var pm = function (n) { return Number(n || 0).toLocaleString('en-IN'); };
                         html += '<div class="table-responsive"><table class="table table-sm table-bordered bg-white mb-2"><tbody>' +
                             '<tr><td>Card: opening ' + fmt(c.opening) + ' + recharge ' + fmt(c.recharge) + ' − sales ' + fmt(c.sale + c.sale_complete) + ' = closing <strong>' + fmt(c.closing) + '</strong></td></tr>' +
-                            (L ? '<tr><td>Loyalty points: opening ' + L.opening + ' + award ' + L.award + ' − redeemed ' + L.redemption + ' − TDS ' + L.tds + ' − expired ' + L.expiry + ' = closing <strong>' + L.closing + '</strong></td></tr>' : '') +
+                            (L && sf ? '<tr><td>Petromiles: opening ' + pm(L.opening) + ' + earned ' + pm(L.award) + (L.redemption ? ' − redeemed ' + pm(L.redemption) : '') + ' = closing <strong>' + pm(L.closing) + '</strong> <span class="text-muted">(points only, not booked)</span></td></tr>'
+                                : L ? '<tr><td>Loyalty points: opening ' + L.opening + ' + award ' + L.award + ' − redeemed ' + L.redemption + ' − TDS ' + L.tds + ' − expired ' + L.expiry + ' = closing <strong>' + L.closing + '</strong></td></tr>' : '') +
                             '<tr><td>Will book: freight recharge <strong>₹' + fmt(b.recharge) + '</strong> · diesel <strong>₹' + fmt(b.diesel) + '</strong>' +
-                            (b.pointsToCard ? ' · points to card ₹' + fmt(b.pointsToCard) : '') + ' · loyalty ₹' + fmt(b.loyalty) + ' · its TDS ₹' + fmt(b.loyaltyTds) + '</td></tr>' +
+                            (b.pointsToCard ? ' · points to card ₹' + fmt(b.pointsToCard) : '') + (sf ? '' : ' · loyalty ₹' + fmt(b.loyalty) + ' · its TDS ₹' + fmt(b.loyaltyTds)) + '</td></tr>' +
                             '</tbody></table></div>';
                         html += '<details class="mb-2"><summary class="small">' + d.txns.length + ' transactions</summary>' + cardRows(d.txns) + '</details>';
                         if (d.status === 'EXISTS') html += '<div class="small text-muted">This statement is already uploaded.</div>';
@@ -1170,7 +1203,7 @@ block content
                             saveCardBtn.disabled = true;
                             try {
                                 await call('POST', '/tt/api/card', cardForm(), true);
-                                sessionStorage.setItem('ttMessage', 'XTRAPOWER statement for ' + s.period + ' saved.');
+                                sessionStorage.setItem('ttMessage', (sf ? 'SmartFleet' : 'XTRAPOWER') + ' statement for ' + s.period + ' saved.');
                                 window.location.reload();
                             } catch (e) { saveCardBtn.disabled = false; showMessage(e.message, false); }
                         });
@@ -1186,7 +1219,7 @@ block content
                         try {
                             var d = await call('GET', '/tt/api/card/' + btn.dataset.id);
                             var s = d.statement;
-                            document.getElementById('tripsTitle').textContent = 'XTRAPOWER ' + s.customer_id + ' · ' + s.period;
+                            document.getElementById('tripsTitle').textContent = (s.program === 'SMARTFLEET' ? 'SmartFleet ' : 'XTRAPOWER ') + s.customer_id + ' · ' + s.period;
                             document.getElementById('tripsBody').innerHTML = cardRows(s.txns);
                             $('#tripsModal').modal('show');
                         } catch (e) { showMessage(e.message, false); }
@@ -1194,7 +1227,7 @@ block content
                 });
                 document.querySelectorAll('.delete-card-btn').forEach(function (btn) {
                     btn.addEventListener('click', async function () {
-                        if (!confirm('Delete the XTRAPOWER statement for ' + btn.dataset.month + '? If it was posted, Create Accounting reverses it.')) return;
+                        if (!confirm('Delete the card statement for ' + btn.dataset.month + '? If it was posted, Create Accounting reverses it.')) return;
                         try {
                             await call('DELETE', '/tt/api/card/' + btn.dataset.id);
                             sessionStorage.setItem('ttMessage', 'Statement deleted.');
