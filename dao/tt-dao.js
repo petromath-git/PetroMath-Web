@@ -443,7 +443,7 @@ const TtDao = {
     }),
 
     getCardStatements: (locationCode, fromDate, toDate) => select(`
-        SELECT s.*, c.customer_id, DATE_FORMAT(s.period_from, '%Y-%m-%d') AS period_from_iso,
+        SELECT s.*, c.customer_id, c.program, DATE_FORMAT(s.period_from, '%Y-%m-%d') AS period_from_iso,
                ROUND((SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'LOYALTY_AWARD') / c.points_per_rupee, 2) AS loyalty_rs,
                ROUND((SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'LOYALTY_TDS') / c.points_per_rupee, 2) AS loyalty_tds_rs,
                (SELECT COALESCE(SUM(x.amount), 0) FROM t_tt_card_txn x WHERE x.statement_id = s.statement_id AND x.kind = 'POINTS_TO_CARD') AS points_to_card,
@@ -459,7 +459,7 @@ const TtDao = {
 
     getCardStatement: async (locationCode, statementId) => {
         const [s] = await select(`
-            SELECT s.*, c.customer_id, c.customer_name FROM t_tt_card_statement s JOIN m_tt_fleet_card c ON c.card_id = s.card_id
+            SELECT s.*, c.customer_id, c.customer_name, c.program FROM t_tt_card_statement s JOIN m_tt_fleet_card c ON c.card_id = s.card_id
             WHERE s.location_code = :locationCode AND s.statement_id = :statementId
         `, { locationCode, statementId });
         if (!s) return null;
@@ -494,7 +494,7 @@ const TtDao = {
 
     // Card recharges from the oil company (the card part of the freight payment) for a vendor
     getCardRecharges: (locationCode, vendorId, fromDate, toDate) => select(`
-        SELECT x.txn_date, x.amount, x.txn_ref, x.merchant, c.customer_id, s.statement_id
+        SELECT x.txn_id, DATE_FORMAT(x.txn_date, '%Y-%m-%d') AS txn_date, x.amount, x.txn_ref, x.merchant, c.customer_id, s.statement_id
         FROM t_tt_card_txn x
         JOIN t_tt_card_statement s ON s.statement_id = x.statement_id
         JOIN m_tt_fleet_card c ON c.card_id = s.card_id
@@ -647,6 +647,17 @@ const TtDao = {
             { replacements: { adviceId }, type: QueryTypes.DELETE });
         return true;
     },
+
+    // "FLEET CARD DEBIT" lines of a vendor's payment advices, by line date
+    getAdviceFleetLines: (locationCode, vendorId, fromDate, toDate) => select(`
+        SELECT al.line_id, al.advice_id, DATE_FORMAT(al.txn_date, '%Y-%m-%d') AS txn_date, al.debit_amount,
+               a.clearing_doc_no, DATE_FORMAT(a.clearing_date, '%Y-%m-%d') AS clearing_date
+        FROM t_tt_payment_advice_line al
+        JOIN t_tt_payment_advice a ON a.advice_id = al.advice_id
+        WHERE a.location_code = :locationCode AND a.vendor_id = :vendorId AND al.line_kind = 'FLEET_CARD'
+          AND al.txn_date BETWEEN :fromDate AND :toDate
+        ORDER BY al.txn_date, al.line_id
+    `, { locationCode, vendorId, fromDate, toDate }),
 
     // Freight bills with how much of them a payment advice has covered: paid = all lines tied
     getBillPaidStatus: (locationCode, invoiceIds) => invoiceIds.length ? select(`

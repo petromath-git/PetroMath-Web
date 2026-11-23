@@ -1912,7 +1912,7 @@ async function processTtCardStatementEvent(event, processedBy) {
     const { location_code, fy_id, source_id: statementId } = event;
 
     const heads = await query(`
-        SELECT cs.statement_id, cs.period_from, cs.period_to, c.customer_id, c.points_per_rupee,
+        SELECT cs.statement_id, cs.period_from, cs.period_to, c.customer_id, c.program, c.points_per_rupee,
                c.wallet_ledger_id, c.points_ledger_id, c.diesel_ledger_id, c.loyalty_income_ledger_id, c.tds_ledger_id,
                v.oil_company, v.debtor_ledger_id
         FROM t_tt_card_statement cs
@@ -1920,17 +1920,19 @@ async function processTtCardStatementEvent(event, processedBy) {
         LEFT JOIN m_tt_vendor v ON v.vendor_id = c.vendor_id
         WHERE cs.statement_id = :statementId
     `, { replacements: { statementId }, type: QueryTypes.SELECT });
-    if (!heads.length) throw new Error(`XTRAPOWER statement not found: statement_id=${statementId}`);
+    if (!heads.length) throw new Error(`Fleet card statement not found: statement_id=${statementId}`);
     const h = heads[0];
     const txns = await query(`
         SELECT kind, txn_date, txn_ref, merchant, vehicle_no, product, amount, rupees
         FROM t_tt_card_txn WHERE statement_id = :statementId ORDER BY sno
     `, { replacements: { statementId }, type: QueryTypes.SELECT });
 
-    const need = (id, what) => { if (!id) throw new Error(`${what} ledger not set for XTRAPOWER card ${h.customer_id} at ${location_code} (Tank Truck Master > Fleet Cards)`); return id; };
+    const need = (id, what) => { if (!id) throw new Error(`${what} ledger not set for fleet card ${h.customer_id} at ${location_code} (Tank Truck Master > Fleet Cards)`); return id; };
     const r2v = (n) => Math.round(parseFloat(n || 0) * 100) / 100;
     const ymd = (d) => String(d instanceof Date ? d.toISOString() : d).substring(0, 10);
-    const card = `XTRAPOWER ${h.customer_id}`;
+    // SmartFleet statements carry no loyalty rows (Petromiles are kept as points only), so only
+    // recharges and diesel post for them
+    const card = `Fleet card ${h.customer_id}`;
     let count = 0, lastVid = null;
     const post = async (date, narration, lines) => {
         lastVid = await createVoucher({
@@ -1944,7 +1946,7 @@ async function processTtCardStatementEvent(event, processedBy) {
         const amt = r2v(t.amount);
         if (!amt) continue;
         if (t.kind === 'RECHARGE') {
-            if (!h.debtor_ledger_id) throw new Error(`XTRAPOWER card ${h.customer_id} is not linked to an oil company vendor with a debtor ledger (Tank Truck Master > Fleet Cards)`);
+            if (!h.debtor_ledger_id) throw new Error(`Fleet card ${h.customer_id} is not linked to an oil company vendor with a debtor ledger (Tank Truck Master > Fleet Cards)`);
             const n = `${card} recharge ${t.txn_ref || ''} by ${t.merchant || h.oil_company} | TT freight paid onto card | ₹${amt.toFixed(2)}`;
             await post(t.txn_date, n, [
                 { ledger_id: need(h.wallet_ledger_id, 'Card'), dr_amount: amt, cr_amount: 0, narration: n },

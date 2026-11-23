@@ -16,8 +16,65 @@ const { parseIoclTransportBill } = require('./tt-invoice-parser');
 const { parseBpclTransportStatement } = require('./tt-bpcl-invoice-parser');
 const { parseBpclPaymentAdvice } = require('./tt-bpcl-advice-parser');
 const { parseXtrapowerStatement } = require('./xtrapower-statement-parser');
+const { parseSmartfleetStatement } = require('./smartfleet-statement-parser');
 
 const r2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const ymd = (d) => (d instanceof Date ? d.toISOString() : String(d || '')).slice(0, 10);
+const addDays = (d, n) => new Date(Date.parse(ymd(d)) + n * 86400000).toISOString().slice(0, 10);
+const dayDiff = (a, b) => Math.round((Date.parse(ymd(a)) - Date.parse(ymd(b))) / 86400000);
+
+// Fleet card lines of a payment advice against the card recharges on uploaded statements.
+// lines: [{ key, txn_date, debit_amount }] -> { byKey: Map(key -> exact recharge), lines, matched, recharged }
+async function cardCheckForAdvice(locationCode, vendorId, lines) {
+    const out = { byKey: new Map(), lines: lines.length, matched: 0, recharged: 0 };
+    if (!lines.length) return out;
+    const dates = lines.map(l => ymd(l.txn_date)).filter(Boolean).sort();
+    if (!dates.length) return out;
+    const recharges = await TtDao.getCardRecharges(locationCode, vendorId, addDays(dates[0], -3), addDays(dates[dates.length - 1], 3));
+    const hit = matchCardRecharges(lines, recharges);
+    hit.forEach((r, key) => { out.byKey.set(key, Number(r.amount)); out.matched++; out.recharged = r2(out.recharged + Number(r.amount)); });
+    return out;
+}
+
+// IOCL XTRAPOWER or BPCL SmartFleet card statement, whichever the file is
+async function parseCardPdf(buffer) {
+    try {
+        const r = await parseXtrapowerStatement(buffer);
+        r.summary.program = 'XTRAPOWER';
+        return r;
+    } catch (e) {
+        if (!/not an XTRAPOWER Monthly Statement/i.test(e.message)) throw e;
+    }
+    try {
+        return await parseSmartfleetStatement(buffer);
+    } catch (e) {
+        if (/not a SmartFleet Account Statement/i.test(e.message)) {
+            throw new Error('This PDF is not a fleet card statement that can be read here. Upload the monthly statement PDF as downloaded from the fleet card portal.');
+        }
+        throw e;
+    }
+}
+
+// BPCL recharges the SmartFleet card out of a freight payment; the AP210 shows each as a
+// "FLEET CARD DEBIT" line without the paise (26,416.79 -> 26,416), dated the day before the
+// recharge or the same day. Pairs each advice fleet-card line with one recharge.
+// lines: [{ key, txn_date, debit_amount }], recharges: [{ txn_id|key, txn_date, amount }]
+// -> Map(line.key -> recharge)
+function matchCardRecharges(lines, recharges) {
+    const used = new Set();
+    const out = new Map();
+    lines.slice().sort((a, b) => ymd(a.txn_date).localeCompare(ymd(b.txn_date))).forEach(l => {
+        const debit = Number(l.debit_amount);
+        const cands = recharges.filter((r, k) => !used.has(k)
+            && Number(r.amount) - debit >= -0.005 && Number(r.amount) - debit < 1
+            && dayDiff(r.txn_date, l.txn_date) >= -1 && dayDiff(r.txn_date, l.txn_date) <= 2);
+        if (!cands.length) return;
+        const best = cands.sort((p, q) => Math.abs(dayDiff(p.txn_date, l.txn_date)) - Math.abs(dayDiff(q.txn_date, l.txn_date)))[0];
+        used.add(recharges.indexOf(best));
+        out.set(l.key, best);
+    });
+    return out;
+}
 
 // IOCL Transportation Bill or BPCL monthly statement, whichever the file is
 async function parseFreightPdf(buffer) {
@@ -30,7 +87,7 @@ async function parseFreightPdf(buffer) {
         return await parseBpclTransportStatement(buffer);
     } catch (e) {
         if (/not a BPCL tank truck statement/i.test(e.message)) {
-            throw new Error('This PDF is neither an IOCL Transportation Bill nor a BPCL tank truck statement.');
+            throw new Error('This PDF is not a tank truck freight bill or statement that can be read here. Upload the PDF as received from the oil company.');
         }
         throw e;
     }
@@ -155,19 +212,25 @@ async function saveFromPdf(locationCode, buffer, fileName, by) {
     return { saved: toSave.map(b => b.bill_no), skipped };
 }
 
-// ── XTRAPOWER fleet card statement ──────────────────────────────────────────
+// ── Fleet card statement (IOCL XTRAPOWER / BPCL SmartFleet) ─────────────────
 // Returns { summary, card, txns (with rupees), status, errors[], warnings[] }.
 // status: NEW, EXISTS (this card + period already uploaded), BEFORE_START.
+// SmartFleet: Petromiles are kept on the statement as points only (their rupee value is not
+// known yet), so no loyalty rows are booked; each recharge is paired with its payment advice.
 async function buildCardFromPdf(locationCode, buffer) {
-    const parsed = await parseXtrapowerStatement(buffer);
+    const parsed = await parseCardPdf(buffer);
     const s = parsed.summary;
+    const program = s.program;
     const errors = [];
     const warnings = parsed.warnings.slice();
     const card = await TtDao.getCardByCustomerId(locationCode, s.customer_id);
     if (!card) {
-        errors.push(`XTRAPOWER customer ${s.customer_id} (${s.customer_name || ''}) is not set up as a fleet card for ${locationCode}. Add it in Masters > Tank Truck Master > Fleet Cards, or upload it at the location it belongs to.`);
+        errors.push(`Fleet card ${s.customer_id} (${s.customer_name || ''}) is not set up as a fleet card for ${locationCode}. Add it in Masters > Tank Truck Master > Fleet Cards, or upload it at the location it belongs to.`);
+    } else if ((card.program || 'XTRAPOWER') !== program) {
+        errors.push(`Card ${s.customer_id} is set up for a different fleet card type than this statement. Check the card in Tank Truck Master.`);
     } else {
-        if (!card.wallet_ledger_id || !card.points_ledger_id || !card.diesel_ledger_id || !card.loyalty_income_ledger_id) {
+        const needLoyalty = program !== 'SMARTFLEET';
+        if (!card.wallet_ledger_id || !card.diesel_ledger_id || (needLoyalty && (!card.points_ledger_id || !card.loyalty_income_ledger_id))) {
             warnings.push('Some ledgers are not set for this card in Tank Truck Master; Create Accounting will fail until they are.');
         }
         if (!card.vendor_id) warnings.push('The card is not linked to an oil company vendor, so recharges cannot clear the freight debtor.');
@@ -197,6 +260,23 @@ async function buildCardFromPdf(locationCode, buffer) {
         const others = veh.filter(v => v !== own);
         if (own && others.length) warnings.push(`Sales on other vehicles (${others.join(', ')}) are booked as tank truck diesel too.`);
     }
+    if (program === 'SMARTFLEET' && card && card.vendor_id) {
+        const recharges = txns.filter(t => t.kind === 'RECHARGE');
+        if (recharges.length) {
+            const lines = await TtDao.getAdviceFleetLines(locationCode, card.vendor_id,
+                addDays(s.period_from, -3), addDays(s.period_to, 3));
+            const hit = matchCardRecharges(lines.map(l => ({ ...l, key: l.line_id })), recharges);
+            const byTxn = new Map(Array.from(hit.entries()).map(([lineId, r]) => [r, lines.find(l => l.line_id === lineId)]));
+            recharges.forEach(t => {
+                const l = byTxn.get(t);
+                t.advice = l ? { clearing_doc_no: l.clearing_doc_no, clearing_date: ymd(l.clearing_date), debit_amount: Number(l.debit_amount) } : null;
+            });
+            const missing = recharges.filter(t => !t.advice);
+            if (missing.length) {
+                warnings.push(`${missing.length} recharge(s) (${missing.map(t => t.amount.toFixed(2)).join(', ')}) are not on an uploaded payment advice yet. Upload the payment Excel in the Payments tab to tie them up.`);
+            }
+        }
+    }
     return { summary: s, card, txns, status, errors, warnings };
 }
 
@@ -218,7 +298,7 @@ async function saveCardFromPdf(locationCode, buffer, fileName, by) {
         file_name: fileName ? String(fileName).substring(0, 200) : null
     }, r.txns.map(t => ({
         sno: t.sno, kind: t.kind, txn_type: t.txn_type ? t.txn_type.substring(0, 50) : null, txn_ref: t.txn_ref ? t.txn_ref.substring(0, 30) : null,
-        txn_date: t.txn_date, txn_time: t.txn_time && t.txn_time.length > 10 ? t.txn_time : null, settle_date: t.settle_date,
+        txn_date: t.txn_date, txn_time: t.txn_time && t.txn_time.length > 10 ? t.txn_time : null, settle_date: t.settle_date || null,
         merchant: t.merchant ? t.merchant.substring(0, 100) : null, merchant_pan: t.merchant_pan ? t.merchant_pan.substring(0, 15) : null,
         location: t.location ? t.location.substring(0, 100) : null, card_no: t.card_no ? t.card_no.substring(0, 25) : null,
         vehicle_no: t.vehicle_no ? t.vehicle_no.substring(0, 20) : null, product: t.product ? t.product.substring(0, 100) : null,
@@ -239,7 +319,7 @@ async function buildAdviceFromExcel(locationCode, buffer) {
 
     const vendor = await TtDao.getVendorByCode(locationCode, parsed.oil_company, h.vendor_code);
     if (!vendor) {
-        errors.push(`No active BPCL transporter with vendor code ${h.vendor_code} is set up for ${locationCode}. Upload it at the location it belongs to, or add the vendor in Tank Truck Master.`);
+        errors.push(`No active ${parsed.oil_company || 'oil company'} transporter with vendor code ${h.vendor_code} is set up for ${locationCode}. Upload it at the location it belongs to, or add the vendor in Tank Truck Master.`);
         return { header: h, vendor: null, lines: parsed.lines, totals: parsed.totals, checks: {}, status: 'NEW', errors, warnings };
     }
     const status = (await TtDao.getAdviceByClearingDoc(locationCode, vendor.vendor_id, h.clearing_doc_no)) ? 'EXISTS' : 'NEW';
@@ -263,7 +343,7 @@ async function buildAdviceFromExcel(locationCode, buffer) {
         return { ...l, invoice_id: hit.invoice_id, invoice_line_id: hit.line_id, bill_no: hit.bill_no };
     });
     if (unmatched) {
-        warnings.push(`${unmatched} of ${freight.length} freight line(s) are not on any uploaded bill yet. Upload BPCL's statement PDF for those trips; they are tied up automatically when it is uploaded.`);
+        warnings.push(`${unmatched} of ${freight.length} freight line(s) are not on any uploaded bill yet. Upload the oil company's statement PDF for those trips; they are tied up automatically when it is uploaded.`);
     }
 
     const t = parsed.totals;
@@ -286,8 +366,21 @@ async function buildAdviceFromExcel(locationCode, buffer) {
     if (Math.abs(checks.tds_diff) >= 1) {
         warnings.push(`TDS deducted is ${h.tds_amount.toFixed(2)}; the bills' TDS (${tdsPercent}% per invoice) comes to ${tdsExpected.toFixed(2)}, a difference of ${checks.tds_diff.toFixed(2)}.`);
     }
-    if (Math.abs(t.other_recovery) >= 0.01) {
-        warnings.push(`Loss Recovery is ${h.loss_recovery.toFixed(2)} but the fleet card lines add up to ${t.fleet_card.toFixed(2)}; ${t.other_recovery.toFixed(2)} is recovered for something the file does not list.`);
+    // Fleet card lines show the recharge without paise; the uploaded SmartFleet statements give the
+    // exact recharge, which should make up the Loss Recovery to the paisa.
+    const card = await cardCheckForAdvice(locationCode, vendor.vendor_id,
+        lines.map((l, k) => ({ ...l, key: k })).filter(l => l.line_kind === 'FLEET_CARD'));
+    lines.forEach((l, k) => { if (card.byKey.has(k)) l.card_recharge = card.byKey.get(k); });
+    checks.card = { lines: card.lines, matched: card.matched, recharged: card.recharged };
+    const fullyMatched = card.lines > 0 && card.matched === card.lines;
+    if (fullyMatched && Math.abs(r2(card.recharged + t.other_debit) - h.loss_recovery) < 0.01) {
+        // explained: the residue is the paise of the recharges
+    } else if (Math.abs(t.other_recovery) >= 0.01) {
+        const paise = t.other_recovery > 0 && t.other_recovery < card.lines;
+        warnings.push(`Loss Recovery is ${h.loss_recovery.toFixed(2)} but the fleet card lines add up to ${t.fleet_card.toFixed(2)}; ` +
+            (paise
+                ? `the ${t.other_recovery.toFixed(2)} is most likely the paise of the card recharges (this file drops them). Upload the fleet card statements in the Fleet Card tab to confirm.`
+                : `${t.other_recovery.toFixed(2)} is recovered for something the file does not list.`));
     }
     return { header: h, vendor, lines, totals: t, checks, status, errors, warnings };
 }
@@ -324,10 +417,33 @@ async function buildBpclReconciliation(locationCode, vendor, fromDate, toDate) {
         TtDao.getInvoices(locationCode, fromDate, toDate),
     ]);
     const bills = allBills.filter(b => b.vendor_id === vendor.vendor_id);
-    const payments = advices.filter(a => a.vendor_id === vendor.vendor_id).map(a => {
+    const mine = advices.filter(a => a.vendor_id === vendor.vendor_id);
+    // Fleet card lines of these payments against the SmartFleet recharges
+    const cardBy = new Map();
+    if (mine.length) {
+        const ds = mine.map(a => a.clearing_date_iso).sort();
+        const ids = new Set(mine.map(a => a.advice_id));
+        const fleet = (await TtDao.getAdviceFleetLines(locationCode, vendor.vendor_id, addDays(ds[0], -90), ds[ds.length - 1]))
+            .filter(l => ids.has(l.advice_id));
+        const dates = fleet.map(l => ymd(l.txn_date)).sort();
+        const recharges = fleet.length ? await TtDao.getCardRecharges(locationCode, vendor.vendor_id, addDays(dates[0], -3), addDays(dates[dates.length - 1], 3)) : [];
+        const hit = matchCardRecharges(fleet.map(l => ({ ...l, key: l.line_id })), recharges);
+        fleet.forEach(l => {
+            const c = cardBy.get(l.advice_id) || { lines: 0, matched: 0, recharged: 0 };
+            c.lines++;
+            const r = hit.get(l.line_id);
+            if (r) { c.matched++; c.recharged = r2(c.recharged + Number(r.amount)); }
+            cardBy.set(l.advice_id, c);
+        });
+    }
+    const payments = mine.map(a => {
         const bank = a.bank_txn_id ? Number(a.net_amount) : 0;
+        const c = cardBy.get(a.advice_id) || { lines: 0, matched: 0, recharged: 0 };
         return {
             ...a,
+            cardLines: c.lines, cardMatched: c.matched, cardRecharged: c.recharged,
+            // Loss Recovery not explained by the recharges (fleet card + residue − recharged)
+            cardDiff: c.lines && c.matched === c.lines ? r2(Number(a.fleet_card_amount) + Number(a.other_recovery) - c.recharged) : null,
             bank,
             difference: r2(Number(a.net_amount) - bank),
             tdsDiff: r2(Number(a.tds_amount) - Number(a.tds_expected)),
@@ -346,6 +462,7 @@ async function buildBpclReconciliation(locationCode, vendor, fromDate, toDate) {
     const totals = {
         freight: sum(payments, a => Number(a.freight_amount)), toll: sum(payments, a => Number(a.toll_amount)),
         tds: sum(payments, a => Number(a.tds_amount)), card: sum(payments, a => Number(a.fleet_card_amount)),
+        cardRecharged: sum(payments, a => a.cardRecharged),
         other: sum(payments, a => Number(a.other_recovery)), net: sum(payments, a => Number(a.net_amount)),
         bank: sum(payments, a => a.bank), difference: sum(payments, a => a.difference),
     };
@@ -410,4 +527,4 @@ async function buildReconciliation(locationCode, vendorId, fromDate, toDate) {
 }
 
 module.exports = { buildFromPdf, saveFromPdf, computeAmounts, buildCardFromPdf, saveCardFromPdf, buildReconciliation,
-    buildAdviceFromExcel, saveAdviceFromExcel, buildBpclReconciliation };
+    buildAdviceFromExcel, saveAdviceFromExcel, buildBpclReconciliation, matchCardRecharges };
