@@ -130,10 +130,10 @@ block content
                             label.btn.btn-outline-secondary.btn-sm.mr-2.mb-1(for="einvoiceFile")
                                 i.bi.bi-upload.mr-1
                                 | Upload portal result
-                            input#einvoiceFile(type="file" accept=".json,.xlsx,.xls" style="display:none")
+                            input#einvoiceFile(type="file" accept=".json,.zip,.xlsx,.xls" style="display:none")
                         .small.text-muted
                             | 1) Download the JSON and upload it on einvoice1.gst.gov.in → e-Invoice → Bulk Upload.
-                            | 2) Download the result there (JSON or Excel) and upload it here: the IRN and QR then print on the invoice PDF.
+                            | 2) Download the result there (Excel, a JSON file, or the whole JSON zip) and upload it here: the IRN and QR then print on the invoice PDF.
 
                 p.small.text-muted.mb-2
                     | #[strong Create drafts] makes one draft per tenant active in #{monthLabel} with the rent from the tenant master.
