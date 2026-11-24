@@ -115,6 +115,23 @@ function pick(obj, names) {
     return null;
 }
 
+// The IRP's signed JSON (e.g. each file in the portal's result zip) has only
+// Irn, AckNo, AckDt, SignedInvoice and SignedQRCode in plain text; the document
+// number and buyer GSTIN are inside the signed JWTs, whose payload is
+// { data: "<JSON string>" }. Read that payload (no signature check: the IRN
+// itself is what we store and it is matched against our own invoice).
+function jwtData(token) {
+    try {
+        const parts = String(token || '').trim().split('.');
+        if (parts.length !== 3) return null;
+        const payload = JSON.parse(Buffer.from(parts[1].replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+        const data = typeof payload.data === 'string' ? JSON.parse(payload.data) : payload.data;
+        return data && typeof data === 'object' ? data : null;
+    } catch (e) {
+        return null;
+    }
+}
+
 function toRecord(obj) {
     // flatten one level (e.g. { DocDtls: { No } } or { Data: { Irn } })
     const flat = { ...obj };
@@ -123,6 +140,19 @@ function toRecord(obj) {
     }
     if (flat.DocDtls && flat.DocDtls.No) flat.DocNo = flat.DocDtls.No;
     if (flat.BuyerDtls && flat.BuyerDtls.Gstin) flat.BuyerGstin = flat.BuyerDtls.Gstin;
+    // Document number / buyer GSTIN only inside the signed QR or signed invoice
+    if (!pick(flat, KEYS.docNo) || !pick(flat, KEYS.buyerGstin)) {
+        const qr = jwtData(pick(flat, KEYS.qr));
+        const signed = jwtData(pick(flat, ['signedinvoice']));
+        const fromJwt = {
+            DocNo: (qr && qr.DocNo) || (signed && signed.DocDtls && signed.DocDtls.No),
+            BuyerGstin: (qr && qr.BuyerGstin) || (signed && signed.BuyerDtls && signed.BuyerDtls.Gstin),
+            Irn: (qr && qr.Irn) || (signed && signed.Irn),
+        };
+        for (const [k, v] of Object.entries(fromJwt)) {
+            if (v && !pick(flat, KEYS[k === 'DocNo' ? 'docNo' : k === 'Irn' ? 'irn' : 'buyerGstin'])) flat[k] = v;
+        }
+    }
     const irn = pick(flat, KEYS.irn);
     const docNo = pick(flat, KEYS.docNo);
     if (!irn || !/^[0-9a-f]{64}$/i.test(irn) || !docNo) return null;
@@ -144,8 +174,22 @@ function collectJson(node, out) {
     else Object.values(node).forEach(v => collectJson(v, out));
 }
 
-// Returns [{ docNo, irn, ackNo, ackDt, signedQr, buyerGstin }]
+// Returns [{ docNo, irn, ackNo, ackDt, signedQr, buyerGstin }]. A .zip (the
+// portal's bulk download, one JSON per invoice) is read file by file.
 function parseResultFile(buffer, filename) {
+    if (/\.zip$/i.test(filename)) {
+        const zip = XLSX.CFB.read(buffer, { type: 'buffer' });
+        const seen = new Set();
+        const out = [];
+        zip.FileIndex.forEach((entry, i) => {
+            const name = zip.FullPaths[i];
+            if (entry.type !== 2 || !entry.content || !/\.(json|xlsx|xls)$/i.test(name)) return;
+            for (const rec of parseResultFile(Buffer.from(entry.content), name)) {
+                if (!seen.has(rec.irn)) { seen.add(rec.irn); out.push(rec); }
+            }
+        });
+        return out;
+    }
     const out = [];
     if (/\.json$/i.test(filename)) {
         collectJson(JSON.parse(buffer.toString('utf8').replace(/^﻿/, '')), out);
