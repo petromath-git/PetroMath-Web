@@ -40,6 +40,14 @@ const OilInvoiceDao = {
         return b || null;
     },
 
+    // Per location: the recipient names IOCL prints on its LFR invoices (the payer code on an LFR proves
+    // the bunk) and on its other charge invoices. Rows: { location_code, recipient_name, is_lfr }.
+    getRecipientNames: (locationCodes) => select(`
+        SELECT DISTINCT location_code, recipient_name, (charge_code = 'LFR') AS is_lfr
+        FROM t_oil_co_invoice
+        WHERE location_code IN (:codes) AND recipient_name IS NOT NULL AND recipient_name <> ''
+    `, { codes: locationCodes && locationCodes.length ? locationCodes : ['__none__'] }),
+
     getExistingInvoiceNos: async (locationCode, invoiceNos) => {
         if (!invoiceNos.length) return new Map();
         const rows = await select(`

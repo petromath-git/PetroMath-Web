@@ -4,10 +4,11 @@
 // that mailbox over IMAP with a Gmail App Password and, for every PDF attachment:
 //   - not an IOCL charge invoice (fuel invoice, payment receipt, payment advice ...) -> NOT_INVOICE
 //   - a charge invoice -> the bunk is the one of this mailbox's bunks whose GSTIN is the invoice's
-//     recipient GSTIN (the LFR payer code decides between bunks sharing a GSTIN), then it is saved
+//     recipient GSTIN (bunks sharing one: by the LFR payer code, else by the printed name), then it is saved
 //     with OilInvoiceService.saveFiles, the same path as an upload: same checks, same duplicate block.
 // Every PDF read gets a row in t_oil_invoice_email_log, so it is never read twice; a mail whose PDFs
-// are all logged gets the Gmail label "PetroMath-Read" and later searches leave it out. Nothing is
+// are all logged gets the Gmail label "PetroMath-Read" and later searches leave it out; a refused PDF is
+// tried again when that label is taken off its mail. Nothing is
 // deleted or marked read in the mailbox. A failure that may pass (DB error, connection drop) is not
 // logged, so the next run tries that PDF again.
 const { ImapFlow } = require('imapflow');
@@ -48,8 +49,15 @@ async function streamToBuffer(stream, limit) {
     return Buffer.concat(chunks);
 }
 
-// Bunk for a parsed invoice among the mailbox's bunks. Returns { location, reason }.
-async function pickLocation(parsed, locations) {
+// "Name <a@b.in>" -> a@b.in; null for IOCL's own address (an auto-forwarded mail keeps it, so it tells nothing).
+function forwarder(mailFrom) {
+    const m = /<([^>]+)>/.exec(String(mailFrom || ''));
+    const addr = (m ? m[1] : String(mailFrom || '')).trim().toLowerCase();
+    return addr.includes('@') && !/@(.+\.)?indianoil\.in$/.test(addr) ? addr : null;
+}
+
+// Bunk for a parsed invoice among the mailbox's bunks. src: { mailboxId, mailFrom }. Returns { location, reason }.
+async function pickLocation(parsed, locations, src) {
     const gstin = String(parsed.recipient_gstin || '').toUpperCase();
     if (!gstin) return { location: null, reason: 'The invoice has no recipient GSTIN.' };
     const hits = [];
@@ -67,7 +75,19 @@ async function pickLocation(parsed, locations) {
             if (acct && String(acct.account_number || '').trim().endsWith(parsed.payer_code)) return { location: loc };
         }
     }
-    return { location: null, reason: `Bunks ${hits.join(', ')} share GSTIN ${gstin}, so PetroMath cannot tell which one this invoice is for. Upload it at the right bunk.` };
+    const shared = `Bunks ${hits.join(', ')} share GSTIN ${gstin}.`;
+    if (parsed.payer_code) return { location: null, reason: `${shared} IOCL customer ${parsed.payer_code} is none of their SAP accounts. Upload it at the right bunk.` };
+    const named = await OilInvoiceService.bunkByName(parsed, hits);
+    if (!named.location) return { location: null, reason: `${shared} ${named.reason} Upload it at the right bunk.` };
+    // forwarded by hand from a bunk's own address: that address must not be another bunk's
+    const sender = src && forwarder(src.mailFrom);
+    if (sender) {
+        const from = await MailboxDao.getLfrLocationsBySender(src.mailboxId, sender, hits);
+        if (from.length === 1 && from[0] !== named.location) {
+            return { location: null, reason: `${shared} The name on the invoice (${parsed.recipient_name}) is ${named.location}'s, but the mail came from ${from[0]}'s address. Upload it at the right bunk.` };
+        }
+    }
+    return { location: named.location };
 }
 
 // The one bunk (of the mailbox's) whose GSTIN is among those printed on a PDF; null if none or several.
@@ -82,7 +102,7 @@ async function locationByGstins(gstins, locations) {
 }
 
 // One PDF -> log row fields (status, location_code, invoice_no, invoice_id, detail).
-async function importPdf(buffer, fileName, locations, by) {
+async function importPdf(buffer, fileName, locations, by, src) {
     let parsed;
     try {
         parsed = await parseOilChargeInvoice(buffer);
@@ -93,8 +113,8 @@ async function importPdf(buffer, fileName, locations, by) {
         }
         return { status: 'ERROR', detail: e.message };
     }
-    const { location, reason } = await pickLocation(parsed, locations);
-    if (!location) return { status: 'BLOCKED', invoice_no: parsed.invoice_no, detail: reason };
+    const { location, reason } = await pickLocation(parsed, locations, src);
+    if (!location) return { status: 'BLOCKED', invoice_no: parsed.invoice_no, recipient_gstin: parsed.recipient_gstin, detail: reason };
 
     let r;
     try {
@@ -194,7 +214,8 @@ async function runMailbox(mailboxId, by) {
                         const dl = await client.download(m.uid, p.part, { uid: true });
                         if (!dl || !dl.content) throw new Error('Attachment could not be downloaded');
                         const buffer = await streamToBuffer(dl.content, MAX_PDF_BYTES);
-                        result = await importPdf(buffer, p.file_name, locations, by === 'AUTO' ? 'EMAIL' : by);
+                        result = await importPdf(buffer, p.file_name, locations, by === 'AUTO' ? 'EMAIL' : by,
+                            { mailboxId, mailFrom: from });
                     } catch (e) {
                         if (!e.permanent) { allDone = false; console.error(`OilInvoiceEmail: ${box.email_address} uid ${m.uid} part ${p.part}:`, e.message); continue; }
                         result = { status: 'ERROR', detail: e.message };
@@ -279,7 +300,7 @@ async function receiveFromScript(box, payload) {
         try {
             const buffer = Buffer.from(String(f.data || ''), 'base64');
             result = buffer.length > MAX_PDF_BYTES ? { status: 'ERROR', detail: 'PDF larger than 5 MB' }
-                : await importPdf(buffer, fileName, locations, 'EMAIL');
+                : await importPdf(buffer, fileName, locations, 'EMAIL', { mailboxId: box.mailbox_id, mailFrom: payload.from });
         } catch (e) {
             console.error(`OilInvoiceEmail: script mailbox ${box.email_address} ${fileName}:`, e.message);
             done = false; // DB trouble: the script sends the mail again next hour

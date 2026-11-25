@@ -11,6 +11,7 @@
 //            type, from 10 days before to 60 days after the invoice date, nearest first
 //   NONE     VMUS: deducted from the tank truck freight payment, never on the SAP account
 const OilInvoiceDao = require('../dao/oil-invoice-dao');
+const MailboxDao = require('../dao/oil-invoice-mailbox-dao');
 const GstConfigDao = require('../dao/gst-config-dao');
 const { parseOilChargeInvoice } = require('./oil-charge-invoice-parser');
 
@@ -39,6 +40,30 @@ function combinedSapPattern(types) {
     return parts.length ? parts.map(p => `(${p})`).join('|') : '^$';
 }
 
+const normName = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+
+// IOCL bunks sharing a GSTIN (the "GST INVOICE" layout has no customer code): which one an invoice is
+// for, by the recipient name IOCL prints ("MUTHU CORPORATION" / "MUTHU CORPORATION UNIT II"). The names
+// come from each bunk's LFR invoices, where the payer code proves the bunk. Returns { location, reason }.
+// A name that begins another bunk's longer name counts only once that other bunk has a non-LFR invoice
+// under its longer name: proof that IOCL prints the full name on this layout too.
+async function bunkByName(parsed, candidates) {
+    const printed = normName(parsed.recipient_name);
+    const rows = (await OilInvoiceDao.getRecipientNames(candidates)).map(r => ({ ...r, name: normName(r.recipient_name) }));
+    const lfrNames = new Map(candidates.map(loc => [loc, new Set(rows.filter(r => r.location_code === loc && Number(r.is_lfr)).map(r => r.name))]));
+    const without = candidates.filter(loc => !lfrNames.get(loc).size);
+    if (without.length) return { location: null, reason: `No LFR invoice of ${without.join(', ')} is in PetroMath yet, so the name on the invoice cannot be checked.` };
+    const hits = printed ? candidates.filter(loc => lfrNames.get(loc).has(printed)) : [];
+    if (hits.length !== 1) return { location: null, reason: `The name on the invoice (${parsed.recipient_name || 'none'}) does not point to one bunk.` };
+    for (const other of candidates.filter(loc => loc !== hits[0])) {
+        const longer = [...lfrNames.get(other)].filter(n => n.startsWith(printed + ' '));
+        if (longer.length && !rows.some(r => r.location_code === other && !Number(r.is_lfr) && longer.includes(r.name))) {
+            return { location: null, reason: `The name on the invoice (${parsed.recipient_name}) is ${hits[0]}'s, but ${other} has no invoice of this kind under its own name yet, so the two cannot be told apart.` };
+        }
+    }
+    return { location: hits[0] };
+}
+
 // Reads every file and works out what would be saved. Returns
 // { account, files: [{ file_name, status, error, problems[], warnings[], charge_code, charge_name, invoice }] }
 // status: NEW, EXISTS (already uploaded, or twice in this upload), BLOCKED (see problems), ERROR (unreadable).
@@ -50,6 +75,13 @@ async function buildFromFiles(locationCode, files) {
     ]);
     const ownGstin = gstConfig ? String(gstConfig.gstin || '').trim().toUpperCase() : '';
     const acctPayer = account && /(\d{5,8})$/.exec(String(account.account_number || '').trim());
+
+    // IOCL bunks on this bunk's GSTIN (itself included)
+    let sharing = [];
+    if (ownGstin) {
+        const same = (await GstConfigDao.findAllActive()).filter(c => String(c.gstin || '').trim().toUpperCase() === ownGstin).map(c => c.location_code);
+        if (same.length > 1) sharing = (await MailboxDao.getIoclLocations(same)).map(r => r.location_code);
+    }
 
     const out = [];
     for (const f of files.slice(0, MAX_FILES)) {
@@ -72,6 +104,12 @@ async function buildFromFiles(locationCode, files) {
             }
             if (p.payer_code && acctPayer && acctPayer[1] !== p.payer_code && !String(account.account_number).endsWith(p.payer_code)) {
                 r.problems.push(`This LFR invoice is for IOCL customer ${p.payer_code}, but ${locationCode}'s SAP account is ${account.account_number}. Upload it at the bunk it belongs to.`);
+            }
+            if (!p.payer_code && p.recipient_gstin === ownGstin && sharing.length > 1 && sharing.includes(locationCode)) {
+                const named = await bunkByName(p, sharing);
+                if (named.location && named.location !== locationCode) {
+                    r.problems.push(`This invoice is made out to ${p.recipient_name}, which is ${named.location}. Upload it there.`);
+                }
             }
             if (type && type.charge_code === 'OTHER') {
                 r.warnings.push(`"${p.service_head}" is not a known charge type; it is saved as "${type.charge_name}" and linked by amount and date only.`);
@@ -230,4 +268,4 @@ async function getLfrCheck(locationCode, fromDate, toDate) {
     return { invoices };
 }
 
-module.exports = { buildFromFiles, saveFiles, linkPending, getSapCharges, getLfrCheck, chargeTypeOf, MAX_FILES };
+module.exports = { bunkByName, buildFromFiles, saveFiles, linkPending, getSapCharges, getLfrCheck, chargeTypeOf, MAX_FILES };

@@ -16,6 +16,7 @@ const security = require('../utils/app-security');
 const secretBox = require('../utils/secret-box');
 const MailboxDao = require('../dao/oil-invoice-mailbox-dao');
 const EmailService = require('../services/oil-invoice-email-service');
+const GstConfigDao = require('../dao/gst-config-dao');
 
 const isIsoDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v || ''));
 const fmtAmt = (n) => Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -104,7 +105,8 @@ module.exports = {
             if (tab === 'email') {
                 // only this bunk's PDFs; the mailboxes themselves are set up in Administration > IOCL Mail Import
                 const showOther = req.query.other === '1';
-                const log = await MailboxDao.getLogForLocation(locationCode, showOther, 300);
+                const gst = await GstConfigDao.findByLocationCode(locationCode);
+                const log = await MailboxDao.getLogForLocation(locationCode, gst ? String(gst.gstin || '').trim().toUpperCase() : null, showOther, 300);
                 return res.render('oil-invoices/home', { ...data, log, showOther, fmtDateTime });
             }
             const [invoices, types] = await Promise.all([
