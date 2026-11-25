@@ -98,47 +98,67 @@ const OilInvoiceMailboxDao = {
     `, { replacements: { mailboxId, status, message: String(message || '').substring(0, 500) } }),
 
     // ── Log ──────────────────────────────────────────────────────────────────
-    // message_key|part_id already read from this mailbox, for the given mails.
+    // message_key|part_id already dealt with from this mailbox, for the given mails. A refused PDF
+    // (BLOCKED / ERROR) is left out: when its mail is sent again it gets another try.
     getLoggedParts: async (mailboxId, messageKeys) => {
         if (!messageKeys.length) return new Set();
         const rows = await select(`
             SELECT message_key, part_id FROM t_oil_invoice_email_log
-            WHERE mailbox_id = :mailboxId AND message_key IN (:messageKeys)
+            WHERE mailbox_id = :mailboxId AND message_key IN (:messageKeys) AND status NOT IN ('BLOCKED', 'ERROR')
         `, { mailboxId, messageKeys });
         return new Set(rows.map(r => `${r.message_key}|${r.part_id}`));
     },
 
+    // One row per PDF. A second try at a refused PDF replaces its row; any other row is never changed.
     addLog: async (row) => {
+        const replacements = {
+            mailbox_id: row.mailbox_id, message_key: String(row.message_key).substring(0, 255), part_id: row.part_id,
+            mail_date: row.mail_date || null, mail_from: row.mail_from ? String(row.mail_from).substring(0, 200) : null,
+            subject: row.subject ? String(row.subject).substring(0, 300) : null,
+            file_name: row.file_name ? String(row.file_name).substring(0, 200) : null,
+            status: row.status, location_code: row.location_code || null, invoice_no: row.invoice_no || null,
+            invoice_id: row.invoice_id || null,
+            recipient_gstin: row.recipient_gstin ? String(row.recipient_gstin).substring(0, 15) : null,
+            detail: row.detail ? String(row.detail).substring(0, 500) : null, created_by: row.created_by || 'AUTO'
+        };
         try {
             await db.sequelize.query(`
                 INSERT INTO t_oil_invoice_email_log
-                    (mailbox_id, message_key, part_id, mail_date, mail_from, subject, file_name, status, location_code, invoice_no, invoice_id, detail, created_by)
-                VALUES (:mailbox_id, :message_key, :part_id, :mail_date, :mail_from, :subject, :file_name, :status, :location_code, :invoice_no, :invoice_id, :detail, :created_by)
-            `, { replacements: {
-                mailbox_id: row.mailbox_id, message_key: String(row.message_key).substring(0, 255), part_id: row.part_id,
-                mail_date: row.mail_date || null, mail_from: row.mail_from ? String(row.mail_from).substring(0, 200) : null,
-                subject: row.subject ? String(row.subject).substring(0, 300) : null,
-                file_name: row.file_name ? String(row.file_name).substring(0, 200) : null,
-                status: row.status, location_code: row.location_code || null, invoice_no: row.invoice_no || null,
-                invoice_id: row.invoice_id || null, detail: row.detail ? String(row.detail).substring(0, 500) : null,
-                created_by: row.created_by || 'AUTO'
-            } });
+                    (mailbox_id, message_key, part_id, mail_date, mail_from, subject, file_name, status, location_code, invoice_no, invoice_id, recipient_gstin, detail, created_by)
+                VALUES (:mailbox_id, :message_key, :part_id, :mail_date, :mail_from, :subject, :file_name, :status, :location_code, :invoice_no, :invoice_id, :recipient_gstin, :detail, :created_by)
+            `, { replacements });
         } catch (e) {
-            if (!(e.parent && e.parent.code === 'ER_DUP_ENTRY')) throw e; // another run logged it a moment ago
+            if (!(e.parent && e.parent.code === 'ER_DUP_ENTRY')) throw e;
+            await db.sequelize.query(`
+                UPDATE t_oil_invoice_email_log
+                SET status = :status, location_code = :location_code, invoice_no = :invoice_no, invoice_id = :invoice_id,
+                    recipient_gstin = :recipient_gstin, detail = :detail, created_by = :created_by, creation_date = NOW()
+                WHERE mailbox_id = :mailbox_id AND message_key = :message_key AND part_id = :part_id AND status IN ('BLOCKED', 'ERROR')
+            `, { replacements });
         }
     },
 
-    // What a bunk's users see: only the PDFs that are this bunk's (by the GSTIN on the PDF). PDFs no
-    // bunk could be told for are on the Administration page only.
-    getLogForLocation: (locationCode, includeOther, limit) => select(`
+    // Bunks (of the given ones) whose LFR invoices came in mails from this sender address.
+    getLfrLocationsBySender: async (mailboxId, sender, locationCodes) => (await select(`
+        SELECT DISTINCT i.location_code
+        FROM t_oil_invoice_email_log g
+        JOIN t_oil_co_invoice i ON i.invoice_id = g.invoice_id
+        WHERE g.mailbox_id = :mailboxId AND i.charge_code = 'LFR' AND i.location_code IN (:codes)
+          AND (LOWER(g.mail_from) = :sender OR LOCATE(:bracketed, LOWER(g.mail_from)) > 0)
+    `, { mailboxId, sender, bracketed: `<${sender}>`, codes: locationCodes.length ? locationCodes : ['__none__'] })).map(r => r.location_code),
+
+    // What a bunk's users see: the PDFs that are this bunk's, and the refused ones made out to its GSTIN
+    // (bunks sharing a GSTIN all see those). Other PDFs no bunk could be told for: Administration page only.
+    getLogForLocation: (locationCode, gstin, includeOther, limit) => select(`
         SELECT g.log_id, g.mailbox_id, g.mail_date, g.subject, g.file_name, g.status,
                g.location_code, g.invoice_no, g.invoice_id, g.detail, g.created_by, g.creation_date
         FROM t_oil_invoice_email_log g
-        WHERE g.location_code = :locationCode
+        WHERE (g.location_code = :locationCode
+               ${gstin ? "OR (g.location_code IS NULL AND g.status IN ('BLOCKED', 'ERROR') AND g.recipient_gstin = :gstin)" : ''})
           ${includeOther ? '' : "AND g.status <> 'NOT_INVOICE'"}
         ORDER BY g.creation_date DESC, g.log_id DESC
         LIMIT ${Number(limit) || 200}
-    `, { locationCode }),
+    `, { locationCode, gstin: gstin || null }),
 
     // Administration: every mailbox's log (or one mailbox's), newest first.
     getLogAll: (mailboxId, includeOther, limit) => select(`
