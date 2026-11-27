@@ -440,8 +440,21 @@ module.exports = {
                 });
             }
 
+            // tkt #496: shared logins — capture who actually closed the day
+            let closedByName;
+            if (await isCloserNameCaptured(userLocation)) {
+                closedByName = String((req.body && req.body.closed_by_name) || '')
+                    .replace(/\s+/g, ' ').trim().toUpperCase();
+                if (!closedByName) {
+                    return res.status(400).json({ error: 'Please enter the name of the person doing the Day Close.' });
+                }
+                if (closedByName.length > 100) {
+                    return res.status(400).json({ error: 'Name is too long (max 100 characters).' });
+                }
+            }
+
             // Proceed with closing if validation passes
-            const result = await cashflowDao.finishClosing(cashflowId);
+            const result = await cashflowDao.finishClosing(cashflowId, closedByName);
             
             if(result == 1) {
                 res.status(200).send({message: 'The closing record is made final.'});
@@ -576,7 +589,8 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
         adjustmentsDao.getDigitalVendors(locationCode),
         cashflowDao.findCashReceiptCustomers(locationCode),
         cashflowDao.findCashflowEmployees(locationCode),
-        cashflowDao.isFirstDayClose(req.query.id)
+        cashflowDao.isFirstDayClose(req.query.id),
+        isCloserNameCaptured(locationCode)
     ]).then(values => {
         const creditData = collectCreditAndDebits(values[1].value);
         const debitData = collectCreditAndDebits(values[2].value);
@@ -599,7 +613,9 @@ function getCashFlowDetailsPromise(cashflowDetails, req, res, next) {
             maxCashFlowRows: Number(values[6].value),
             digitalVendorList: values[7].value || [],
             cashReceiptCustomers: values[8].value || [],
-            cashflowEmployees: values[9].value || []
+            cashflowEmployees: values[9].value || [],
+            askCloserName: values[11].value === true,
+            closedByName: values[0].value.closed_by_name || ''
         });
     });
 }
@@ -639,6 +655,12 @@ function gatherCashflowClosings(fromDate, toDate, user, res, next, messagesOptio
             generateDate : utils.currentDate(), currentDate: utils.currentDate(),
             messages: messagesOptional});
     });
+}
+
+// tkt #496: ask for the free-text name of whoever is doing the Day Close
+async function isCloserNameCaptured(locationCode) {
+    const value = await locationConfig.getLocationConfigValue(locationCode, 'DAY_CLOSE_CAPTURE_CLOSER_NAME', 'N');
+    return String(value).toUpperCase() === 'Y';
 }
 
 // Admins may reopen Day Close for their own location only when the location enables it
