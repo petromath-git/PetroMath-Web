@@ -23,6 +23,19 @@ const ymd = (d) => (d instanceof Date ? d.toISOString() : String(d || '')).slice
 const addDays = (d, n) => new Date(Date.parse(ymd(d)) + n * 86400000).toISOString().slice(0, 10);
 const dayDiff = (a, b) => Math.round((Date.parse(ymd(a)) - Date.parse(ymd(b))) / 86400000);
 
+// A bill has one row per product per trip, and each trip has its own product invoice
+// (delivery invoice / shipment no), so trips = distinct product invoices, not rows (tkt #499).
+// A row without the number counts as a trip of its own.
+function countTrips(lines) {
+    const seen = new Set();
+    let unnumbered = 0;
+    (lines || []).forEach(l => {
+        const no = l.delivery_invoice_no == null ? '' : String(l.delivery_invoice_no).trim();
+        if (no) seen.add(no); else unnumbered++;
+    });
+    return seen.size + unnumbered;
+}
+
 // Fleet card lines of a payment advice against the card recharges on uploaded statements.
 // lines: [{ key, txn_date, debit_amount }] -> { byKey: Map(key -> exact recharge), lines, matched, recharged }
 async function cardCheckForAdvice(locationCode, vendorId, lines) {
@@ -180,7 +193,7 @@ async function buildFromPdf(locationCode, buffer, fileName) {
             sac_code: vendor ? vendor.sac_code : '996791',
             gst_rate: vendor ? Number(vendor.gst_rate) : 5,
             ...amounts,
-            trip_count: b.lines.length,
+            trip_count: countTrips(b.lines),
             total_kl: Math.round(b.lines.reduce((s, l) => s + l.qty_kl, 0) * 1000) / 1000,
             vehicles: vehicles.join(', ').substring(0, 200),
             file_name: fileName ? String(fileName).substring(0, 200) : null,

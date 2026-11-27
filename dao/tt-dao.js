@@ -108,8 +108,10 @@ const TtDao = {
                DATE_FORMAT(h.fc_expiry, '%Y-%m-%d') AS fc_expiry_iso,
                DATE_FORMAT(h.permit_expiry, '%Y-%m-%d') AS permit_expiry_iso,
                DATE_FORMAT(h.tax_expiry, '%Y-%m-%d') AS tax_expiry_iso,
-               (SELECT COUNT(*) FROM t_tt_invoice_line l JOIN t_tt_invoice i ON i.invoice_id = l.invoice_id
-                WHERE i.location_code = h.location_code AND l.vehicle_no = h.vehicle_no) AS trip_count
+               (SELECT COUNT(DISTINCT COALESCE(NULLIF(l.delivery_invoice_no, ''), CONCAT('#', l.line_id)))
+                FROM t_tt_invoice_line l JOIN t_tt_invoice i ON i.invoice_id = l.invoice_id
+                WHERE i.location_code = h.location_code AND l.vehicle_no = h.vehicle_no
+                  AND COALESCE(i.bill_type, 'FREIGHT') <> 'TOLL') AS trip_count
         FROM m_tt_vehicle h
         LEFT JOIN m_tt_vendor v ON v.vendor_id = h.vendor_id
         WHERE h.location_code = :locationCode

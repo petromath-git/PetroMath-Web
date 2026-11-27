@@ -131,10 +131,8 @@ block content
                                     th Date
                                     th.tt-hide-sm Period
                                     th.tt-hide-sm Truck
-                                    th.num Trips
-                                    th.num.tt-hide-sm KL
+                                    th.num(title="Trips = distinct product invoices on the bill (a trip carrying 2 products has 2 rows)") Trips
                                     th.num Taxable
-                                    th.num.tt-hide-sm(title="Under reverse charge: paid by the oil company") GST (RCM)
                                     th.num TDS
                                     th.num Net due
                                     th GL
@@ -144,9 +142,7 @@ block content
                                     tr.tt-month
                                         td(colspan=4)= m.label
                                         td.num= m.trips
-                                        td.num.tt-hide-sm= m.kl.toFixed(0)
                                         td.num= fmtAmt(m.taxable)
-                                        td.num.tt-hide-sm= fmtAmt(m.gst)
                                         td.num= fmtAmt(m.tds)
                                         td.num= fmtAmt(m.net)
                                         td(colspan=2)
@@ -166,9 +162,7 @@ block content
                                             td.tt-hide-sm.small.text-nowrap #{fmtDate(b.period_from)} – #{fmtDate(b.period_to)}
                                             td.tt-hide-sm= b.vehicles
                                             td.num= b.trip_count
-                                            td.num.tt-hide-sm= Number(b.total_kl).toFixed(0)
                                             td.num= fmtAmt(b.taxable_value)
-                                            td.num.tt-hide-sm= fmtAmt(Number(b.cgst_amount) + Number(b.sgst_amount) + Number(b.igst_amount))
                                             td.num= fmtAmt(b.tds_amount)
                                             td.num= fmtAmt(b.net_receivable)
                                             td
@@ -537,7 +531,7 @@ block content
                                     td.num= fmtAmt(recon.totals.received)
                                     td.num= fmtAmt(recon.totals.difference)
                     p.small.text-muted
-                        | Difference = due − received. GST is left out: it is under reverse charge (paid by #{vendor.oil_company}) and is not part of what you receive. See the Bills tab for GST (RCM) per bill. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
+                        | Difference = due − received. GST is left out: it is under reverse charge (paid by #{vendor.oil_company}) and is not part of what you receive. A difference means a payment not yet tagged / uploaded, a deduction by #{vendor.oil_company} (e.g. the quarterly ₹1,322), or a payment in a different month.
                         if !cards.length
                             |  No fleet card is set up, so the card column is empty.
 
