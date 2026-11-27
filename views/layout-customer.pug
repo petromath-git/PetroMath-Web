@@ -26,7 +26,9 @@ html
         script(src=`/javascripts/app-report-table-generator.js?v=${CACHE_BUST}`)        
         link(rel='stylesheet', href='https://cdnjs.cloudflare.com/ajax/libs/open-iconic/1.1.0/font/css/open-iconic-bootstrap.min.css')
         link(rel ='stylesheet', href ='https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datetimepicker/4.17.47/css/bootstrap-datetimepicker.min.css')  
-        link(id="favicon" rel="shortcut icon" type="image/webp" href=`/images/mc_logo.webp?v=${CACHE_BUST}` src=`/images/mc_logo.jpg?v=${CACHE_BUST}`)
+        //- Beta (canary) gets the blue logo so its browser tab is easy to tell apart (tkt #501)
+        - var faviconBase = (APP_VERSION === 'canary') ? 'mc_logo_beta' : 'mc_logo'
+        link(id="favicon" rel="shortcut icon" type="image/webp" href=`/images/${faviconBase}.webp?v=${CACHE_BUST}` src=`/images/${faviconBase}.jpg?v=${CACHE_BUST}`)
         link(rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-icons/1.10.0/font/bootstrap-icons.min.css")
         //- script.
         //-     function formatIndianCurrency(number) {
