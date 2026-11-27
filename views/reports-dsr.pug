@@ -307,7 +307,11 @@ block content
         div.row &nbsp;
         h5.text-center.text-muted= locationName
         h4.font-weight-bold.text-center= "Day Close Report "                                                                 
-        h4.font-weight-bold.text-center= formattedFromClosingDate                
+        h4.font-weight-bold.text-center= formattedFromClosingDate
+        if dayClosedBy
+            h6.text-center
+                span.font-weight-bold Day Closed By:
+                | &nbsp;#{dayClosedBy}
         h4.font-weight-bold.text-success.text-center                           
     if(closingData == 'Available') 
         if isDraft

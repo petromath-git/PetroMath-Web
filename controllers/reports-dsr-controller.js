@@ -694,6 +694,9 @@ module.exports = {
         : 'Credit Customer Balances (Top 3)' , // Pass title dynamically
         isDraft: isDraft,
         cashflowEnabled: cashflowEnabled,
+        // tkt #496: free-text name captured at Day Close (DAY_CLOSE_CAPTURE_CLOSER_NAME)
+        dayClosedBy: (dayClosePromise[0] && dayClosePromise[0].closed_by_name)
+          ? String(dayClosePromise[0].closed_by_name).toUpperCase() : '',
       }
     }else
     {

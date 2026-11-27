@@ -9,7 +9,7 @@ module.exports = {
 
 
     getDayClose: async (locationCode, reportDate) =>{
-        const result = await db.sequelize.query(`SELECT cashflow_id
+        const result = await db.sequelize.query(`SELECT cashflow_id, closed_by_name
                                                     FROM   t_cashflow_closing tc
                                                     WHERE  tc.location_code = :locationCode
                                                         AND Date(tc.cashflow_date) = :reportDate
