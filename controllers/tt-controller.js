@@ -164,7 +164,10 @@ async function renderPage(req, res, next, pageKey) {
                 }
                 m.bills.push(b);
                 m.taxable += Number(b.taxable_value); m.gst += Number(b.cgst_amount) + Number(b.sgst_amount) + Number(b.igst_amount);
-                m.tds += Number(b.tds_amount); m.net += Number(b.net_receivable); m.trips += Number(b.trip_count); m.kl += Number(b.total_kl);
+                m.tds += Number(b.tds_amount); m.net += Number(b.net_receivable);
+                // A toll bill lists the same trips as the freight bills again: don't count them twice
+                if (b.bill_type !== 'TOLL') m.trips += Number(b.trip_count);
+                m.kl += Number(b.total_kl);
             }
             const totals = months.reduce((t, m) => {
                 ['taxable', 'gst', 'tds', 'net', 'trips', 'kl'].forEach(k => { t[k] += m[k]; });
