@@ -142,13 +142,27 @@ block content
         div &nbsp;
     div.cashflow-actions(style="text-align:center")
         if(cashFlowStatus != 'CLOSED')
+            //- tkt #496: shared logins — the person closing the day types their name
+            if askCloserName
+                div.form-inline.justify-content-center.mb-2
+                    label.mr-2(for='cashflow-closed-by-name') Day closed by
+                        span.text-danger &nbsp;*
+                    input.form-control#cashflow-closed-by-name(type='text' maxlength='100' placeholder='Your name' autocomplete='off' style='text-transform:uppercase; min-width:240px')
             span
                 button.btn.btn-primary(type="button", onClick="saveCashFlowTxnsAndDenoms()") SAVE
             span &nbsp;
             span
                 //- After closing, land on that day's Day Close report
-                button.btn.btn-dark(id='cashflow-close' disabled=true onClick=`finishClosing('cashflowId','close-cashflow','reports-dsr?date=${cashflowDate}')`) CLOSE &raquo;
+                if askCloserName
+                    button.btn.btn-dark(id='cashflow-close' disabled=true onClick='finishDayCloseWithName()') CLOSE &raquo;
+                else
+                    button.btn.btn-dark(id='cashflow-close' disabled=true onClick=`finishClosing('cashflowId','close-cashflow','reports-dsr?date=${cashflowDate}')`) CLOSE &raquo;
         else
+            if closedByName
+                p.mb-2
+                    span.text-muted Day closed by:
+                    | &nbsp;
+                    strong= closedByName
             a.btn.btn-primary(href='/reports-dsr?date=' + cashflowDate)
                 i.bi.bi-file-earmark-pdf
                 span &nbsp;View Day Close Report
@@ -157,6 +171,36 @@ block content
 
     input(type='hidden' id='cashflow-debit-rowcnt_hiddenValue' value=debitRowCnt)
     input(type='hidden' id='cashflow-credit-rowcnt_hiddenValue' value=rowCnt)
+    if askCloserName && cashFlowStatus != 'CLOSED'
+        input(type='hidden' id='cashflow-date_hiddenValue' value=cashflowDate)
+        script.
+            function finishDayCloseWithName() {
+                const input = document.getElementById('cashflow-closed-by-name');
+                const name = (input.value || '').replace(/\s+/g, ' ').trim().toUpperCase();
+                if (!name) {
+                    alert('Please enter the name of the person doing the Day Close.');
+                    input.focus();
+                    return;
+                }
+                if (!confirm('Close the day as ' + name + '?')) return;
+                const id = document.getElementById('cashflowId_hiddenId').value;
+                const date = document.getElementById('cashflow-date_hiddenValue').value;
+                ajaxLoading('d-md-block');
+                fetch('/close-cashflow?id=' + encodeURIComponent(id), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ closed_by_name: name })
+                }).then(function (r) {
+                    return r.json().then(function (body) { return { ok: r.ok, body: body }; });
+                }).then(function (res) {
+                    ajaxLoading('d-md-none');
+                    showToastMessage(res.body, 7000);
+                    if (res.ok) window.location.href = '/reports-dsr?date=' + encodeURIComponent(date);
+                }).catch(function () {
+                    ajaxLoading('d-md-none');
+                    showToastMessage({ error: 'Error while closing the record.' }, 7000);
+                });
+            }
     script.
         document.addEventListener('DOMContentLoaded', function() {
             calculateCashflowDebitTotal();

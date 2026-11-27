@@ -21,6 +21,11 @@ module.exports = function(sequelize, DataTypes) {
             field: 'notes',
             type: DataTypes.STRING
         },
+        // tkt #496: free-text name of who did the Day Close (DAY_CLOSE_CAPTURE_CLOSER_NAME)
+        closed_by_name: {
+            field: 'closed_by_name',
+            type: DataTypes.STRING
+        },
         cashflow_date: {
             field: 'cashflow_date',
             type: DataTypes.DATE

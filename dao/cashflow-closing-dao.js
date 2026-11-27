@@ -445,9 +445,13 @@ module.exports = {
         const txn = CashFlowTxn.destroy({ where: { transaction_id: id } });
         return txn;
     },
-    finishClosing: (cashflowId) => {
+    // closedByName is only passed when the location captures it (tkt #496);
+    // otherwise the column is left untouched.
+    finishClosing: (cashflowId, closedByName) => {
+        const values = { status: 'CLOSED' };
+        if (closedByName !== undefined) values.closed_by_name = closedByName;
         const closingTxn = CashFlowClosing.update(
-            { status: 'CLOSED' },
+            values,
             { where: { cashflowId: cashflowId } }
         );
         return closingTxn;
@@ -547,6 +551,7 @@ reopenCashflow: async (cashflowId, locationCode, userId) => {
         const result = await db.sequelize.query(
             `UPDATE t_cashflow_closing
             SET closing_status = 'DRAFT',
+                closed_by_name = NULL,
                 updated_by = :userId,
                 updation_date = NOW()
             WHERE cashflow_id = :cashflowId
