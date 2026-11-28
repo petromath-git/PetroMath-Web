@@ -247,17 +247,12 @@ block content
             tr
                 td.rf-label.rf-range Date Range:
                 td.rf-field.rf-range
-                    select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='month_year') Month / Year
-                        option(value='today') Today
-                        option(value='yesterday') Yesterday
-                        option(value='this_week') This Week
-                        option(value='this_month', selected=true) This Month
-                        option(value='last_month') Last Month
-                        option(value='this_financial_year') This Financial Year
-                        option(value='last_financial_year') Last Financial Year
-                        option(value='custom') Custom Date
-                +rangeMonthYearCells()
+                    //- name= keeps the chosen period across Generate and the Day/Month tab switch
+                    - var _range = selectedRange || 'this_month'
+                    select#dateRange.form-control(name='selectedRange', onchange="updateDateRange()")
+                        each r in [['month_year', 'Month / Year'], ['today', 'Today'], ['yesterday', 'Yesterday'], ['this_week', 'This Week'], ['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This Financial Year'], ['last_financial_year', 'Last Financial Year'], ['custom', 'Custom Date']]
+                            option(value=r[0] selected=(r[0] === _range))= r[1]
+                +rangeMonthYearCells({ date: _range === 'month_year' ? fromClosingDate : null })
                 td.rf-gap &nbsp;
 
                 if viewType === 'daily'
@@ -279,13 +274,16 @@ block content
                         input#weekendOnly(type='checkbox', onchange='applyFilters()')
                     td.rf-gap &nbsp;
 
-                td.rf-label.rf-from#fromDateLabel From Date:
-                td.rf-field.rf-from
+                //- Shown only for Custom, as updateDateRange() does after a change (else the
+                //- phone Month pickers and From/To share one slot)
+                - var _dateCell = _range === 'custom' ? undefined : 'display:none'
+                td.rf-label.rf-from#fromDateLabel(style=_dateCell) From Date:
+                td.rf-field.rf-from(style=_dateCell)
                     input#fromclosingDate.form-control(type='date', name='fromClosingDate', value=fromClosingDate, required)
                 td.rf-gap &nbsp;
 
-                td.rf-label.rf-to#toDateLabel To Date:
-                td.rf-field.rf-to
+                td.rf-label.rf-to#toDateLabel(style=_dateCell) To Date:
+                td.rf-field.rf-to(style=_dateCell)
                     input#toclosingDate.form-control(type='date', name='toClosingDate', value=toClosingDate, required)
                 td.rf-gap &nbsp;
 

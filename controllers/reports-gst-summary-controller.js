@@ -34,6 +34,8 @@ module.exports = {
         if(req.body.toClosingDate) {
           toDate = req.body.toClosingDate;
         }
+        // Period dropdown value, so the page re-opens on what the user picked
+        const selectedRange = req.body.selectedRange || (req.body.fromClosingDate ? 'custom' : 'this_month');
 
 
        
@@ -139,7 +141,8 @@ module.exports = {
         title: 'Reports', 
         user: req.user, 
         fromClosingDate: fromDate,
-        toClosingDate: toDate, 
+        toClosingDate: toDate,
+        selectedRange: selectedRange,
         personLocations: personLocations,
         locationName: locationDetails.location_name,
         locationCode: locationCode,

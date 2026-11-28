@@ -1045,9 +1045,13 @@ getCreditSummaryReport: async(req, res) => {
 
 getSalesSummaryReport: async(req, res) => {
     let locationCode = req.user.location_code;
-    let fromDate = dateFormat(new Date(), "yyyy-mm-dd");
-    let toDate = dateFormat(new Date(), "yyyy-mm-dd");
-    
+    // Default matches the "This Month" option the dropdown opens on: 1st of month to today
+    const today = new Date();
+    let fromDate = dateFormat(new Date(today.getFullYear(), today.getMonth(), 1), "yyyy-mm-dd");
+    let toDate = dateFormat(today, "yyyy-mm-dd");
+    // Period dropdown value, so the page re-opens on what the user picked
+    let selectedRange = req.body.selectedRange || (req.body.fromClosingDate ? 'custom' : 'this_month');
+
     let caller = req.body.caller;
     let viewType = req.body.viewType || 'daily'; // 'daily' or 'monthly'
     
@@ -1075,6 +1079,7 @@ getSalesSummaryReport: async(req, res) => {
         formattedFromDate: formattedFromDate,
         formattedToDate: formattedToDate,
         Saleslist: Saleslist,
+        selectedRange: selectedRange,
         viewType: viewType // Pass viewType to pug
     }
 
