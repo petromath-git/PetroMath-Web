@@ -1,0 +1,369 @@
+//- Cashier Shift Summary PDF (tkt #485). Rendered by
+//- controllers/shift-summary-pdf-controller.js into puppeteer with JS off:
+//- keep it self-contained (inline CSS, data: URI logo, no scripts).
+- var h = header
+- var exShort = num(h.ex_short)
+//- bill_no 0 = no bill number entered
+- var billNo = function (b) { return (b && String(b) !== '0') ? b : '' }
+doctype html
+html(lang='en')
+    head
+        meta(charset='UTF-8')
+        title Shift Summary #{h.cashier_name} #{h.closing_date_fmt}
+        style.
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font-family: Arial, Helvetica, sans-serif; font-size: 10.5px; color: #222; }
+            .head { display: flex; align-items: center; border-bottom: 2px solid #222; padding-bottom: 6px; margin-bottom: 8px; }
+            .head .logo { width: 70px; }
+            .head .logo img { max-height: 54px; max-width: 66px; }
+            .head .bunk { flex: 1; text-align: center; }
+            .head .bunk .name { font-size: 16px; font-weight: bold; }
+            .head .bunk div { font-size: 10px; }
+            .head .spacer { width: 70px; }
+            h1 { font-size: 15px; text-align: center; margin: 4px 0 8px; letter-spacing: .5px; }
+            .draft { color: #c0392b; font-size: 11px; border: 1px solid #c0392b; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+            .meta { display: flex; flex-wrap: wrap; border: 1px solid #bbb; background: #f6f8fa; padding: 5px 8px; margin-bottom: 8px; }
+            .meta div { width: 33.33%; padding: 2px 0; }
+            .meta b { color: #555; font-weight: normal; }
+            .kpis { display: flex; gap: 6px; margin-bottom: 10px; }
+            .kpi { flex: 1; border: 1px solid #bbb; padding: 5px 6px; text-align: center; }
+            .kpi .l { font-size: 9px; color: #555; text-transform: uppercase; }
+            .kpi .v { font-size: 12.5px; font-weight: bold; margin-top: 2px; }
+            .pos { color: #1e7e34; } .neg { color: #c0392b; }
+            h2 { font-size: 11.5px; margin: 10px 0 4px; padding-bottom: 2px; border-bottom: 1px solid #999; }
+            table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            thead { display: table-header-group; }
+            th, td { border: 1px solid #aaa; padding: 3px 5px; vertical-align: top; }
+            th { background: #e9ecef; text-align: left; font-weight: bold; }
+            .r, .d { text-align: right; white-space: nowrap; }
+            .d { text-align: left; }
+            tfoot td, tr.tot td { font-weight: bold; background: #f6f8fa; }
+            .cols { display: flex; gap: 12px; }
+            .cols > div { flex: 1; min-width: 0; }
+            .section { page-break-inside: avoid; }
+            .notes { border: 1px solid #bbb; padding: 5px 8px; margin-top: 10px; white-space: pre-wrap; }
+            .foot { margin-top: 14px; font-size: 9px; color: #666; text-align: center; }
+    body
+        .head
+            .logo
+                if logo
+                    img(src=logo alt='')
+            .bunk
+                .name= location.location_name
+                if dealerOf
+                    div Dealer: #{dealerOf}
+                if location.address
+                    div= location.address
+                if location.gst_number
+                    div GSTIN: #{location.gst_number}
+            .spacer
+
+        h1 CASHIER SHIFT SUMMARY
+            if isDraft
+                span.draft DRAFT – NOT CLOSED
+
+        .meta
+            div #[b Cashier:] #{h.cashier_name || '-'}
+            div #[b Shift date:] #{h.closing_date_fmt}
+            div #[b Shift no.:] #{h.closing_id}
+            div #[b Opening cash given:] Rs. #{inr(h.cash)}
+            div #[b Reading time:] #{h.close_reading_time_fmt || '-'}
+            div #[b Entered by:] #{h.closer_name || '-'}
+
+        .kpis
+            .kpi
+                .l Fuel sales
+                .v Rs. #{inr(totals.fuelAmount)}
+            .kpi
+                .l Credit sales
+                .v Rs. #{inr(totals.credits)}
+            .kpi
+                .l Digital sales
+                .v Rs. #{inr(totals.digital)}
+            .kpi
+                .l Expenses
+                .v Rs. #{inr(totals.expenses)}
+            .kpi
+                .l Cash counted
+                .v Rs. #{inr(totals.denoms)}
+            .kpi
+                .l= exShort < 0 ? 'Shortage' : 'Excess'
+                .v(class=exShort < 0 ? 'neg' : 'pos') Rs. #{inr(Math.abs(exShort))}
+
+        //- Pump readings
+        h2 Nozzle Readings
+        if readings.length
+            table
+                thead
+                    tr
+                        th Nozzle
+                        th Product
+                        th.r Opening
+                        th.r Closing
+                        th.r Testing
+                        th.r Sale (L)
+                        th.r Rate
+                        th.r Amount (Rs.)
+                tbody
+                    each r in readings
+                        tr
+                            td= r.pump_code
+                            td= r.product_name || '-'
+                            td.r= qty(r.opening_reading)
+                            td.r= qty(r.closing_reading)
+                            td.r= qty(r.testing)
+                            td.r= qty(r.sale_qty)
+                            td.r= inr(r.price)
+                            td.r= inr(r.sale_amount)
+                tfoot
+                    tr
+                        td(colspan=5) Total
+                        td.r= qty(totals.fuelQty)
+                        td
+                        td.r= inr(totals.fuelAmount)
+        else
+            div No readings entered.
+
+        //- Fuel sales by product
+        if productTotals.length > 1
+            .section
+                h2 Fuel Sales by Product
+                table(style='width:60%')
+                    thead
+                        tr
+                            th Product
+                            th.r Sale (L)
+                            th.r Amount (Rs.)
+                    tbody
+                        each p in productTotals
+                            tr
+                                td= p.product_name
+                                td.r= qty(p.sale_qty)
+                                td.r= inr(p.sale_amount)
+
+        //- 2T oil
+        if oil2t.length
+            .section
+                h2 2T Oil
+                table
+                    thead
+                        tr
+                            th Product
+                            th.r Given
+                            th.r Returned
+                            th.r Sale
+                            th.r Rate
+                            th.r Amount (Rs.)
+                    tbody
+                        each r in oil2t
+                            tr
+                                td= r.product_name
+                                td.r= qty(r.given_qty)
+                                td.r= qty(r.returned_qty)
+                                td.r= qty(r.sale_qty)
+                                td.r= inr(r.price)
+                                td.r= inr(r.sale_amount)
+                    tfoot
+                        tr
+                            td(colspan=5) Total
+                            td.r= inr(totals.oil2t)
+
+        //- Lube / cash sales
+        if lubes.length
+            .section
+                h2 Lube Sales
+                table
+                    thead
+                        tr
+                            th Product
+                            th Bill #
+                            th.r Price
+                            th.r Discount
+                            th.r Qty
+                            th.r Amount (Rs.)
+                    tbody
+                        each r in lubes
+                            tr
+                                td= r.product_name || '-'
+                                td= billNo(r.bill_no)
+                                td.r= inr(r.price)
+                                td.r= inr(r.price_discount)
+                                td.r= qty(r.qty, 2)
+                                td.r= inr(r.amount)
+                    tfoot
+                        tr
+                            td(colspan=5) Total
+                            td.r= inr(totals.lubes)
+
+        //- Credit sales
+        if credits.length
+            .section
+                h2 Credit Sales
+                table
+                    thead
+                        tr
+                            th Customer
+                            th Bill #
+                            th Vehicle
+                            th Product
+                            th.r Price
+                            th.r Discount
+                            th.r Qty
+                            th.r Amount (Rs.)
+                    tbody
+                        each r in credits
+                            tr
+                                td= r.company_name || '-'
+                                td= billNo(r.bill_no)
+                                td= r.vehicle_number || ''
+                                td= r.product_name || '-'
+                                td.r= inr(r.price)
+                                td.r= inr(r.price_discount)
+                                td.r= qty(r.qty)
+                                td.r= inr(r.amount)
+                    tfoot
+                        tr
+                            td(colspan=7) Total
+                            td.r= inr(totals.credits)
+
+        //- Digital sales
+        if digital.length
+            .section
+                h2 Digital Sales
+                table
+                    thead
+                        tr
+                            th Date
+                            th Vendor
+                            th Notes
+                            th.r Amount (Rs.)
+                    tbody
+                        each r in digital
+                            tr
+                                td= r.txn_date_fmt || ''
+                                td= r.vendor_name || '-'
+                                td= r.notes || ''
+                                td.r= inr(r.amount)
+                    tfoot
+                        tr
+                            td(colspan=3) Total
+                            td.r= inr(totals.digital)
+
+        //- Bowser fills
+        if intercompany.length
+            .section
+                h2 Intercompany Fills
+                table(style='width:60%')
+                    thead
+                        tr
+                            th Bowser
+                            th Product
+                            th.r Qty (L)
+                    tbody
+                        each r in intercompany
+                            tr
+                                td= r.bowser_name
+                                td= r.product_name
+                                td.r= qty(r.quantity)
+                    tfoot
+                        tr
+                            td(colspan=2) Total
+                            td.r= qty(totals.intercompany)
+
+        //- Collections + employee advances
+        if receipts.length || advances.length
+            .cols
+                if receipts.length
+                    div.section
+                        h2 Collections
+                        table
+                            thead
+                                tr
+                                    th Date
+                                    th Type
+                                    th Customer
+                                    th.r Amount (Rs.)
+                            tbody
+                                each r in receipts
+                                    tr
+                                        td.d= r.receipt_date_fmt || ''
+                                        td= r.receipt_type || ''
+                                        td= r.party_name || '-'
+                                        td.r= inr(r.amount)
+                            tfoot
+                                tr
+                                    td(colspan=3) Total
+                                    td.r= inr(totals.receipts)
+                if advances.length
+                    div.section
+                        h2 Employee Advance / Recovery
+                        table
+                            thead
+                                tr
+                                    th Date
+                                    th Type
+                                    th Employee
+                                    th.r Amount (Rs.)
+                            tbody
+                                each r in advances
+                                    - var isRec = r.txn_type === 'ADVANCE_RECOVERY'
+                                    tr
+                                        td.d= r.txn_date_fmt || ''
+                                        td= isRec ? 'Recovery' : ({ ADVANCE: 'Advance', PAYMENT: 'Payment' })[r.txn_type] || r.txn_type
+                                        td= r.employee_name || '-'
+                                        td.r(class=isRec ? 'pos' : 'neg') #{isRec ? '+' : '-'}#{inr(r.amount)}
+                            tfoot
+                                tr
+                                    td(colspan=3) Net
+                                    td.r= inr(totals.advances)
+
+        //- Expenses + denominations side by side
+        .cols
+            div.section
+                h2 Expenses
+                if expenses.length
+                    table
+                        thead
+                            tr
+                                th Expense
+                                th Notes
+                                th.r Amount (Rs.)
+                        tbody
+                            each r in expenses
+                                tr
+                                    td= r.expense_name || '-'
+                                    td= r.notes || ''
+                                    td.r= inr(r.amount)
+                        tfoot
+                            tr
+                                td(colspan=2) Total
+                                td.r= inr(totals.expenses)
+                else
+                    div No expenses.
+            div.section
+                h2 Cash Denominations
+                if denoms.length
+                    table
+                        thead
+                            tr
+                                th Note
+                                th.r Count
+                                th.r Amount (Rs.)
+                        tbody
+                            each r in denoms
+                                tr
+                                    td= String(r.denomination) === '0' ? 'Coins / loose' : 'Rs. ' + r.denomination
+                                    td.r= String(r.denomination) === '0' ? '' : r.denomcount
+                                    td.r= inr(r.amount)
+                        tfoot
+                            tr
+                                td(colspan=2) Total
+                                td.r= inr(totals.denoms)
+                else
+                    div No cash counted.
+
+        if h.notes
+            .notes #[b Notes:] #{h.notes}
+
+        .foot Generated by #{generatedBy} on #{generatedOn}
