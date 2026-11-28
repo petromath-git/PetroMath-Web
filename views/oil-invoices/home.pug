@@ -12,6 +12,14 @@ mixin sapBadge(i)
     else
         span.badge.badge-warning(title="No SAP debit of this amount yet — upload the SAP statement, or link it by hand") Not found
 
+//- shown under the charge tiles once one is clicked (tkt #502)
+mixin chargeFilterNote()
+    .small.mb-2.d-none#chargeFilterNote
+        | Showing only
+        strong#chargeFilterName.mx-1
+        | ·
+        a(href="#" id="chargeFilterClear") Show all
+
 block content
     style.
         .oi-tabs .nav-link { font-weight: 600; }
@@ -20,6 +28,13 @@ block content
         .stat-tile .val { font-size: 16px; font-weight: 700; }
         .num { text-align: right; white-space: nowrap; }
         .oi-group td { background: #f1f4f8; font-weight: 600; }
+        .charge-tile { cursor: pointer; user-select: none; }
+        .charge-tile:hover { border-color: #adb5bd; }
+        .charge-tile.active { border-color: #007bff; box-shadow: 0 0 0 2px rgba(0, 123, 255, .25); background: #f0f7ff; }
+        .charge-tile.dim { opacity: .55; }
+        @media screen and (max-width: 767px) {
+            body.mobile-ready table.m-stack td.m-title .m-only { display: inline; }
+        }
         @media (max-width: 575px) {
             .stat-tile .val { font-size: 13px; }
             .oi-hide-sm { display: none; }
@@ -45,14 +60,24 @@ block content
                     li.nav-item
                         a.nav-link(class=(tab === t[0] ? 'active' : '') href=`/oil-invoices?tab=${t[0]}&from=${fromDate}&to=${toDate}`)= t[1]
 
-            form.d-flex.flex-wrap.align-items-end.mb-2(method="get" action="/oil-invoices" class=(tab === 'email' ? 'd-none' : ''))
+            form.d-flex.flex-wrap.align-items-end.mb-2#periodForm(method="get" action="/oil-invoices")
                 input(type="hidden" name="tab" value=tab)
+                if tab === 'email' && showOther
+                    input(type="hidden" name="other" value="1")
+                .mr-2.mb-2
+                    label.small.mb-1 Period
+                    select.form-control.form-control-sm#periodPreset
+                        option(value="custom") Custom dates
+                        option(value="this_month") This Month
+                        option(value="last_month") Last Month
+                        option(value="this_fy") This FY
+                        option(value="last_fy") Last FY
                 .mr-2.mb-2
                     label.small.mb-1 From
-                    input.form-control.form-control-sm(type="date" name="from" value=fromDate)
+                    input.form-control.form-control-sm#periodFrom(type="date" name="from" value=fromDate)
                 .mr-2.mb-2
                     label.small.mb-1 To
-                    input.form-control.form-control-sm(type="date" name="to" value=toDate)
+                    input.form-control.form-control-sm#periodTo(type="date" name="to" value=toDate)
                 .mb-2
                     button.btn.btn-sm.btn-secondary(type="submit") Show
 
@@ -73,13 +98,14 @@ block content
                         #previewArea.mt-2
 
                 if byType.length
-                    .row.no-gutters.mb-3
+                    .row.no-gutters.mb-1
                         each t in byType
                             .col-6.col-md-2.p-1
-                                .stat-tile
+                                .stat-tile.charge-tile(data-charge=t.charge_code role="button" tabindex="0" title="Show only " + t.charge_name)
                                     .lbl= t.charge_name
                                     .val ₹#{fmtAmt(t.total)}
                                     .small.text-muted #{t.count} invoice(s)#{t.unlinked ? ' · ' + t.unlinked + ' not on SAP yet' : ''}
+                    +chargeFilterNote()
 
                 if !invoices.length
                     .text-muted.small No IOCL invoices dated between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
@@ -98,8 +124,10 @@ block content
                                 th
                         tbody
                             each i in invoices
-                                tr
-                                    td.m-title.text-nowrap #{fmtDate(i.invoice_date)} · #{i.charge_name || i.charge_code}
+                                tr(data-charge=i.charge_code)
+                                    td.m-title.text-nowrap
+                                        = fmtDate(i.invoice_date)
+                                        span.m-only  · #{i.charge_name || i.charge_code}
                                     td(data-label="Invoice No")
                                         span.text-nowrap= i.invoice_no
                                         if i.sap_ref
@@ -135,13 +163,14 @@ block content
                 p.small.text-muted.mb-2
                     | Charge debits on the IOCL SAP account (#{account.account_number}) between #{fmtDate(fromDate)} and #{fmtDate(toDate)}, and whether the invoice for each has been uploaded.
                 if sap.summary.length
-                    .row.no-gutters.mb-3
+                    .row.no-gutters.mb-1
                         each s in sap.summary
                             .col-6.col-md-2.p-1
-                                .stat-tile
+                                .stat-tile.charge-tile(data-charge=s.charge_code role="button" tabindex="0" title="Show only " + s.charge_name)
                                     .lbl= s.charge_name
                                     .val ₹#{fmtAmt(s.amount)}
                                     .small(class=(s.missing ? 'text-danger' : 'text-muted')) #{s.withInvoice}/#{s.count} with invoice#{s.missing ? ' · ' + s.missing + ' missing' : ''}
+                    +chargeFilterNote()
                 if !sap.rows.length
                     .text-muted.small No charge debits on the SAP account in this period.
                 else
@@ -155,8 +184,10 @@ block content
                                 th Invoice
                         tbody
                             each r in sap.rows
-                                tr
-                                    td.m-title.text-nowrap #{fmtDate(r.trans_date)} · #{r.charge_name}
+                                tr(data-charge=r.charge_code)
+                                    td.m-title.text-nowrap
+                                        = fmtDate(r.trans_date)
+                                        span.m-only  · #{r.charge_name}
                                     td.m-hide= r.charge_name
                                     td.oi-hide-sm.small(data-label="SAP narration")= r.remarks
                                     td.num.m-summary(data-label="Amount")= fmtAmt(r.debit_amount)
@@ -233,11 +264,11 @@ block content
                 .d-flex.align-items-center.mb-1
                     .font-weight-bold.mr-auto PDFs read from email
                     if showOther
-                        a.small(href="/oil-invoices?tab=email") Hide other PDFs
+                        a.small(href=`/oil-invoices?tab=email&from=${fromDate}&to=${toDate}`) Hide other PDFs
                     else
-                        a.small(href="/oil-invoices?tab=email&other=1") Show other PDFs too (fuel invoices, receipts …)
+                        a.small(href=`/oil-invoices?tab=email&other=1&from=${fromDate}&to=${toDate}`) Show other PDFs too (fuel invoices, receipts …)
                 if !log.length
-                    .small.text-muted Nothing read for #{user.location_code} yet.
+                    .small.text-muted No mails for #{user.location_code} dated between #{fmtDate(fromDate)} and #{fmtDate(toDate)}.
                 else
                     table.table.table-sm.table-hover.m-stack.m-collapse
                         thead.thead-light
@@ -320,6 +351,67 @@ block content
                         return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
                     });
                 }
+                // ── Period presets (tkt #503): fill From/To and show ──
+                (function () {
+                    var sel = document.getElementById('periodPreset');
+                    var fromEl = document.getElementById('periodFrom'), toEl = document.getElementById('periodTo');
+                    if (!sel || !fromEl || !toEl) return;
+                    function iso(d) {
+                        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+                    }
+                    function ranges() {
+                        var t = new Date(), y = t.getFullYear(), m = t.getMonth();
+                        var fy = m >= 3 ? y : y - 1;   // FY starts 1-Apr
+                        return {
+                            this_month: [iso(new Date(y, m, 1)), iso(t)],
+                            last_month: [iso(new Date(y, m - 1, 1)), iso(new Date(y, m, 0))],
+                            this_fy: [fy + '-04-01', (fy + 1) + '-03-31'],
+                            last_fy: [(fy - 1) + '-04-01', fy + '-03-31']
+                        };
+                    }
+                    var r = ranges();
+                    sel.value = Object.keys(r).filter(function (k) { return r[k][0] === fromEl.value && r[k][1] === toEl.value; })[0] || 'custom';
+                    sel.addEventListener('change', function () {
+                        var p = ranges()[sel.value];
+                        if (!p) return;
+                        fromEl.value = p[0]; toEl.value = p[1];
+                        document.getElementById('periodForm').submit();
+                    });
+                    [fromEl, toEl].forEach(function (el) { el.addEventListener('change', function () { sel.value = 'custom'; }); });
+                })();
+
+                // ── Charge tiles filter the list below (tkt #502) ──
+                (function () {
+                    var tiles = document.querySelectorAll('.charge-tile');
+                    if (!tiles.length) return;
+                    var note = document.getElementById('chargeFilterNote');
+                    var current = null;
+                    function apply(code) {
+                        current = code;
+                        var name = '';
+                        tiles.forEach(function (t) {
+                            var on = t.dataset.charge === code;
+                            if (on) name = t.querySelector('.lbl').textContent;
+                            t.classList.toggle('active', on);
+                            t.classList.toggle('dim', !!code && !on);
+                        });
+                        document.querySelectorAll('tbody > tr[data-charge]').forEach(function (tr) {
+                            tr.classList.toggle('d-none', !!code && tr.dataset.charge !== code);
+                        });
+                        if (note) {
+                            note.classList.toggle('d-none', !code);
+                            document.getElementById('chargeFilterName').textContent = name;
+                        }
+                    }
+                    tiles.forEach(function (t) {
+                        function toggle() { apply(current === t.dataset.charge ? null : t.dataset.charge); }
+                        t.addEventListener('click', toggle);
+                        t.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+                    });
+                    var clear = document.getElementById('chargeFilterClear');
+                    if (clear) clear.addEventListener('click', function (e) { e.preventDefault(); apply(null); });
+                })();
+
                 var pending = sessionStorage.getItem('oilInvMessage');
                 if (pending) { sessionStorage.removeItem('oilInvMessage'); showMessage(pending, true); }
 
