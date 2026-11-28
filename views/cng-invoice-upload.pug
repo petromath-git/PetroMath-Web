@@ -1,0 +1,98 @@
+extends layout
+
+//- CNG invoices (tkt #481): upload many CNG invoice PDFs at once. Each is read and saved as a
+//- Purchase Invoice (CNG, KG) unless its number is already in. No tank receipt: the oil company fills CNG.
+block content
+    style.
+        @media (max-width: 767px) {
+            .cng-page.container-fluid { padding: 0; }
+        }
+    div.container-fluid.mt-3.cng-page
+        div.d-flex.flex-wrap.align-items-center.mb-3
+            h5.mb-0
+                a.text-secondary(href='/lubes-invoice-home') Purchases
+                span.text-muted  /
+                | CNG Invoices
+
+        div.card.mb-3
+            div.card-body
+                p.small.text-muted.mb-2
+                    | Choose one or many CNG invoice PDFs. Each one is read and saved as a purchase of #[strong= cngProduct.product_name] in KG.
+                    | Invoices already entered are skipped, so it is safe to choose the same files again.
+                div.d-flex.flex-wrap.align-items-center
+                    input#cngFiles.form-control-file.mr-3.mb-2(type='file' accept='.pdf,application/pdf' multiple style='max-width:340px')
+                    button#cngStart.btn.btn-primary.btn-sm.mb-2(type='button' onclick='cngUploadAll()') Upload
+                div#cngSummary.small.mt-1
+
+        div.table-responsive
+            table.table.table-sm.table-bordered.m-stack#cngTable(style='display:none')
+                thead.thead-light
+                    tr
+                        th File
+                        th Invoice #
+                        th Date
+                        th.text-right Qty (KG)
+                        th.text-right Amount
+                        th Result
+                tbody#cngBody
+
+    script.
+        const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        function cngDate(ymd) {
+            if (!ymd) return '';
+            const [y, m, d] = ymd.split('-');
+            return d + '-' + MON[Number(m) - 1] + '-' + y;
+        }
+        function cngEsc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+        const fmtAmt = n => n == null ? '' : Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+        async function cngUploadAll() {
+            const files = Array.from(document.getElementById('cngFiles').files || []);
+            if (!files.length) { alert('Choose the CNG invoice PDFs first.'); return; }
+            const btn = document.getElementById('cngStart');
+            const body = document.getElementById('cngBody');
+            const summary = document.getElementById('cngSummary');
+            btn.disabled = true;
+            body.innerHTML = '';
+            document.getElementById('cngTable').style.display = '';
+            const counts = { IMPORTED: 0, EXISTS: 0, ERROR: 0 };
+            let qty = 0, amount = 0;
+
+            // oldest file name first, so the list reads in order; one file per request (small bodies)
+            files.sort((a, b) => a.name.localeCompare(b.name));
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
+                summary.className = 'small mt-1 text-info';
+                summary.textContent = 'Reading ' + (i + 1) + ' of ' + files.length + ' …';
+                let r;
+                try {
+                    const fd = new FormData();
+                    fd.append('invoicePdf', f);
+                    const resp = await fetch('/purchases/cng-invoices/import', { method: 'POST', body: fd });
+                    const json = await resp.json();
+                    r = json.success ? json.result : { status: 'ERROR', detail: json.error || 'Upload failed.' };
+                } catch (e) {
+                    r = { status: 'ERROR', detail: e.message };
+                }
+                counts[r.status] = (counts[r.status] || 0) + 1;
+                if (r.status === 'IMPORTED') { qty += Number(r.quantity) || 0; amount += Number(r.amount) || 0; }
+                const badge = r.status === 'IMPORTED' ? 'badge-success' : r.status === 'EXISTS' ? 'badge-secondary' : 'badge-danger';
+                const label = r.status === 'IMPORTED' ? 'Saved' : r.status === 'EXISTS' ? 'Already in' : 'Not saved';
+                const link = r.invoice_id ? '<a href="/purchases/fuel-invoice/' + r.invoice_id + '">' + cngEsc(r.invoice_number) + '</a>' : cngEsc(r.invoice_number || '');
+                body.insertAdjacentHTML('beforeend', '<tr>'
+                    + '<td data-label="File">' + cngEsc(f.name) + '</td>'
+                    + '<td data-label="Invoice #">' + link + '</td>'
+                    + '<td data-label="Date">' + cngDate(r.invoice_date) + '</td>'
+                    + '<td data-label="Qty (KG)" class="text-right">' + (r.quantity ? Number(r.quantity).toFixed(3) : '') + '</td>'
+                    + '<td data-label="Amount" class="text-right">' + fmtAmt(r.amount) + '</td>'
+                    + '<td data-label="Result"><span class="badge ' + badge + '">' + label + '</span>'
+                    + (r.status === 'ERROR' ? ' <span class="small text-danger">' + cngEsc(r.detail) + '</span>' : '') + '</td>'
+                    + '</tr>');
+            }
+            summary.className = 'small mt-1 ' + (counts.ERROR ? 'text-danger' : 'text-success');
+            summary.textContent = files.length + ' file(s): ' + counts.IMPORTED + ' saved (' + qty.toFixed(3) + ' KG, Rs ' + fmtAmt(amount) + '), '
+                + counts.EXISTS + ' already in, ' + counts.ERROR + ' not saved.';
+            btn.disabled = false;
+        }

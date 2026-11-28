@@ -18,6 +18,9 @@ const OilInvoiceDao = require('../dao/oil-invoice-dao');
 const OilInvoiceService = require('./oil-invoice-service');
 const GstConfigDao = require('../dao/gst-config-dao');
 const { parseOilChargeInvoice } = require('./oil-charge-invoice-parser');
+const pdfParse = require('pdf-parse');
+const { isIoclCngText, parseIoclCngText } = require('./iocl-cng-invoice-parser');
+const CngInvoiceService = require('./cng-invoice-service');
 
 const DONE_LABEL = 'PetroMath-Read';
 const MAX_MAILS_PER_RUN = 150;
@@ -101,6 +104,40 @@ async function locationByGstins(gstins, locations) {
     return hits.length === 1 ? hits[0] : null;
 }
 
+// IOCL CNG tax invoice (tkt #481) -> saved as a CNG Purchase Invoice of the bunk whose IOCL SAP account
+// ends with the invoice's customer code (CNG invoices carry no buyer GSTIN). null when the PDF is not one.
+// invoice_id stays empty: on the log it points at t_oil_co_invoice, and this lands in t_tank_invoice.
+async function importCngIfCng(buffer, fileName, locations) {
+    let text;
+    try {
+        text = (await pdfParse(buffer)).text || '';
+    } catch (e) {
+        return null;
+    }
+    if (!isIoclCngText(text)) return null;
+    let cng;
+    try {
+        cng = parseIoclCngText(text);
+    } catch (e) {
+        return { status: 'BLOCKED', detail: 'CNG invoice: ' + e.message };
+    }
+    const no = cng.header.invoice_number;
+    const hits = [];
+    for (const loc of locations) {
+        const acct = await OilInvoiceDao.getIoclAccount(loc);
+        if (acct && cng.customer_code && String(acct.account_number || '').trim().endsWith(cng.customer_code)) hits.push(loc);
+    }
+    if (hits.length !== 1) {
+        return { status: 'BLOCKED', invoice_no: no, detail: hits.length
+            ? `CNG invoice for IOCL customer ${cng.customer_code}: bunks ${hits.join(', ')} all have that SAP account.`
+            : `CNG invoice for IOCL customer ${cng.customer_code || '?'}, which is not the SAP account of any bunk this mailbox serves (${locations.join(', ')}).` };
+    }
+    const r = await CngInvoiceService.importCngPdf(hits[0], buffer, fileName); // DB trouble throws: retried next run
+    if (r.status === 'IMPORTED') return { status: 'IMPORTED', location_code: hits[0], invoice_no: no, detail: 'Saved as a CNG purchase invoice.' };
+    if (r.status === 'EXISTS') return { status: 'EXISTS', location_code: hits[0], invoice_no: no, detail: 'CNG purchase invoice already entered.' };
+    return { status: 'BLOCKED', location_code: hits[0], invoice_no: no, detail: 'CNG invoice: ' + r.detail };
+}
+
 // One PDF -> log row fields (status, location_code, invoice_no, invoice_id, detail).
 async function importPdf(buffer, fileName, locations, by, src) {
     let parsed;
@@ -108,6 +145,8 @@ async function importPdf(buffer, fileName, locations, by, src) {
         parsed = await parseOilChargeInvoice(buffer);
     } catch (e) {
         if (e.code === 'NOT_CHARGE_INVOICE') {
+            const cng = await importCngIfCng(buffer, fileName, locations);
+            if (cng) return cng;
             return { status: 'NOT_INVOICE', location_code: await locationByGstins(e.gstins, locations),
                 detail: 'Not an IOCL charge invoice (fuel invoice, payment receipt …) - left alone.' };
         }
