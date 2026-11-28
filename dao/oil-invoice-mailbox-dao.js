@@ -149,16 +149,19 @@ const OilInvoiceMailboxDao = {
 
     // What a bunk's users see: the PDFs that are this bunk's, and the refused ones made out to its GSTIN
     // (bunks sharing a GSTIN all see those). Other PDFs no bunk could be told for: Administration page only.
-    getLogForLocation: (locationCode, gstin, includeOther, limit) => select(`
+    // fromDate/toDate (YYYY-MM-DD, optional) = the mail's date in IST (stored UTC); no mail date -> the day it was read
+    getLogForLocation: (locationCode, gstin, includeOther, limit, fromDate, toDate) => select(`
         SELECT g.log_id, g.mailbox_id, g.mail_date, g.subject, g.file_name, g.status,
                g.location_code, g.invoice_no, g.invoice_id, g.detail, g.created_by, g.creation_date
         FROM t_oil_invoice_email_log g
         WHERE (g.location_code = :locationCode
                ${gstin ? "OR (g.location_code IS NULL AND g.status IN ('BLOCKED', 'ERROR') AND g.recipient_gstin = :gstin)" : ''})
           ${includeOther ? '' : "AND g.status <> 'NOT_INVOICE'"}
+          ${fromDate ? "AND DATE(CONVERT_TZ(COALESCE(g.mail_date, g.creation_date), '+00:00', '+05:30')) >= :fromDate" : ''}
+          ${toDate ? "AND DATE(CONVERT_TZ(COALESCE(g.mail_date, g.creation_date), '+00:00', '+05:30')) <= :toDate" : ''}
         ORDER BY g.creation_date DESC, g.log_id DESC
         LIMIT ${Number(limit) || 200}
-    `, { locationCode, gstin: gstin || null }),
+    `, { locationCode, gstin: gstin || null, fromDate: fromDate || null, toDate: toDate || null }),
 
     // Administration: every mailbox's log (or one mailbox's), newest first.
     getLogAll: (mailboxId, includeOther, limit) => select(`
