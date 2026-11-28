@@ -5,6 +5,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { execFile, exec } = require('child_process');
 const moment = require('moment');
+const { isIoclCngText, parseIoclCngText } = require('./iocl-cng-invoice-parser');
 
 const SUPPLIER_MAP = {
     'IOCL': 'IOCL',
@@ -389,6 +390,20 @@ async function parseInvoice(pdfBuffer, companyName) {
         throw new Error(`This PDF is a ${detectedSupplier} invoice but this location uses ${supplierKey}. Please upload the correct invoice.`);
     }
 
+    // IOCL CNG (VAT invoice, KG): its own reader, see iocl-cng-invoice-parser.js (tkt #481)
+    if (supplierKey === 'IOCL' && isIoclCngText(rawText)) {
+        const cng = parseIoclCngText(rawText);
+        return {
+            supplier: supplierKey,
+            header: cng.header,
+            lines: [cng.line],
+            rawText,
+            qty_unit: 'KG',
+            is_cng: true,
+            customer_code: cng.customer_code
+        };
+    }
+
     // Auto-detect CNG variant for BPCL
     let configKey = supplierKey;
     if (supplierKey === 'BPCL' && /COMPRESSED NATURAL GAS|CNG/i.test(rawText)) {
@@ -415,7 +430,8 @@ async function parseInvoice(pdfBuffer, companyName) {
         header,
         lines: productLines,
         rawText,
-        qty_unit: configKey === 'BPCL_CNG' ? 'KG' : 'KL'
+        qty_unit: configKey === 'BPCL_CNG' ? 'KG' : 'KL',
+        is_cng: configKey === 'BPCL_CNG'
     };
 }
 

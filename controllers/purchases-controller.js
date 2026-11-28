@@ -7,6 +7,7 @@ const utils = require('../utils/app-utils');
 const dateFormat = require('dateformat');
 const DocumentStoreDao = require('../dao/document-store-dao');
 const { tempInvoiceStore } = require('./tank-receipt-controller');
+const CngInvoiceService = require('../services/cng-invoice-service');
 
 module.exports = {
 
@@ -171,6 +172,36 @@ module.exports = {
             return res.json({ success: true });
         } catch (err) {
             console.error('deleteFuelInvoice error:', err);
+            return res.status(500).json({ success: false, error: err.message });
+        }
+    },
+
+    // CNG invoices (tkt #481): bulk PDF upload page, only for a bunk with a CNG product
+    getCngUpload: async (req, res, next) => {
+        try {
+            const cngProduct = await CngInvoiceService.findCngProduct(req.user.location_code);
+            if (!cngProduct) return res.status(404).send(`${req.user.location_code} has no CNG product, so there are no CNG invoices to upload.`);
+            res.render('cng-invoice-upload', {
+                title: 'CNG Invoices',
+                mobileReady: true,
+                user: req.user,
+                cngProduct
+            });
+        } catch (err) {
+            next(err);
+        }
+    },
+
+    importCngInvoice: async (req, res) => {
+        try {
+            if (!req.file || !req.file.buffer) return res.status(400).json({ success: false, error: 'No PDF file uploaded.' });
+            if (req.file.buffer.slice(0, 4).toString('ascii') !== '%PDF') {
+                return res.json({ success: true, result: { status: 'ERROR', detail: 'Not a PDF file.' } });
+            }
+            const result = await CngInvoiceService.importCngPdf(req.user.location_code, req.file.buffer, req.file.originalname || 'invoice.pdf');
+            return res.json({ success: true, result });
+        } catch (err) {
+            console.error('importCngInvoice error:', err);
             return res.status(500).json({ success: false, error: err.message });
         }
     },
