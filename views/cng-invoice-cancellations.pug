@@ -1,0 +1,167 @@
+extends layout
+
+//- CNG invoices IOCL cancelled (tkt #481). IOCL sends no cancellation PDF: the SAP statement shows a
+//- "CANCELLATION OF INVOICE" credit that does not name the invoice. Each credit is paired with the CNG
+//- invoice of the same amount; that invoice then leaves Purchase Invoices (and every report) and is kept here.
+block content
+    -
+        const MON = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+        const fd = s => { if (!s) return ''; const p = String(s).slice(0, 10).split('-'); return p[2] + '-' + MON[Number(p[1]) - 1] + '-' + p[0]; };
+        const fa = n => n == null ? '' : Number(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fq = n => n == null ? '' : Number(n).toFixed(3);
+        const open = credits.filter(c => !c.cancelled);
+        const single = open.filter(c => c.suggested_id && !c.choose);
+        const toChoose = open.filter(c => c.choose);
+        const none = open.filter(c => !c.candidates.length);
+        const done = credits.filter(c => c.cancelled);
+        const shownTxn = new Set(credits.map(c => Number(c.bank_txn_id)));
+        const otherCancelled = cancelled.filter(c => !shownTxn.has(Number(c.bank_txn_id)));
+    style.
+        @media (max-width: 767px) {
+            .cng-page.container-fluid { padding: 0; }
+        }
+        .cng-cand { max-width: 330px; display: inline-block; }
+    div.container-fluid.mt-3.cng-page
+        div.d-flex.flex-wrap.align-items-center.mb-3
+            h5.mb-0
+                a.text-secondary(href='/lubes-invoice-home') Purchases
+                span.text-muted  /
+                | CNG Cancelled by IOCL
+            a.btn.btn-outline-secondary.btn-sm.ml-auto(href='/purchases/cng-invoices/upload') Upload CNG Invoices
+
+        div.card.mb-3
+            div.card-body
+                p.small.text-muted.mb-2
+                    | IOCL cancels a CNG invoice only by a #[strong CANCELLATION OF INVOICE] credit on the SAP statement, and the credit does not say which invoice.
+                    | Each credit below is matched with the CNG invoice of the same amount. Cancelling takes that invoice out of Purchase Invoices and all reports; it is kept here with its PDF, and it will not be saved again if it is uploaded or mailed later.
+                if !account
+                    div.alert.alert-warning.mb-0 This bunk has no IOCL SAP account, so there are no cancellation credits to show.
+                else
+                    form.form-inline(method='get' action='/purchases/cng-invoices/cancellations')
+                        label.mr-2.small(for='fromDate') Credits from
+                        input#fromDate.form-control.form-control-sm.mr-2.mb-1(type='date' name='fromDate' value=fromDate max=currentDate)
+                        label.mr-2.small(for='toDate') to
+                        input#toDate.form-control.form-control-sm.mr-2.mb-1(type='date' name='toDate' value=toDate max=currentDate)
+                        button.btn.btn-sm.btn-outline-primary.mb-1(type='submit') Show
+                    div.small.mt-2
+                        | #{credits.length} credit(s) on #{account.bank_name} #{account.account_number}:
+                        |  #[strong= done.length] cancelled,
+                        |  #[strong= single.length] with one matching invoice,
+                        |  #[strong= toChoose.length] to choose,
+                        |  #[strong= none.length] with no CNG invoice of that amount.
+                    if single.length
+                        button#cngAll.btn.btn-sm.btn-warning.mt-2(type='button' onclick='cngCancelAll()')
+                            | Cancel the #{single.length} invoice(s) with one match
+                    div#cngMsg.small.mt-2
+
+        if account && credits.length
+            div.table-responsive
+                table.table.table-sm.table-bordered.m-stack
+                    thead.thead-light
+                        tr
+                            th Credit date
+                            th IOCL credit #
+                            th.text-right Amount
+                            th Invoice it cancels
+                            th
+                    tbody
+                        each c in credits
+                            tr(data-txn=c.bank_txn_id class=c.cancelled ? 'table-secondary' : '')
+                                td(data-label='Credit date')= fd(c.trans_date)
+                                td(data-label='IOCL credit #')= c.cancel_doc_no || ''
+                                td.text-right(data-label='Amount')= fa(c.credit_amount)
+                                td(data-label='Invoice it cancels')
+                                    if c.cancelled
+                                        span.badge.badge-secondary.mr-1 Cancelled
+                                        if c.cancelled.doc_id
+                                            a(href='/purchases/cng-invoices/cancelled/' + c.cancelled.cancel_id + '/pdf' target='_blank')= c.cancelled.invoice_number
+                                        else
+                                            = c.cancelled.invoice_number
+                                        span.small.text-muted  · #{fd(c.cancelled.invoice_date)} · #{fq(c.cancelled.quantity)} KG · by #{c.cancelled.cancelled_by}
+                                    else if c.candidates.length
+                                        select.form-control.form-control-sm.cng-cand(data-single=(c.suggested_id && !c.choose) ? 'Y' : 'N')
+                                            if !c.suggested_id
+                                                option(value='' selected) Choose the invoice …
+                                            each i in c.candidates
+                                                option(value=i.id selected=i.id === c.suggested_id)
+                                                    | #{i.invoice_number} · #{fd(i.invoice_date)} · #{fq(i.quantity)} KG · Rs #{fa(i.amount)}
+                                        if c.choose
+                                            div.small.text-danger.mt-1 #{c.candidates.length} invoices of this amount: look up this credit in the IOCL SAP portal and choose the invoice it cancels.
+                                        else if c.candidates.length > 1
+                                            div.small.text-muted.mt-1 The other invoice(s) of this amount are taken by other credits.
+                                    else
+                                        span.small.text-muted No CNG invoice of this amount in the #{matchDays} days before. Upload it first; if it is a fuel invoice, leave it.
+                                td(data-label='')
+                                    if c.cancelled
+                                        button.btn.btn-sm.btn-outline-secondary(type='button' onclick='cngRestore(' + c.cancelled.cancel_id + ', this)') Undo
+                                    else if c.candidates.length
+                                        button.btn.btn-sm.btn-warning(type='button' onclick='cngCancel(this)') Cancel invoice
+
+        if otherCancelled.length
+            h6.mt-4 Cancelled invoices with a credit outside these dates
+            div.table-responsive
+                table.table.table-sm.table-bordered.m-stack
+                    thead.thead-light
+                        tr
+                            th Invoice #
+                            th Invoice date
+                            th.text-right Amount
+                            th IOCL credit
+                            th
+                    tbody
+                        each c in otherCancelled
+                            tr
+                                td(data-label='Invoice #')= c.invoice_number
+                                td(data-label='Invoice date')= fd(c.invoice_date)
+                                td.text-right(data-label='Amount')= fa(c.invoice_amount)
+                                td(data-label='IOCL credit') #{c.cancel_doc_no || ''} · #{fd(c.cancel_date)}
+                                td(data-label='')
+                                    button.btn.btn-sm.btn-outline-secondary(type='button' onclick='cngRestore(' + c.cancel_id + ', this)') Undo
+
+    script.
+        async function cngPost(url, body) {
+            const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+            let json = {};
+            try { json = await resp.json(); } catch (e) { json = { success: false, error: 'Server error (' + resp.status + ').' }; }
+            return json;
+        }
+        function cngRow(btn) { return btn.closest('tr'); }
+        async function cngCancelRow(tr) {
+            const sel = tr.querySelector('select.cng-cand');
+            return cngPost('/purchases/cng-invoices/cancel', { invoice_id: sel.value, bank_txn_id: tr.dataset.txn });
+        }
+        async function cngCancel(btn) {
+            const tr = cngRow(btn);
+            const sel = tr.querySelector('select.cng-cand');
+            if (!sel.value) { alert('Choose the invoice this credit cancels.'); sel.focus(); return; }
+            const label = sel.options[sel.selectedIndex].text.split(' · ')[0];
+            if (!confirm('Cancel invoice ' + label + '? It will be taken out of Purchase Invoices and all reports.')) return;
+            btn.disabled = true;
+            const r = await cngCancelRow(tr);
+            if (!r.success) { alert(r.error || 'Could not cancel.'); btn.disabled = false; return; }
+            location.reload();
+        }
+        async function cngCancelAll() {
+            const rows = Array.from(document.querySelectorAll('select.cng-cand[data-single="Y"]')).map(s => s.closest('tr'));
+            if (!rows.length) return;
+            if (!confirm('Cancel ' + rows.length + ' invoice(s), each the only CNG invoice of its credit\'s amount?')) return;
+            const btn = document.getElementById('cngAll');
+            const msg = document.getElementById('cngMsg');
+            btn.disabled = true;
+            let ok = 0; const errs = [];
+            for (let i = 0; i < rows.length; i++) {
+                msg.className = 'small mt-2 text-info';
+                msg.textContent = 'Cancelling ' + (i + 1) + ' of ' + rows.length + ' …';
+                const r = await cngCancelRow(rows[i]);
+                if (r.success) ok++; else errs.push(r.error || 'failed');
+            }
+            if (errs.length) { alert(ok + ' cancelled. Not done:\n' + errs.join('\n')); }
+            location.reload();
+        }
+        async function cngRestore(cancelId, btn) {
+            if (!confirm('Put this invoice back into Purchase Invoices?')) return;
+            btn.disabled = true;
+            const r = await cngPost('/purchases/cng-invoices/cancelled/' + cancelId + '/restore');
+            if (!r.success) { alert(r.error || 'Could not put it back.'); btn.disabled = false; return; }
+            location.reload();
+        }
