@@ -19,20 +19,38 @@ mixin howVideo(name, label, phone, lang)
 
 block content
   style.
-    .help-page { max-width: 980px; }
+    /* Reading layout: light grey page, each topic a white card; text stays dark on white. */
+    body, .main-content, .content-wrapper { background: #eef1f5 !important; }
+    .help-page { max-width: 980px; color: #1f2937; font-size: 1.02rem; line-height: 1.65; padding-bottom: 2.5rem; }
+    .help-page .text-muted { color: #4b5563 !important; }
+    .help-page .help-toc, .help-page section { background: #fff; border: 1px solid #e3e7ed; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06); }
     .help-page .help-toc ol { margin-bottom: 0; }
-    .help-page section { margin-bottom: 2rem; }
-    .help-page h2 { font-size: 1.35rem; margin-bottom: .75rem; }
-    .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+    .help-page .help-toc a { color: #1d4ed8; }
+    .help-page section { padding: 22px 26px 8px; margin-bottom: 1.25rem; }
+    .help-page h2 { font-size: 1.35rem; margin-bottom: .75rem; color: #111827; }
+    .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; color: #111827; }
     .help-video { margin: 0 0 1.25rem; }
-    .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; display: block; }
+    .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 8px; display: block; }
     .help-video.phone { max-width: 360px; }
     .help-video.phone video { aspect-ratio: 720 / 1504; }
     .help-video figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 2px; font-size: .95rem; }
-    .help-steps > li { margin-bottom: .6rem; }
-    .help-page h2.help-part { font-size: 1.1rem; text-transform: uppercase; letter-spacing: .06em; color: #6c757d; border-bottom: 2px solid #f4c430; padding-bottom: .35rem; margin: 2.2rem 0 1.2rem; }
-    .help-who { display: inline-block; font-size: .85rem; background: #fff7d6; border: 1px solid #f4c430; border-radius: 999px; padding: 1px 10px; margin: -.35rem 0 .75rem; }
-    .help-toc-part { font-weight: 600; margin-top: .5rem; }
+    /* Steps: numbered yellow circles */
+    .help-page ol.help-steps { list-style: none; counter-reset: step; padding-left: 0; }
+    .help-page ol.help-steps > li { counter-increment: step; position: relative; padding-left: 2.5rem; margin-bottom: .8rem; }
+    .help-page ol.help-steps > li::before { content: counter(step); position: absolute; left: 0; top: .15rem; width: 1.75rem; height: 1.75rem;
+      border-radius: 50%; background: #facc15; color: #111827; font-weight: 700; font-size: .9rem; display: flex; align-items: center; justify-content: center; }
+    /* "Good to know" / "What happens next": a light yellow note box */
+    .help-page section h3 + ul { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: .75rem 1rem .75rem 2.2rem; margin-bottom: 1rem; }
+    .help-page section h3 + ul > li { margin-bottom: .3rem; }
+    /* Part headings: a navy band, like the video cards */
+    .help-page h2.help-part { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; color: #facc15; background: #0f172a;
+      border-radius: 10px; padding: .6rem 1.1rem; margin: 2.2rem 0 1rem; }
+    .help-who { display: inline-block; font-size: .88rem; color: #78350f; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 999px; padding: 1px 12px; margin: -.35rem 0 .9rem; }
+    .help-toc-part { font-weight: 600; margin-top: .6rem; }
+    @media (max-width: 576px) {
+      .help-page section { padding: 16px 14px 4px; border-radius: 10px; }
+      .help-page { font-size: 1rem; }
+    }
     .help-steps dt { font-weight: 600; }
     .help-steps dd { margin-left: 1.25rem; }
     /* One language shown at a time (html[data-help-lang], set before the page draws). No script: English. */
