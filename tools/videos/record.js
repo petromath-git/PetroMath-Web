@@ -2076,6 +2076,8 @@ async function record(browser, name) {
   const browser = await chromium.launch();
   try {
     for (const a of args) await record(browser, a);
+    // Title-card posters (thumbnails.js) replace the plain frame toMp4 wrote.
+    if (!CAPTIONS_ONLY) await require('./thumbnails').makeThumbnails(browser, args);
   } finally {
     await browser.close();
   }
