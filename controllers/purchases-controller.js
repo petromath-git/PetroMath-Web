@@ -206,65 +206,6 @@ module.exports = {
         }
     },
 
-    // CNG invoices IOCL cancelled (credit on the SAP statement): pair credit -> invoice, or put one back
-    getCngCancellations: async (req, res, next) => {
-        try {
-            const locationCode = req.user.location_code;
-            const cngProduct = await CngInvoiceService.findCngProduct(locationCode);
-            if (!cngProduct) return res.status(404).send(`${locationCode} has no CNG product, so there are no CNG invoices.`);
-            const today = utils.currentDate();
-            const ymd = /^\d{4}-\d{2}-\d{2}$/;
-            const fromDate = ymd.test(req.query.fromDate || '') ? req.query.fromDate : '2026-04-01';
-            const toDate = ymd.test(req.query.toDate || '') ? req.query.toDate : today;
-            const view = await CngInvoiceService.getCancellationView(locationCode, fromDate, toDate);
-            res.render('cng-invoice-cancellations', {
-                title: 'CNG Cancellations',
-                mobileReady: true,
-                user: req.user,
-                fromDate, toDate, currentDate: today,
-                ...view
-            });
-        } catch (err) {
-            next(err);
-        }
-    },
-
-    cancelCngInvoice: async (req, res) => {
-        try {
-            const invoiceId = Number(req.body.invoice_id), bankTxnId = Number(req.body.bank_txn_id);
-            if (!invoiceId || !bankTxnId) return res.status(400).json({ success: false, error: 'Choose the invoice and the credit.' });
-            const r = await CngInvoiceService.cancelInvoice(req.user.location_code, invoiceId, bankTxnId, req.user.User_Name);
-            return res.json({ success: true, ...r });
-        } catch (err) {
-            if (err.userFacing) return res.status(400).json({ success: false, error: err.message });
-            console.error('cancelCngInvoice error:', err);
-            return res.status(500).json({ success: false, error: err.message });
-        }
-    },
-
-    restoreCngInvoice: async (req, res) => {
-        try {
-            const r = await CngInvoiceService.restoreInvoice(req.user.location_code, Number(req.params.id));
-            return res.json({ success: true, ...r });
-        } catch (err) {
-            if (err.userFacing) return res.status(400).json({ success: false, error: err.message });
-            console.error('restoreCngInvoice error:', err);
-            return res.status(500).json({ success: false, error: err.message });
-        }
-    },
-
-    getCancelledCngPdf: async (req, res, next) => {
-        try {
-            const doc = await CngInvoiceService.getCancelledPdf(req.user.location_code, Number(req.params.id));
-            if (!doc) return res.status(404).send('No PDF for this cancelled invoice.');
-            res.set('Content-Type', 'application/pdf');
-            res.set('Content-Disposition', `inline; filename="${doc.file_name}"`);
-            res.send(doc.file_data);
-        } catch (err) {
-            next(err);
-        }
-    },
-
     saveFuelInvoice: async (req, res, next) => {
         try {
             const locationCode = req.user.location_code;
