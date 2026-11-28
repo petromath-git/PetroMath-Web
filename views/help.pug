@@ -1,10 +1,10 @@
 extends layout
 
-//- Each video can have a Tamil copy (<name>.ta.mp4, Tamil voice + captions); the language switch picks it.
+//- Each video can have a Tamil / Hindi copy (<name>.ta.mp4, <name>.hi.mp4: voice + captions); the language switch picks it.
 mixin howVideo(name, label, phone)
   - const src = (lang) => { const f = name + (lang === 'en' ? '' : '.' + lang); return { mp4: `/videos/${f}.mp4?v=${videoV[f + '.mp4'] || ''}`, jpg: `/videos/${f}.jpg?v=${videoV[f + '.jpg'] || ''}`, share: 'https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + f + '.mp4') }; }
-  - const en = src('en'), ta = videoV[name + '.ta.mp4'] ? src('ta') : null;
-  figure.help-video(class=phone ? 'phone' : undefined data-en=JSON.stringify(en) data-ta=ta ? JSON.stringify(ta) : undefined)
+  - const en = src('en'), ta = videoV[name + '.ta.mp4'] ? src('ta') : null, hi = videoV[name + '.hi.mp4'] ? src('hi') : null;
+  figure.help-video(class=phone ? 'phone' : undefined data-en=JSON.stringify(en) data-ta=ta ? JSON.stringify(ta) : undefined data-hi=hi ? JSON.stringify(hi) : undefined)
     video(src=en.mp4 poster=en.jpg controls playsinline preload="none")
     figcaption
       span
@@ -46,6 +46,7 @@ block content
       .btn-group.btn-group-sm(role='group' aria-label='Video language')
         button.btn.btn-outline-primary(type='button' data-lang='en') English
         button.btn.btn-outline-primary(type='button' data-lang='ta') தமிழ்
+        button.btn.btn-outline-primary(type='button' data-lang='hi') हिन्दी
 
     section#intro
       h2 Start here: a quick tour of PetroMath
@@ -679,14 +680,15 @@ block content
 
 
   script.
-    // Video language switch: Tamil by default (owner, 2026-11-12), English if chosen. Remembered per browser;
-    // ?lang=en / ?lang=ta in a link sets it. A video without a Tamil copy plays in English.
+    // Video language switch: Tamil by default (owner, 2026-11-12), English / Hindi if chosen. Remembered per browser;
+    // ?lang=en / ?lang=ta / ?lang=hi in a link sets it. A video without a copy in that language plays in English.
     (function () {
       var KEY = 'helpVideoLang';
+      var LANGS = ['en', 'ta', 'hi'];
       var q = new URLSearchParams(location.search).get('lang');
-      var lang = q === 'ta' || q === 'en' ? q : null;
+      var lang = LANGS.indexOf(q) >= 0 ? q : null;
       if (!lang) { try { lang = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ } }
-      if (lang !== 'en') lang = 'ta';
+      if (LANGS.indexOf(lang) < 0) lang = 'ta';
       function apply(l) {
         document.querySelectorAll('.help-lang button').forEach(function (b) {
           var on = b.getAttribute('data-lang') === l;
@@ -694,8 +696,8 @@ block content
           b.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
         document.querySelectorAll('figure.help-video').forEach(function (fig) {
-          var ta = fig.getAttribute('data-ta');
-          var s = JSON.parse(l === 'ta' && ta ? ta : fig.getAttribute('data-en'));
+          var copy = l === 'en' ? null : fig.getAttribute('data-' + l);
+          var s = JSON.parse(copy || fig.getAttribute('data-en'));
           var v = fig.querySelector('video');
           if (v.getAttribute('src') !== s.mp4) {
             v.pause();
@@ -704,7 +706,7 @@ block content
             v.load();
           }
           fig.querySelector('.help-share').setAttribute('href', s.share);
-          fig.querySelector('.help-en-only').hidden = !(l === 'ta' && !ta);
+          fig.querySelector('.help-en-only').hidden = !(l !== 'en' && !copy);
         });
       }
       document.querySelectorAll('.help-lang button').forEach(function (b) {
