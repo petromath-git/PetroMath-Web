@@ -240,7 +240,17 @@ html
             if hasMobileHome
               a.mobile-home-btn(href="/m" aria-label="Home" title="Home")
                 i.bi.bi-grid-fill
-            .breadcrumb-nav Dashboard > #{title}
+            //- Desktop only (CSS) — Back / Home on every page (tkt #498): the installed
+            //- desktop app window has no browser back button. Phones keep the tile Home button.
+            button.page-nav-btn#pageBackBtn(type="button" title="Back to previous page" onclick="pmGoBack()")
+              i.bi.bi-arrow-left
+              span.page-nav-label Back
+            a.page-nav-btn#pageHomeBtn(href="/" title="Go to Home")
+              i.bi.bi-house-door
+              span.page-nav-label Home
+            .breadcrumb-nav
+              a(href="/") Home
+              |  > #{title}
           
           .top-bar-actions
             .user-info
@@ -292,8 +302,28 @@ html
       block content
 
     script.
+      // Back button (tkt #498): go to the previous PetroMath page; if we came
+      // from outside the app (or opened the page directly), go Home instead.
+      function pmGoBack() {
+        var cameFromApp = false;
+        try { cameFromApp = !!document.referrer && new URL(document.referrer).origin === window.location.origin; } catch (e) {}
+        if (cameFromApp && window.history.length > 1) {
+          window.history.back();
+        } else {
+          window.location.href = '/';
+        }
+      }
+
       // Sidebar toggle functionality
       document.addEventListener('DOMContentLoaded', function() {
+        // Already on Home: Back/Home buttons have nowhere useful to go
+        if (window.location.pathname === '/' || window.location.pathname === '/home') {
+          ['pageBackBtn', 'pageHomeBtn'].forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+          });
+        }
+
         const sidebarToggle = document.getElementById('sidebarToggle');
         const sidebar = document.getElementById('sidebar');
         const mainContent = document.getElementById('mainContent');
