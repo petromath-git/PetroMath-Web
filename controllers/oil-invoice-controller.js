@@ -106,7 +106,7 @@ module.exports = {
                 // only this bunk's PDFs; the mailboxes themselves are set up in Administration > IOCL Mail Import
                 const showOther = req.query.other === '1';
                 const gst = await GstConfigDao.findByLocationCode(locationCode);
-                const log = await MailboxDao.getLogForLocation(locationCode, gst ? String(gst.gstin || '').trim().toUpperCase() : null, showOther, 300);
+                const log = await MailboxDao.getLogForLocation(locationCode, gst ? String(gst.gstin || '').trim().toUpperCase() : null, showOther, 300, fromDate, toDate);
                 return res.render('oil-invoices/home', { ...data, log, showOther, fmtDateTime });
             }
             const [invoices, types] = await Promise.all([
