@@ -1395,7 +1395,7 @@ const VIDEOS = {
       await page.waitForURL(/\/help/);
       await page.waitForLoadState('networkidle');
       await h.pause(600);
-      await h.point('.help-toc', 2800);
+      await h.point('.help-toc >> visible=true', 2800); // /help has a contents box per language; one shows
       await h.say('PetroMath: your whole bunk, in one place.', 2600);
     },
   },
