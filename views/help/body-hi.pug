@@ -1,0 +1,669 @@
+//- Help page text, Hindi (same page as body-en.pug). Spoken Hindi like the voiceover; words on the screen
+//- (Add New, Masters → Users, ...) stay in English letters; the bunk is "पंप". Section ids are prefixed hi-.
+.card.help-toc.mb-4
+  .card-body
+    strong विषय-सूची
+    .help-toc-part शुरुआत
+      span.text-muted  · Owner, पहले दिन से पहले
+    ol.mb-2(start=1)
+      li: a(href='#hi-getting-started') शुरुआत: अपने पंप की details भरें
+      li: a(href='#hi-intro') PetroMath का छोटा सा tour
+      li: a(href='#hi-phone-app') अपने phone पर PetroMath install करें
+    .help-toc-part अपना पंप set up करें (एक बार)
+      span.text-muted  · Owner (Admin)
+    ol.mb-2(start=4)
+      li: a(href='#hi-add-user') Staff के login जोड़ें: Admin, Manager और Cashier roles
+      li: a(href='#hi-add-product') Product जोड़ें, opening stock के साथ
+      li: a(href='#hi-add-customer') Credit customer जोड़ें: opening balance और login
+    .help-toc-part हर दिन
+      span.text-muted  · Manager और cashiers
+    ol.mb-2(start=7)
+      li: a(href='#hi-shift') Shift भरें और close करें
+      li: a(href='#hi-day-close') दिन close करें, Day-Close Report पढ़ें
+      li: a(href='#hi-fuel-invoice') Fuel (tanker) invoice PDF upload करें
+      li: a(href='#hi-lube-invoice') Lube purchase invoice PDF upload करें
+    .help-toc-part हर हफ़्ते और महीने
+      span.text-muted  · Manager और owner
+    ol.mb-2(start=11)
+      li: a(href='#hi-bank-upload') Bank statement upload करें
+      li: a(href='#hi-sap-upload') Oil company (SAP) statement upload करें
+      li: a(href='#hi-paytm-recon') Paytm reconcile करें (digital reconciliation)
+      li: a(href='#hi-customer-statement') Customer का credit statement निकालें
+      li: a(href='#hi-customer-phone') Customer अपना statement phone पर देखें
+      li: a(href='#hi-accounting') Accounts बनाएँ, Profit &amp; Loss देखें
+
+h2.help-part#hi-part-start शुरुआत
+
+section#hi-getting-started
+  h2 1. शुरुआत: अपने पंप की details भरें
+  .help-who कौन: Owner, PetroMath demo के तुरंत बाद
+  +howVideo('getting-started', 'अपने पंप की details भरें', false, 'hi')
+  p Demo के बाद PetroMath आपको एक onboarding form का link भेजता है। इसे computer या phone पर खोलें। आप जो type करते हैं वह अपने-आप save होता है, इसलिए बीच में रुककर उसी link पर कभी भी वापस आ सकते हैं।
+  ol.help-steps
+    li
+      strong RO Details
+      | : GST certificate के अनुसार पंप का नाम, owner का mobile, oil company, GST number और पता।
+    li
+      strong Employees
+      | : पंप पर काम करने वाले सभी लोग, और उनका काम। इसी list से उनके login बनते हैं।
+    li
+      strong Products, Tanks और Nozzles
+      | : आज के selling price के साथ fuels; हर tank उसकी capacity और fuel के साथ; हर nozzle उसके pump make, tank और अगली stamping date के साथ।
+    li
+      strong Lubes / Other
+      | : आप जो भी दूसरा item बेचते हैं, pack size, unit और selling price के साथ।
+    li
+      strong Banks और Digital
+      | : आपके bank accounts, और जो payment apps और cards आप लेते हैं।
+    li
+      strong Customers और Suppliers
+      | : credit customers, जिस bank में वे पैसा जमा करते हैं उसके साथ; और आप जिनसे खरीदते हैं (invoice वाला नाम)।
+  h3 आगे क्या होता है
+  ul
+    li PetroMath आपकी details (HSN code और GST rate भी) check करके आपका पंप set up करता है।
+    li Owner को पहला login मिलता है: Admin username और password।
+    li उसके बाद नए staff, products और credit customers आप खुद जोड़ते हैं (topic 4 से 6), opening stock और हर customer के बकाया के साथ।
+
+section#hi-intro
+  h2 2. PetroMath का छोटा सा tour
+  .help-who कौन: Owner (Admin)
+  +howVideo('intro', 'PetroMath का छोटा सा tour', false, 'hi')
+  p Sign in करें और देखें कि menu का हर हिस्सा किस काम का है। यह tour owner (Admin) का menu दिखाता है; managers और staff को सिर्फ़ उनके role के हिस्से दिखते हैं।
+  ul
+    li
+      strong Daily Operations
+      | : shifts, day bill, Day Close, और bank व oil company statements upload करना।
+    li
+      strong Transactions
+      | : credit receipts, purchase invoices, tanker receipts, tank dip और renewal dates।
+    li
+      strong Reports
+      | : customer balances और statements, reconciliation, GST, sales और stock।
+    li
+      strong Masters
+      | : users, products, customers, digital payments, banks और employees।
+    li
+      strong Accounting
+      | : हर महीने accounts बनाना, फिर Day Book, Profit &amp; Loss और Balance Sheet।
+    li
+      strong Administration
+      | : support tickets और password reset।
+
+section#hi-phone-app
+  h2 3. अपने phone पर PetroMath install करें
+  .help-who कौन: सभी
+  +howVideo('phone-app', 'अपने phone पर PetroMath install करें', true, 'hi')
+  ol.help-steps
+    li
+      | Android phone पर Chrome खोलें,
+      strong  petromath.co.in
+      |  पर जाएँ और
+      strong  Sign in
+      |  tap करें।
+    li अपने username और password से sign in करें।
+    li
+      strong Get the PetroMath app
+      |  banner पर
+      strong  Install
+      |  tap करें, फिर confirm करने के लिए दोबारा
+      strong  Install
+      | । PetroMath आपकी home screen पर आ जाता है।
+    li Home screen से खोलें: यह पूरी screen पर, पहले से sign in होकर खुलता है।
+    li
+      | हर screen एक tile है, computer के menu की तरह groups में। पूरा section देखने के लिए
+      strong  more
+      |  tap करें, या
+      strong  Search screens
+      |  में type करें।
+  h3 जानने लायक
+  ul
+    li
+      | iPhone पर Safari में petromath.co.in खोलें,
+      strong  Share
+      |  tap करें, फिर
+      strong  Add to Home Screen
+      | ।
+    li Sign in के बाद fingerprint login on कर सकते हैं, फिर उस phone पर password की ज़रूरत नहीं।
+
+h2.help-part#hi-part-setup अपना पंप set up करें (एक बार)
+
+section#hi-add-user
+  h2 4. Staff के login जोड़ें: Admin, Manager और Cashier roles
+  .help-who कौन: Owner (Admin)
+  +howVideo('add-user', 'staff के login और roles जोड़ें', false, 'hi')
+  p PetroMath इस्तेमाल करने वाले हर व्यक्ति का अपना login होता है, और उनका role तय करता है कि वे क्या देख सकते हैं।
+  ul
+    li
+      strong Admin
+      | : owner। यह login PetroMath owner को देता है।
+    li
+      strong Manager
+      | : जो रोज़ पंप चलाते हैं।
+    li
+      strong Cashier
+      | : आपके cashiers और pump attendants। ये हर shift की Attendance में दिखते हैं।
+  p
+    | हर role का अपना default menu और access है। अगर आप चाहते हैं कि आपके पंप पर कोई role ज़्यादा या कम देखे, तो PetroMath से कहें (एक
+    strong  Support Ticket
+    |  डालें), हम उस role का access जोड़ या हटा देंगे।
+  ol.help-steps
+    li
+      strong Masters → Users
+      |  खोलें और
+      strong  Add User
+      |  पर click करें।
+    li पूरा नाम capital letters में type करें। Username नाम और आपके पंप के code से बन जाता है।
+    li हर नया login form में दिखे default password से शुरू होता है; sign in के बाद उसे बदलने को कहें।
+    li
+      | Role चुनें और
+      strong  Save
+      |  पर click करें।
+    li
+      | कोई काम छोड़ दे, तो
+      strong  Disable
+      |  पर click करें। वे sign in नहीं कर पाएँगे; उनकी पुरानी entries बनी रहेंगी। Disabled users
+      strong  Disabled
+      |  में रहते हैं, जहाँ
+      strong  Enable
+      |  उन्हें वापस ले आता है।
+  h3 जानने लायक
+  ul
+    li
+      | Password भूल गए?
+      strong  Administration → Password Reset
+      |  से reset करें।
+
+section#hi-add-product
+  h2 5. Product जोड़ें, opening stock के साथ
+  .help-who कौन: Owner (Admin)
+  +howVideo('add-product', 'product जोड़ें', false, 'hi')
+  p Lubes, coolant और कोई भी दूसरा item जो आप बेचते हैं। Fuels (MS, HSD आदि) PetroMath team आपके tanks और nozzles के साथ set up करती है।
+  ol.help-steps
+    li
+      strong Masters → Products
+      |  खोलें और
+      strong  Add Product
+      |  पर click करें।
+    li Product का नाम वैसे डालें जैसे bill पर चाहिए, pack size के साथ (जैसे 500 ML, 1 LTR), और supplier के invoice से HSN code।
+    li
+      strong Unit:
+      |  pack और bottle के लिए NOS, खुले oil के लिए LIT।
+    li
+      | Selling
+      strong  Price
+      |  (GST के साथ), और GST rate को
+      strong  CGST
+      |  और
+      strong  SGST
+      |  में बाँटें (18% मतलब 9 और 9)।
+    li
+      strong Add Product
+      |  पर click करें। अब cashiers इसे Lube Sales और Credit Sales में चुन सकते हैं।
+    li
+      strong Opening Stock
+      |  column में
+      strong  Set
+      |  पर click करें, और दिखाई गई date पर आपके पास कितना है (गिनती करके) वह डालें।
+  h3 जानने लायक
+  ul
+    li Purchase से stock बढ़ता है और हर sale से घटता है, इसलिए opening गिनती ज़रूरी है।
+    li Price बदलने के लिए product के edit button का इस्तेमाल करें।
+
+section#hi-add-customer
+  h2 6. Credit customer जोड़ें: opening balance और login
+  .help-who कौन: Owner (Admin)
+  +howVideo('add-customer', 'credit customer जोड़ें', false, 'hi')
+  p Customers owner (Admin login) जोड़ते हैं।
+  ol.help-steps
+    li
+      strong Masters → Customers
+      |  खोलें और
+      strong  Add Customer
+      |  पर click करें।
+    li Company का नाम, bill पर छपने वाला short name, phone, पता, और tax invoice चाहिए तो GST number डालें।
+    li
+      strong Remittance Bank:
+      |  वह account जिसमें वे पैसा जमा करते हैं। उस bank का statement upload करने पर उनके payments इसी customer में दिखेंगे।
+    li
+      strong Opening Balance:
+      |  PetroMath में पहले bill से पहले उनका कितना बकाया था, आपके पुराने ledger से।
+      strong  As on
+      |  PetroMath शुरू करने से एक दिन पहले की date से भरा होता है। बिल्कुल नए customer के लिए 0 रहने दें।
+    li
+      strong Save Customer
+      |  पर click करें। PetroMath customer का login भी बना देता है।
+    li
+      | Login के पास वाली
+      strong  चाबी (key)
+      |  पर click करके username और password देखें, और customer को भेजें। Reset Password नया password देता है; वहीं login बंद भी कर सकते हैं।
+    li
+      strong Truck
+      |  button से उनकी गाड़ियाँ जोड़ें।
+  h3 जानने लायक
+  ul
+    li
+      | किसी पुराने customer का opening balance
+      strong  Not set
+      |  दिखे, तो Opening Balance column के
+      strong  Set
+      |  button से डाल सकते हैं।
+    li Set होने के बाद opening balance बदलने के लिए कारण देना होता है, और बदलाव history में रहता है।
+
+h2.help-part#hi-part-daily हर दिन
+
+section#hi-shift
+  h2 7. Shift भरें और close करें
+  .help-who कौन: Cashier या Manager
+  +howVideo('shift-closing', 'shift भरें और close करें', false, 'hi')
+  p
+    strong Shift क्या है?
+    |  PetroMath में shift का मतलब है एक cashier की duty: opening cash लेने से लेकर cash सौंपने तक।
+    |  अगर पंप पर 24 घंटे एक ही duty है तो दिन में एक shift; दिन में cashier बदलते हैं तो हर cashier की एक shift भरें।
+  p
+    | Shift एक ही screen पर भरी जाती है, हर हिस्से का एक tab है। बाएँ से दाएँ
+    strong  Next
+    |  से आगे बढ़ें। हर बार अगले tab पर जाते समय PetroMath shift को draft में save करता है, इसलिए आप रुककर Cashier Shift list में
+    strong  Edit
+    |  से फिर शुरू कर सकते हैं।
+  ol.help-steps
+    li
+      strong Daily Operations → Cashier Shift
+      |  खोलें और
+      strong  Add New
+      |  पर click करें।
+    li
+      strong Closing:
+      |  cashier, shift date और दिया गया opening cash चुनें। Selling rates check करें (पिछली shift से आते हैं)।
+    li
+      strong Attendance:
+      |  काम करने वाले हर व्यक्ति के लिए
+      strong  Add
+      |  पर click करें: व्यक्ति, shift, in time और out time।
+    li
+      strong Reading:
+      |  closing reading time चुनें,
+      strong  Add All Nozzles
+      |  पर click करें, फिर हर nozzle की closing meter reading type करें। Testing litre हो तो डालें। Sale और amount अपने-आप calculate होते हैं।
+    li
+      strong Lube Sales:
+      |  cash में बिके oil और दूसरे products: product और quantity।
+    li
+      strong Credit Sales:
+      |  हर credit bill के लिए
+      strong  Add credits
+      |  पर click करें: product, bill number, company, गाड़ी और quantity, फिर
+      strong  Save
+      | ।
+    li
+      strong Digital Sales:
+      |  UPI, card और fleet card से आए payments: vendor और amount।
+    li
+      strong Collections
+      |  (optional, सिर्फ़ अगर आपके पंप के लिए on है): shift के दौरान credit customers से मिला पैसा: cash या digital, customer और amount। Customer का balance कम होता है।
+    li
+      strong Employee Advance
+      |  (optional, सिर्फ़ अगर on है): shift के cash से staff को दिया गया पैसा, salary advance या salary। यह employee के ledger में जाता है।
+    li
+      strong Expenses:
+      |  shift के दौरान cash से किया गया खर्च। आम amount अपने-आप भरता है; ज़रूरत हो तो बदलें।
+    li
+      strong Cash Count:
+      |  सौंपे जा रहे हर note और coin की गिनती। Total अपने-आप आता है।
+    li
+      strong Summary:
+      |  पूरी shift check करें, ख़ासकर
+      strong  Excess/Shortage
+      |  (गिना हुआ cash बनाम देय cash)। फिर
+      strong  CLOSE
+      |  पर click करें और
+      strong  OK
+      |  से confirm करें।
+  h3 जानने लायक
+  ul
+    li आपके पंप पर 2T Sales, Collections या Employee Advance जैसे extra tabs हो सकते हैं। वे भी इसी तरह काम करते हैं।
+    li Close हुई shift edit नहीं हो सकती। उसकी closing readings अगली shift की opening readings बनती हैं।
+    li अगर Close पर credit quantity meter sale से ज़्यादा बताए, तो credit bills में product check करें (जैसे HSD की जगह MS डाला गया हो)।
+
+section#hi-day-close
+  h2 8. दिन close करें, Day-Close Report पढ़ें
+  .help-who कौन: Manager
+  +howVideo('day-close', 'दिन close करें, Day-Close Report पढ़ें', false, 'hi')
+  p
+    strong Day Close, 24 घंटे के एक दिन का आपका office हिसाब है।
+    |  अपने office का cash drawer सोचिए: cash आता है (InFlow) और cash जाता है (OutFlow)। जो बचता है वह locker में रहता है और अगले दिन में जाता है।
+  p
+    | आपका पंप तय करता है कि उसके 24 घंटे कब शुरू होते हैं। जैसे 14-Nov सुबह 9 बजे से 15-Nov सुबह 9 बजे तक; आपके पंप का समय अलग हो सकता है।
+  p उस दिन की सारी shifts close होने के बाद, दिन में एक बार close करें। फिर Day-Close Report पूरे दिन की झलक देती है।
+  ol.help-steps
+    li
+      strong Daily Operations → Day Close
+      |  खोलें। Close करने की date भरी होती है;
+      strong  Generate Day Close
+      |  पर click करें (पहले से शुरू किए दिन के लिए
+      strong  Continue Day Close
+      | )।
+    li
+      strong InFlow
+      |  (बाईं तरफ़): drawer में आया cash:
+      ul
+        li
+          strong Balance B/F
+          | : कल के आखिर में locker में बचा cash, आगे लाया गया।
+        li
+          strong Collection
+          | : shifts से दिन की sales collection। यह cashier के गिने notes का total
+          strong  नहीं
+          |  है।
+        li Cashier का excess और 2T oil की sale।
+    li
+      strong OutFlow
+      |  (दाईं तरफ़): drawer से बाहर गया cash: cashier का shortage और shift के खर्च।
+    li
+      strong Grey rows
+      |  shifts से भरती हैं। बदलना हो तो shift ठीक करें।
+    li
+      | जो PetroMath नहीं जान सकता, वह
+      strong  +
+      |  से जोड़ें: customer से आई cash receipt (InFlow), दी गई salary (OutFlow), और bank में जमा cash। आपकी जोड़ी row सफ़ेद होती है, आखिर में delete करने के लिए
+      strong  ✕
+      |  के साथ।
+    li
+      strong Bank में जमा cash OutFlow में जाता है।
+      |  पैसा आपका ही है, पर office के drawer से निकल गया, इसलिए यह बाहर जाने वाला cash है।
+    li
+      strong Difference
+      |  (InFlow − OutFlow): आज रात locker में जितना cash बचना चाहिए। असल में बचे notes
+      strong  Denominations
+      |  में गिनकर डालें; फ़र्क ही दिन का cash excess या shortage है।
+    li
+      strong SAVE
+      | , फिर
+      strong  CLOSE
+      |  पर click करके confirm करें। Day-Close Report खुलती है।
+  h3 Day-Close Report में क्या है
+  ul
+    li Litre और रुपये में sales (cash, digital, credit), lubes, digital sales, credit bills और खर्च।
+    li हर cashier shift अपने excess या shortage के साथ; आए tanker loads; customers के payments।
+    li
+      strong Credit Customer Balances
+      | : सबसे ज़्यादा बकाया वाले top 3 customers, और सारे credit customers के लिए एक
+      strong  Total
+      |  row। 15 तारीख और महीने के आखिरी दिन हर customer दिखता है।
+    li Prices, इस महीने बनाम पिछले महीने और पिछले साल का fuel offtake, nozzle readings, दिन का cash flow और cash excess या shortage, bank और SAP lines, और deadlines।
+    li कोई भी date चुनें और Go पर click करें; हरा button इसे PDF में download करता है, भेजने के लिए।
+  h3 जानने लायक
+  ul
+    li कोई दिन तभी close होता है जब उससे पहले का दिन close हो चुका हो।
+    li अगला दिन पिछले दिन के Difference से शुरू होता है: वह उस दिन का Balance B/F बनता है।
+    li Close हुआ दिन बदला नहीं जा सकता। Reopen के लिए special permission चाहिए; ज़रूरत हो तो support ticket डालें।
+
+section#hi-fuel-invoice
+  h2 9. Fuel (tanker) invoice PDF upload करें
+  .help-who कौन: Manager
+  +howVideo('fuel-invoice', 'fuel invoice upload करें', false, 'hi')
+  p Oil company का tanker invoice उसकी PDF से भरें, बिना type किए।
+  ol.help-steps
+    li
+      strong Transactions → Purchase Invoice
+      |  खोलें,
+      strong  New Purchase
+      |  पर click करें, फिर
+      strong  Fuel Invoice
+      | ।
+    li
+      strong Choose File
+      |  पर click करें और oil company portal से download की गई invoice PDF चुनें।
+    li PetroMath उसे पढ़कर invoice number, date, tanker number, delivery और seal numbers, total, और हर product की quantity, rate, density, HSN code और VAT भर देता है।
+    li सिर्फ़ पहली बार, invoice का हर product आपका कौन सा product है, वह चुनें (जैसे EBMS = MS)। PetroMath इसे याद रखता है।
+    li
+      | Paper invoice से figures मिलाएँ और
+      strong  Save Mapping
+      |  पर click करें। PDF invoice के साथ रहती है (View PDF)।
+  h3 जानने लायक
+  ul
+    li जहाँ आपका oil company account जुड़ा है, उसी screen पर Fetch from IOCL invoice PDFs खुद ले आता है।
+
+section#hi-lube-invoice
+  h2 10. Lube purchase invoice PDF upload करें
+  .help-who कौन: Manager
+  +howVideo('lube-invoice', 'lube purchase invoice upload करें', false, 'hi')
+  p अपने lube distributor का invoice उसकी PDF से भरें।
+  ol.help-steps
+    li
+      strong Transactions → Purchase Invoice
+      |  खोलें,
+      strong  New Purchase
+      |  पर click करें, फिर
+      strong  Lube Invoice
+      | ।
+    li
+      strong Fill from invoice PDF
+      |  पर click करें और invoice PDF चुनें।
+    li PetroMath supplier, invoice number, date, और हर product line की quantity, rate, discount और GST भर देता है।
+    li
+      | हर line पर
+      strong  Matched
+      | ,
+      strong  Suggested
+      |  या
+      strong  Pick
+      |  दिखता है। Suggested lines check करें और Pick lines के लिए product चुनें; उस supplier के लिए PetroMath आपकी पसंद याद रखता है।
+    li
+      | Total invoice से मिलता है, यह देखें, फिर
+      strong  Save & Close Invoice
+      |  पर click करके confirm करें। हर product का stock बढ़ता है और PDF साथ लगी रहती है।
+  h3 जानने लायक
+  ul
+    li यह IndianOil (SERVO) distributor invoices और Tally जैसे tax invoices पढ़ता है। दूसरे format के लिए उसी screen पर हाथ से भरें।
+    li PDF से आए figures lock रहते हैं, ताकि PetroMath का invoice paper से बिल्कुल मिले।
+    li वही invoice number पहले भरा गया हो तो PetroMath चेतावनी देता है।
+
+h2.help-part#hi-part-monthly हर हफ़्ते और महीने
+
+section#hi-bank-upload
+  h2 11. Bank statement upload करें
+  .help-who कौन: Manager
+  +howVideo('bank-upload', 'bank statement upload करें', false, 'hi')
+  p अपने bank account का हर credit और debit PetroMath में लाएँ। Internet banking से statement Excel file में download करें (कुछ banks की PDF भी चलती है)।
+  ol.help-steps
+    li
+      strong Daily Operations → Upload Transactions
+      |  खोलें।
+    li
+      strong Step 1:
+      |  bank account और statement file चुनें, और
+      strong  Next: Preview Transactions
+      |  पर click करें। File पर password हो तो PetroMath पूछता है।
+    li
+      strong Step 2:
+      |  हर line के लिए ledger चुनें: पैसा देने वाला customer, UPI या card vendor, cash जमा के लिए Cash, oil company को payment के लिए आपका SAP account, या Bank Charges जैसा खर्च।
+    li
+      strong Step 3:
+      |  lines की गिनती और account check करें, फिर
+      strong  Save All Transactions
+      |  पर click करें और
+      strong  OK
+      |  से confirm करें।
+  h3 जानने लायक
+  ul
+    li पहले upload हुई lines duplicate mark होकर छूट जाती हैं, इसलिए overlap वाला statement upload करना safe है।
+    li कुछ uploads के बाद PetroMath आपकी पिछली पसंद से ledger suggest करता है। Suggestions check करें।
+    li
+      | Save हुई lines
+      strong  Bank Transactions
+      |  में हैं। Ledger गलत चुना गया हो तो वहाँ बदलने के लिए अपने Admin से कहें।
+
+section#hi-sap-upload
+  h2 12. Oil company (SAP) statement upload करें
+  .help-who कौन: Manager
+  +howVideo('sap-upload', 'oil company (SAP) statement upload करें', false, 'hi')
+  p Oil company portal का account statement भी उसी screen पर, उसी तरह upload होता है। Excel file में download करें।
+  ol.help-steps
+    li
+      strong Daily Operations → Upload Transactions
+      |  खोलें और अपना oil company (SAP) account चुनें।
+    li
+      | Statement file चुनें और
+      strong  Next: Preview Transactions
+      |  पर click करें।
+    li
+      | हर line के लिए ledger चुनें: product invoices
+      strong  Purchase Invoice
+      |  में, आपके payments आपके bank account में, fleet card और loyalty credits उनके अपने ledgers में, और fees मिलते-जुलते charge ledger में।
+    li
+      strong Next
+      | , फिर
+      strong  Save All Transactions
+      |  पर click करें और
+      strong  OK
+      |  से confirm करें।
+  h3 जानने लायक
+  ul
+    li
+      | Save हुई lines
+      strong  SAP Transactions
+      |  में हैं।
+    li दोनों statements नियमित upload करें: oil company को किया payment दोनों में दिखता है, bank में debit और SAP में credit।
+
+section#hi-paytm-recon
+  h2 13. Paytm reconcile करें (digital reconciliation)
+  .help-who कौन: Manager
+  +howVideo('paytm-recon', 'Paytm reconcile करें', false, 'hi')
+  p
+    | Check करें कि cashiers ने Paytm (या किसी card, UPI, fleet card vendor) से जो हर रुपया लिया, वह आपके bank में आया।
+    | PetroMath आपकी shifts में भरी
+    strong  Digital Sales
+    |  को upload किए bank statement के vendor payments से मिलाता है, और आपके लिए match करता है।
+  ol.help-steps
+    li
+      strong Reports → Digital Reconciliation
+      |  खोलें।
+    li
+      | Period और
+      strong  Digital Vendor
+      |  चुनें, फिर
+      strong  Go
+      |  पर click करें।
+    li
+      | Debits आपकी shifts की sales हैं; credits vendor के payments। Match हुई lines की एक ही
+      strong  Match ID
+      |  होती है: अगले दिन पैसा आए तो हरा, कुछ दिन बाद आए तो orange (जैसे weekend की sale सोमवार को)।
+    li
+      strong Show Only Unreconciled
+      |  पर tick करें, बाकी दिख जाएगा।
+    li
+      | हाथ से match करने के लिए lines पर tick करें और
+      strong  Manual Match
+      |  पर click करें। Amount अलग हो, तो फ़र्क का कारण note में लिखें और
+      strong  Save & Match
+      |  पर click करें।
+  h3 जानने लायक
+  ul
+    li पहले bank statement upload करें और vendor के payments को उस vendor (जैसे PAYTM) पर tag करें, वरना वे credits में नहीं दिखेंगे।
+    li Manager ₹100 तक और Admin ₹1,000 तक का फ़र्क match कर सकते हैं। ज़्यादा फ़र्क का मतलब आमतौर पर कोई sale या payment छूटा है या गलत vendor पर भरा है।
+    li गलती से match हो गया? Save हुई Match ID के पास का लाल ✕ group को unmatch करता है।
+
+section#hi-customer-statement
+  h2 14. Customer का credit statement निकालें
+  .help-who कौन: Manager
+  +howVideo('customer-statement', 'customer का credit statement निकालें', false, 'hi')
+  p
+    strong Customer Detailed Report
+    |  एक credit customer का statement है: किसी period के सारे bills और payments, चलते balance के साथ।
+  ol.help-steps
+    li
+      strong Reports → Customer Detailed Report
+      |  खोलें।
+    li
+      strong Date Range
+      |  चुनें: This Month, Last Month, कोई महीना और साल, financial year, या Custom Date में अपनी dates।
+    li
+      strong Company Name
+      |  में customer चुनें और
+      strong  Go
+      |  पर click करें।
+    li
+      strong Period Summary
+      |  (opening balance, bills, payments, closing balance) check करें, फिर नीचे की lines: हर bill product, गाड़ी, quantity और amount के साथ, और हर payment।
+    li
+      | भेजने के लिए हरे
+      strong  Download PDF
+      |  button पर click करें, या print के लिए नीले
+      strong  Print
+      |  button पर।
+  h3 जानने लायक
+  ul
+    li Bills तब दिखते हैं जब उनकी shift close हो। Payments record होने पर दिखते हैं: customer को ledger रखकर upload किए bank statement से, या Credit Receipts में भरे हुए।
+    li PDF में आपके पंप का नाम और पता होता है, इसलिए इसे सीधे WhatsApp पर भेज सकते हैं।
+    li
+      | हर bill या payment की एक line वाला छोटा statement चाहिए, तो
+      strong  Customer Ledger Report
+      |  इस्तेमाल करें।
+
+section#hi-customer-phone
+  h2 15. Customer अपना statement phone पर देखें
+  .help-who कौन: आपका credit customer
+  +howVideo('customer-phone', 'अपना statement phone पर देखें', true, 'hi')
+  p हर credit customer का अपना login है, इसलिए वे आपको फ़ोन किए बिना कभी भी देख सकते हैं कि कितना बाकी है। यह video उनके username और password के साथ भेजें।
+  ol.help-steps
+    li
+      | Customer अपने phone पर
+      strong  petromath.co.in
+      |  खोलते हैं और आपके भेजे username और password से sign in करते हैं (देखें:
+      a(href='#hi-add-customer')  Credit customer जोड़ें
+      | )।
+    li उनका statement तुरंत खुलता है: opening balance, हर bill (date, bill number, product, litre, गाड़ी) और हर payment, हर line के बाद balance, और आखिर में closing balance।
+    li
+      | दूसरा period देखने के लिए वे
+      strong  Date Range
+      |  (जैसे Last Month) चुनकर
+      strong  Go
+      |  tap करते हैं।
+    li हरा button statement को PDF में download करता है; नीला print करता है।
+    li
+      | Menu (☰) से वे
+      strong  Change Password
+      |  कर सकते हैं।
+  h3 जानने लायक
+  ul
+    li Customer को सिर्फ़ अपने bills और payments दिखते हैं।
+    li Password भूल जाएँ, तो Masters → Customers में उनके login के पास Reset Password इस्तेमाल करें।
+
+section#hi-accounting
+  h2 16. Accounts बनाएँ, Profit &amp; Loss देखें
+  .help-who कौन: Owner (Admin), महीने में एक बार
+  +howVideo('accounting', 'accounts बनाएँ, Profit & Loss देखें', false, 'hi')
+  p महीने की shifts, bills, invoices और bank lines को accounting entries में बदलें, फिर अपना profit और वह कैसे बना, देखें।
+  ol.help-steps
+    li
+      strong Accounting → GL Control
+      |  खोलें। (नीचे के steps सिर्फ़ owner, यानी Admin, चला सकते हैं।)
+    li
+      strong Generate Events
+      |  पर period चुनें (जैसे
+      strong  Last Month
+      | ) और
+      strong  Generate Missing Events
+      |  पर click करें। उस period की हर sale, receipt, invoice और bank line accounts के लिए queue में लग जाती है।
+    li
+      strong Events Monitor
+      |  पर
+      strong  View
+      |  click करें, queue दिखेगी। Eye button हर event के पीछे का transaction दिखाता है।
+    li
+      strong Create Accounting
+      |  पर वही period चुनें और
+      strong  Run Create Accounting
+      |  पर click करें। PetroMath vouchers लिखता है और बताता है कितने बने।
+    li
+      strong Accounting → Profit &amp; Loss
+      |  खोलें, period चुनें और
+      strong  View
+      |  पर click करें: income, खर्च और net profit।
+    li किसी भी ledger के नाम पर click करें, उसकी Ledger Report खुलती है: उस figure के पीछे की हर entry, date, voucher और description के साथ।
+  h3 जानने लायक
+  ul
+    li दोनों steps दोबारा चलाना safe है: पहले से queue हुए events और बने vouchers दोहराए नहीं जाते।
+    li जिन dates की shift अभी draft में है वे छूट जाती हैं। Shift close करें, फिर Create Accounting दोबारा चलाएँ।
+    li कोई event Error दिखाए, तो eye button से खोलें, कारण ठीक करें (अक्सर ledger नहीं होता), फिर Retry।
+    li P&amp;L में गलत figure आमतौर पर गलत tag हुई bank या SAP line से आता है: ledger खोलें, line ढूँढें, और उसका tag ठीक करें।

@@ -1,0 +1,669 @@
+//- Help page text, Tamil (same page as body-en.pug). Spoken Tamil like the voiceover; words on the screen
+//- (Add New, Masters → Users, ...) stay in English letters. Section ids are prefixed ta-.
+.card.help-toc.mb-4
+  .card-body
+    strong பொருளடக்கம்
+    .help-toc-part தொடக்கம்
+      span.text-muted  · Owner, முதல் நாளுக்கு முன்னாடி
+    ol.mb-2(start=1)
+      li: a(href='#ta-getting-started') தொடக்கம்: உங்க பங்க் details போடுங்க
+      li: a(href='#ta-intro') PetroMath ஒரு சின்ன tour
+      li: a(href='#ta-phone-app') உங்க phone-ல PetroMath install பண்ணுங்க
+    .help-toc-part உங்க பங்க்-ஐ set up பண்ணுங்க (ஒரு தடவை)
+      span.text-muted  · Owner (Admin)
+    ol.mb-2(start=4)
+      li: a(href='#ta-add-user') Staff login சேர்க்கிறது: Admin, Manager, Cashier roles
+      li: a(href='#ta-add-product') Product சேர்க்கிறது, opening stock-ஓட
+      li: a(href='#ta-add-customer') Credit customer சேர்க்கிறது: opening balance, login
+    .help-toc-part தினமும்
+      span.text-muted  · Manager, cashiers
+    ol.mb-2(start=7)
+      li: a(href='#ta-shift') Shift entry பண்ணி close பண்றது
+      li: a(href='#ta-day-close') Day Close பண்றது, Day-Close Report படிக்கிறது
+      li: a(href='#ta-fuel-invoice') Fuel (tanker) invoice PDF upload பண்றது
+      li: a(href='#ta-lube-invoice') Lube purchase invoice PDF upload பண்றது
+    .help-toc-part வாரம், மாசம் ஒரு தடவை
+      span.text-muted  · Manager, owner
+    ol.mb-2(start=11)
+      li: a(href='#ta-bank-upload') Bank statement upload பண்றது
+      li: a(href='#ta-sap-upload') Oil company (SAP) statement upload பண்றது
+      li: a(href='#ta-paytm-recon') Paytm reconcile பண்றது (digital reconciliation)
+      li: a(href='#ta-customer-statement') Customer credit statement எடுக்கிறது
+      li: a(href='#ta-customer-phone') Customer தன் statement-ஐ phone-ல பார்க்கலாம்
+      li: a(href='#ta-accounting') Accounts உருவாக்கி, Profit &amp; Loss பார்க்கிறது
+
+h2.help-part#ta-part-start தொடக்கம்
+
+section#ta-getting-started
+  h2 1. தொடக்கம்: உங்க பங்க் details போடுங்க
+  .help-who யார்: Owner, PetroMath demo முடிஞ்சதும்
+  +howVideo('getting-started', 'உங்க பங்க் details போடுங்க', false, 'ta')
+  p Demo முடிஞ்சதும், PetroMath உங்களுக்கு ஒரு onboarding form link அனுப்பும். அதை computer-லயோ phone-லயோ open பண்ணுங்க. நீங்க type பண்றது தானா save ஆயிடும், அதனால நடுவுல நிறுத்திட்டு அதே link-ல எப்ப வேணும்னாலும் தொடரலாம்.
+  ol.help-steps
+    li
+      strong RO Details
+      | : GST certificate-ல இருக்குற மாதிரி பங்க் பேரு, owner mobile, oil company, GST number, address.
+    li
+      strong Employees
+      | : பங்க்ல வேலை பார்க்குற எல்லாரும், அவங்க வேலையும். இந்த list-ல இருந்து தான் login உருவாக்குவோம்.
+    li
+      strong Products, Tanks, Nozzles
+      | : fuels, இன்னைக்கு selling price-ஓட; ஒவ்வொரு tank, அதோட capacity, fuel; ஒவ்வொரு nozzle, pump make, tank, அடுத்த stamping date.
+    li
+      strong Lubes / Other
+      | : நீங்க விக்கிற மத்த எல்லா items-உம், pack size, unit, selling price-ஓட.
+    li
+      strong Banks, Digital
+      | : உங்க bank accounts, நீங்க வாங்குற payment apps, cards.
+    li
+      strong Customers, Suppliers
+      | : credit customers, அவங்க பணம் கட்டுற bank-ஓட; நீங்க யார்கிட்ட வாங்குறீங்க (invoice-ல இருக்குற பேரு).
+  h3 அடுத்து என்ன நடக்கும்
+  ul
+    li PetroMath உங்க details-ஐ (HSN code, GST rate உட்பட) check பண்ணி, உங்க பங்க்-ஐ set up பண்ணும்.
+    li Owner-க்கு முதல் login வரும்: Admin username, password.
+    li அதுக்கப்புறம் புது staff, products, credit customers-ஐ நீங்களே சேர்க்கலாம் (topic 4 முதல் 6), opening stock-உம் ஒவ்வொரு customer பாக்கியும் சேர்த்து.
+
+section#ta-intro
+  h2 2. PetroMath ஒரு சின்ன tour
+  .help-who யார்: Owner (Admin)
+  +howVideo('intro', 'PetroMath ஒரு சின்ன tour', false, 'ta')
+  p Sign in பண்ணி, menu-ல ஒவ்வொரு பகுதியும் எதுக்குன்னு பாருங்க. இந்த tour owner (Admin) menu-ஐ காட்டுது; managers, staff-க்கு அவங்க role-க்கு தேவையான பகுதிகள் மட்டும் தெரியும்.
+  ul
+    li
+      strong Daily Operations
+      | : shifts, day bill, Day Close, bank / oil company statements upload.
+    li
+      strong Transactions
+      | : credit receipts, purchase invoices, tanker receipts, tank dip, renewal dates.
+    li
+      strong Reports
+      | : customer balances, statements, reconciliation, GST, sales, stock.
+    li
+      strong Masters
+      | : users, products, customers, digital payments, banks, employees.
+    li
+      strong Accounting
+      | : மாசா மாசம் accounts உருவாக்குறது, அப்புறம் Day Book, Profit &amp; Loss, Balance Sheet.
+    li
+      strong Administration
+      | : support tickets, password reset.
+
+section#ta-phone-app
+  h2 3. உங்க phone-ல PetroMath install பண்ணுங்க
+  .help-who யார்: எல்லாரும்
+  +howVideo('phone-app', 'உங்க phone-ல PetroMath install பண்ணுங்க', true, 'ta')
+  ol.help-steps
+    li
+      | Android phone-ல Chrome open பண்ணி,
+      strong  petromath.co.in
+      |  போயி
+      strong  Sign in
+      |  tap பண்ணுங்க.
+    li உங்க username, password-ஓட sign in பண்ணுங்க.
+    li
+      strong Get the PetroMath app
+      |  banner-ல
+      strong  Install
+      |  tap பண்ணி, confirm பண்ண மறுபடியும்
+      strong  Install
+      |  tap பண்ணுங்க. PetroMath உங்க home screen-ல வந்துடும்.
+    li Home screen-ல இருந்து open பண்ணுங்க: full screen-ல, ஏற்கனவே sign in ஆகி திறக்கும்.
+    li
+      | ஒவ்வொரு screen-உம் ஒரு tile, computer menu மாதிரி group பண்ணியிருக்கும். முழு section பார்க்க
+      strong  more
+      |  tap பண்ணுங்க, இல்லன்னா
+      strong  Search screens
+      | -ல type பண்ணுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li
+      | iPhone-ல Safari-ல petromath.co.in open பண்ணி,
+      strong  Share
+      | , அப்புறம்
+      strong  Add to Home Screen
+      |  tap பண்ணுங்க.
+    li Sign in பண்ணதும் fingerprint login on பண்ணலாம், அப்புறம் அந்த phone-ல password தேவையில்ல.
+
+h2.help-part#ta-part-setup உங்க பங்க்-ஐ set up பண்ணுங்க (ஒரு தடவை)
+
+section#ta-add-user
+  h2 4. Staff login சேர்க்கிறது: Admin, Manager, Cashier roles
+  .help-who யார்: Owner (Admin)
+  +howVideo('add-user', 'staff login, roles சேர்க்கிறது', false, 'ta')
+  p PetroMath use பண்ற ஒவ்வொருத்தருக்கும் தனி login இருக்கும்; அவங்க என்ன பார்க்கலாம்னு அவங்க role முடிவு பண்ணும்.
+  ul
+    li
+      strong Admin
+      | : owner. இந்த login-ஐ PetroMath owner-க்கு குடுக்கும்.
+    li
+      strong Manager
+      | : தினமும் பங்க்-ஐ நடத்துறவங்க.
+    li
+      strong Cashier
+      | : உங்க cashiers, pump attendants. இவங்க ஒவ்வொரு shift-ஓட Attendance-ல வருவாங்க.
+  p
+    | ஒவ்வொரு role-க்கும் அதுக்கான default menu, access இருக்கு. உங்க பங்க்ல ஒரு role அதிகமா அல்லது கம்மியா பார்க்கணும்னா, PetroMath-கிட்ட கேளுங்க (ஒரு
+    strong  Support Ticket
+    |  போடுங்க); அந்த role-க்கு access-ஐ சேர்த்து அல்லது எடுத்துடுவோம்.
+  ol.help-steps
+    li
+      strong Masters → Users
+      |  open பண்ணி
+      strong  Add User
+      |  click பண்ணுங்க.
+    li முழு பேரை capital letters-ல type பண்ணுங்க. Username, பேரு, உங்க பங்க் code-ல இருந்து தானா வரும்.
+    li ஒவ்வொரு புது login-உம் form-ல காட்டுற default password-ஓட தொடங்கும்; sign in பண்ணதும் அதை மாத்த சொல்லுங்க.
+    li
+      | Role select பண்ணி
+      strong  Save
+      |  click பண்ணுங்க.
+    li
+      | யாராவது வேலையை விட்டு போனா
+      strong  Disable
+      |  click பண்ணுங்க. அவங்க sign in பண்ண முடியாது; அவங்களோட பழைய entries அப்படியே இருக்கும். Disable ஆனவங்க
+      strong  Disabled
+      | -ல இருப்பாங்க, அங்க
+      strong  Enable
+      |  பண்ணா திரும்ப வருவாங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li
+      | Password மறந்துட்டாங்களா?
+      strong  Administration → Password Reset
+      | -ல reset பண்ணுங்க.
+
+section#ta-add-product
+  h2 5. Product சேர்க்கிறது, opening stock-ஓட
+  .help-who யார்: Owner (Admin)
+  +howVideo('add-product', 'product சேர்க்கிறது', false, 'ta')
+  p Lubes, coolant, நீங்க விக்கிற வேற எந்த item-க்கும். Fuels (MS, HSD மாதிரி) உங்க tanks, nozzles-ஓட சேர்த்து PetroMath team set up பண்ணும்.
+  ol.help-steps
+    li
+      strong Masters → Products
+      |  open பண்ணி
+      strong  Add Product
+      |  click பண்ணுங்க.
+    li Bill-ல வரணும்னு நினைக்கிற product பேரை pack size-ஓட (உதா. 500 ML, 1 LTR) போடுங்க; supplier invoice-ல இருக்குற HSN code-உம் போடுங்க.
+    li
+      strong Unit:
+      |  pack, bottle-க்கு NOS; loose oil-க்கு LIT.
+    li
+      | Selling
+      strong  Price
+      |  (GST சேர்த்து), GST rate-ஐ
+      strong  CGST
+      | ,
+      strong  SGST
+      |  ஆ பிரிச்சு (18% னா 9, 9).
+    li
+      strong Add Product
+      |  click பண்ணுங்க. இனி cashiers இதை Lube Sales, Credit Sales-ல select பண்ணலாம்.
+    li
+      strong Opening Stock
+      |  column-ல
+      strong  Set
+      |  click பண்ணி, காட்டுற date-ல உங்ககிட்ட எத்தனை இருக்குன்னு (எண்ணிப் பார்த்து) போடுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li Purchase stock-ஐ ஏத்தும், ஒவ்வொரு sale-உம் குறைக்கும், அதனால opening எண்ணிக்கை முக்கியம்.
+    li Price மாத்த, product-ல இருக்குற edit button use பண்ணுங்க.
+
+section#ta-add-customer
+  h2 6. Credit customer சேர்க்கிறது: opening balance, login
+  .help-who யார்: Owner (Admin)
+  +howVideo('add-customer', 'credit customer சேர்க்கிறது', false, 'ta')
+  p Customers-ஐ owner (Admin login) தான் சேர்ப்பாங்க.
+  ol.help-steps
+    li
+      strong Masters → Customers
+      |  open பண்ணி
+      strong  Add Customer
+      |  click பண்ணுங்க.
+    li Company பேரு, bill-ல print ஆகுற short name, phone, address, tax invoice வேணும்னா GST number போடுங்க.
+    li
+      strong Remittance Bank:
+      |  அவங்க பணம் கட்டுற account. அந்த bank statement upload பண்ணும்போது அவங்க payments இந்த customer கீழ வரும்.
+    li
+      strong Opening Balance:
+      |  PetroMath-ல முதல் bill-க்கு முன்னாடி அவங்க எவ்வளவு பாக்கி வச்சிருந்தாங்க, உங்க பழைய ledger-ல இருந்து.
+      strong  As on
+      |  , PetroMath தொடங்குறதுக்கு முந்தின நாளா தானா வரும். புது customer-க்கு 0 விட்டுடுங்க.
+    li
+      strong Save Customer
+      |  click பண்ணுங்க. PetroMath customer-க்கு login-உம் உருவாக்கும்.
+    li
+      | Login பக்கத்துல இருக்குற
+      strong  key
+      |  click பண்ணா username, password தெரியும்; அதை customer-க்கு அனுப்புங்க. Reset Password புது password குடுக்கும்; அங்கயே login-ஐ off-உம் பண்ணலாம்.
+    li
+      strong truck
+      |  button-ல அவங்க vehicles சேருங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li
+      | ஏற்கனவே இருக்குற customer-க்கு opening balance
+      strong  Not set
+      |  னு காட்டினா, Opening Balance column-ல இருக்குற
+      strong  Set
+      |  button-ல போடலாம்.
+    li Set பண்ணின opening balance-ஐ மாத்த காரணம் சொல்லணும்; அந்த மாற்றம் history-ல இருக்கும்.
+
+h2.help-part#ta-part-daily தினமும்
+
+section#ta-shift
+  h2 7. Shift entry பண்ணி close பண்றது
+  .help-who யார்: Cashier அல்லது Manager
+  +howVideo('shift-closing', 'shift entry பண்ணி close பண்றது', false, 'ta')
+  p
+    strong Shift-னா என்ன?
+    |  PetroMath-ல shift-னா ஒரு cashier-ஓட duty: opening cash வாங்குறதுல இருந்து cash ஒப்படைக்குற வரைக்கும்.
+    |  24 மணி நேரம் ஒரே duty-னா ஒரு நாளைக்கு ஒரு shift; நடுவுல cashier மாறினா, ஒவ்வொரு cashier-க்கும் ஒரு shift போடுங்க.
+  p
+    | ஒரு shift ஒரே screen-ல, ஒவ்வொரு பகுதிக்கும் ஒரு tab-ஓட போடப்படும். இடமிருந்து வலமா
+    strong  Next
+    |  click பண்ணி போங்க. ஒவ்வொரு தடவை அடுத்த tab போகும்போதும் PetroMath shift-ஐ draft-ஆ save பண்ணும், அதனால நிறுத்திட்டு Cashier Shift list-ல
+    strong  Edit
+    |  ல இருந்து தொடரலாம்.
+  ol.help-steps
+    li
+      strong Daily Operations → Cashier Shift
+      |  open பண்ணி
+      strong  Add New
+      |  click பண்ணுங்க.
+    li
+      strong Closing:
+      |  cashier, shift date, குடுத்த opening cash select பண்ணுங்க. Selling rates-ஐ check பண்ணுங்க (போன shift-ல இருந்து வரும்).
+    li
+      strong Attendance:
+      |  வேலை பார்த்த ஒவ்வொருத்தருக்கும்
+      strong  Add
+      |  click பண்ணுங்க: ஆள், shift, in time, out time.
+    li
+      strong Reading:
+      |  closing reading time select பண்ணி,
+      strong  Add All Nozzles
+      |  click பண்ணுங்க; அப்புறம் ஒவ்வொரு nozzle-ஓட closing meter reading type பண்ணுங்க. Testing litre இருந்தா போடுங்க. Sale, amount தானா calculate ஆகும்.
+    li
+      strong Lube Sales:
+      |  cash-க்கு வித்த oil, மத்த products: product, quantity.
+    li
+      strong Credit Sales:
+      |  ஒவ்வொரு credit bill-க்கும்
+      strong  Add credits
+      |  click பண்ணி product, bill number, company, vehicle, quantity போட்டு
+      strong  Save
+      |  பண்ணுங்க.
+    li
+      strong Digital Sales:
+      |  UPI, card, fleet card-ல வந்த payments: vendor, amount.
+    li
+      strong Collections
+      |  (optional, உங்க பங்க்குக்கு on பண்ணியிருந்தா மட்டும்): shift நேரத்துல credit customers கட்டின பணம்: cash-ஆ digital-ஆ, customer, amount. Customer balance குறையும்.
+    li
+      strong Employee Advance
+      |  (optional, on பண்ணியிருந்தா மட்டும்): shift cash-ல இருந்து staff-க்கு குடுத்த பணம், salary advance அல்லது salary. இது employee ledger-ல போகும்.
+    li
+      strong Expenses:
+      |  shift நேரத்துல cash-ல இருந்து செலவு பண்ண பணம். வழக்கமான amount தானா வரும்; வேணும்னா மாத்துங்க.
+    li
+      strong Cash Count:
+      |  ஒப்படைக்குற ஒவ்வொரு note, coin எத்தனை. Total தானா வரும்.
+    li
+      strong Summary:
+      |  முழு shift-ஐ check பண்ணுங்க, முக்கியமா
+      strong  Excess/Shortage
+      |  (எண்ணின cash vs வர வேண்டிய cash). அப்புறம்
+      strong  CLOSE
+      |  click பண்ணி
+      strong  OK
+      |  குடுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li உங்க பங்க்ல 2T Sales, Collections, Employee Advance மாதிரி extra tabs இருக்கலாம். அவையும் இதே மாதிரி தான்.
+    li Close ஆன shift-ஐ மாத்த முடியாது. அதோட closing readings அடுத்த shift-ஓட opening readings ஆகும்.
+    li Close பண்ணும்போது credit quantity meter sale-ஐ விட அதிகம்னு சொன்னா, credit bills-ல product-ஐ check பண்ணுங்க (உதா. HSD-ஐ MS-னு போட்டிருக்கலாம்).
+
+section#ta-day-close
+  h2 8. Day Close பண்றது, Day-Close Report படிக்கிறது
+  .help-who யார்: Manager
+  +howVideo('day-close', 'Day Close பண்றது, Day-Close Report படிக்கிறது', false, 'ta')
+  p
+    strong Day Close-னா 24 மணி நேர ஒரு நாளுக்கான உங்க office கணக்கு.
+    |  உங்க office cash drawer-ஐ நினைச்சுக்கோங்க: cash வருது (InFlow), cash போகுது (OutFlow). மீதி locker-ல இருக்கும், அடுத்த நாளுக்கு போகும்.
+  p
+    | உங்க பங்க்கோட 24 மணி நேரம் எப்போ தொடங்குதுன்னு உங்க பங்க் தான் முடிவு பண்ணும். உதா. 14-Nov காலை 9 மணி முதல் 15-Nov காலை 9 மணி வரை; உங்க பங்க்ல வேற நேரமா இருக்கலாம்.
+  p அந்த நாளோட எல்லா shifts-உம் close ஆனதும், நாளுக்கு ஒரு தடவை close பண்ணுங்க. அப்புறம் Day-Close Report முழு நாளையும் காட்டும்.
+  ol.help-steps
+    li
+      strong Daily Operations → Day Close
+      |  open பண்ணுங்க. Close பண்ண வேண்டிய date தானா வரும்;
+      strong  Generate Day Close
+      |  click பண்ணுங்க (ஏற்கனவே தொடங்கின நாளுக்கு
+      strong  Continue Day Close
+      | ).
+    li
+      strong InFlow
+      |  (இடது பக்கம்): drawer-க்குள்ள வந்த cash:
+      ul
+        li
+          strong Balance B/F
+          | : நேத்து முடிவுல locker-ல இருந்த cash, இன்னைக்கு கொண்டு வந்தது.
+        li
+          strong Collection
+          | : shifts-ல இருந்து அன்னைக்கு sales collection. இது cashier எண்ணின notes total
+          strong  இல்ல
+          | .
+        li Cashier-ஓட excess, 2T oil sale.
+    li
+      strong OutFlow
+      |  (வலது பக்கம்): drawer-ல இருந்து வெளியே போன cash: cashier shortage, shift expenses.
+    li
+      strong Grey rows
+      |  shifts-ல இருந்து வருது. மாத்தணும்னா shift-ஐ சரி பண்ணுங்க.
+    li
+      | PetroMath-க்கு தெரியாததை
+      strong  +
+      |  ல சேருங்க: customer கிட்ட வந்த cash receipt (InFlow), குடுத்த salary (OutFlow), bank-ல கட்டின cash. நீங்க சேர்க்குற row வெள்ளையா இருக்கும், delete பண்ண கடைசில
+      strong  ✕
+      |  இருக்கும்.
+    li
+      strong Bank-ல கட்டின cash OutFlow-ல போகும்.
+      |  அது உங்க பணம் தான், ஆனா office drawer-ஐ விட்டு போயிடுச்சு, அதனால அது வெளியே போற cash.
+    li
+      strong Difference
+      |  (InFlow − OutFlow): இன்னைக்கு ராத்திரி locker-ல இருக்க வேண்டிய cash. உண்மையில இருக்குற notes-ஐ
+      strong  Denominations
+      | -ல எண்ணி போடுங்க; வித்தியாசம் தான் அன்னைக்கு cash excess அல்லது shortage.
+    li
+      strong SAVE
+      | , அப்புறம்
+      strong  CLOSE
+      |  click பண்ணி confirm பண்ணுங்க. Day-Close Report திறக்கும்.
+  h3 Day-Close Report என்ன காட்டும்
+  ul
+    li Litre-லயும் ரூபாய்லயும் sales (cash, digital, credit), lubes, digital sales, credit bills, expenses.
+    li ஒவ்வொரு cashier shift-உம் அதோட excess / shortage-ஓட; வந்த tanker loads; customers கட்டின payments.
+    li
+      strong Credit Customer Balances
+      | : உங்களுக்கு அதிகம் பாக்கி வச்சிருக்குற top 3 customers, எல்லா credit customers-ஓட மொத்தத்துக்கு ஒரு
+      strong  Total
+      |  row. 15-ஆம் தேதியும் மாசக் கடைசி நாளும் எல்லா customers-உம் வருவாங்க.
+    li Prices, இந்த மாசம் / போன மாசம் / போன வருஷம் fuel offtake, nozzle readings, அன்னைக்கு cash flow, cash excess / shortage, bank, SAP lines, deadlines.
+    li எந்த date-ஐயும் select பண்ணி Go click பண்ணுங்க; பச்சை button PDF-ஆ download பண்ணும், share பண்ணலாம்.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li முந்தின நாள் close ஆனதுக்கு அப்புறம் தான் ஒரு நாளை close பண்ண முடியும்.
+    li அடுத்த நாள், முந்தின நாளோட Difference-ல இருந்து தொடங்கும்: அது அன்னைக்கு Balance B/F-ஆ வரும்.
+    li Close ஆன நாளை மாத்த முடியாது. Reopen பண்ண special permission வேணும்; தேவைன்னா support ticket போடுங்க.
+
+section#ta-fuel-invoice
+  h2 9. Fuel (tanker) invoice PDF upload பண்றது
+  .help-who யார்: Manager
+  +howVideo('fuel-invoice', 'fuel invoice upload பண்றது', false, 'ta')
+  p Oil company tanker invoice-ஐ அதோட PDF-ல இருந்தே போடுங்க, type பண்ண வேண்டாம்.
+  ol.help-steps
+    li
+      strong Transactions → Purchase Invoice
+      |  open பண்ணி,
+      strong  New Purchase
+      | , அப்புறம்
+      strong  Fuel Invoice
+      |  click பண்ணுங்க.
+    li
+      strong Choose File
+      |  click பண்ணி, oil company portal-ல download பண்ண invoice PDF-ஐ select பண்ணுங்க.
+    li PetroMath அதை படிச்சு invoice number, date, tanker number, delivery, seal numbers, total, ஒவ்வொரு product-ஓட quantity, rate, density, HSN code, VAT எல்லாம் போடும்.
+    li முதல் தடவை மட்டும், invoice-ல இருக்குற ஒவ்வொரு product உங்க எந்த product-னு select பண்ணுங்க (உதா. EBMS = MS). PetroMath நினைவு வச்சுக்கும்.
+    li
+      | Paper invoice-ஓட figures-ஐ check பண்ணி
+      strong  Save Mapping
+      |  click பண்ணுங்க. PDF invoice-ஓட சேர்ந்து இருக்கும் (View PDF).
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li உங்க oil company account connect ஆகியிருந்தா, அதே screen-ல Fetch from IOCL invoice PDFs-ஐ தானா கொண்டு வரும்.
+
+section#ta-lube-invoice
+  h2 10. Lube purchase invoice PDF upload பண்றது
+  .help-who யார்: Manager
+  +howVideo('lube-invoice', 'lube purchase invoice upload பண்றது', false, 'ta')
+  p உங்க lube distributor invoice-ஐ அதோட PDF-ல இருந்து போடுங்க.
+  ol.help-steps
+    li
+      strong Transactions → Purchase Invoice
+      |  open பண்ணி,
+      strong  New Purchase
+      | , அப்புறம்
+      strong  Lube Invoice
+      |  click பண்ணுங்க.
+    li
+      strong Fill from invoice PDF
+      |  click பண்ணி invoice PDF-ஐ select பண்ணுங்க.
+    li PetroMath supplier, invoice number, date, ஒவ்வொரு product line-ஓட quantity, rate, discount, GST எல்லாம் போடும்.
+    li
+      | ஒவ்வொரு line-லயும்
+      strong  Matched
+      | ,
+      strong  Suggested
+      |  அல்லது
+      strong  Pick
+      |  காட்டும். Suggested lines-ஐ check பண்ணுங்க, Pick lines-க்கு product select பண்ணுங்க; அந்த supplier-க்கு உங்க தேர்வை PetroMath நினைவு வச்சுக்கும்.
+    li
+      | Total invoice-ஓட match ஆகுதான்னு பார்த்து
+      strong  Save & Close Invoice
+      |  click பண்ணி confirm பண்ணுங்க. ஒவ்வொரு product stock-உம் ஏறும், PDF சேர்ந்திருக்கும்.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li IndianOil (SERVO) distributor invoices, Tally மாதிரி tax invoices-ஐ படிக்கும். மத்த format-க்கு அதே screen-ல கையால போடுங்க.
+    li PDF-ல இருந்து வந்த figures lock ஆகியிருக்கும், அதனால PetroMath-ல இருக்குற invoice paper-ஓட சரியா match ஆகும்.
+    li அதே invoice number ஏற்கனவே போட்டிருந்தா PetroMath எச்சரிக்கும்.
+
+h2.help-part#ta-part-monthly வாரம், மாசம் ஒரு தடவை
+
+section#ta-bank-upload
+  h2 11. Bank statement upload பண்றது
+  .help-who யார்: Manager
+  +howVideo('bank-upload', 'bank statement upload பண்றது', false, 'ta')
+  p உங்க bank account-ல இருக்குற எல்லா credit, debit-ஐயும் PetroMath-க்கு கொண்டு வாங்க. Internet banking-ல statement-ஐ Excel file-ஆ download பண்ணுங்க (சில banks-க்கு PDF-உம் வேலை செய்யும்).
+  ol.help-steps
+    li
+      strong Daily Operations → Upload Transactions
+      |  open பண்ணுங்க.
+    li
+      strong Step 1:
+      |  bank account, statement file select பண்ணி
+      strong  Next: Preview Transactions
+      |  click பண்ணுங்க. File-க்கு password இருந்தா PetroMath கேக்கும்.
+    li
+      strong Step 2:
+      |  ஒவ்வொரு line-க்கும் ledger select பண்ணுங்க: பணம் கட்டின customer, UPI / card vendor, cash deposit-க்கு Cash, oil company payment-க்கு உங்க SAP account, அல்லது Bank Charges மாதிரி expense.
+    li
+      strong Step 3:
+      |  lines எண்ணிக்கை, account check பண்ணி
+      strong  Save All Transactions
+      |  click பண்ணி
+      strong  OK
+      |  குடுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li முன்னாடி upload பண்ண lines duplicate-னு mark ஆகி skip ஆகும், அதனால overlap ஆகுற statement upload பண்ணலாம்.
+    li முதல் சில uploads-க்கு அப்புறம், நீங்க முன்னாடி select பண்ணதை வச்சு PetroMath ledger-ஐ suggest பண்ணும். Suggestions-ஐ check பண்ணுங்க.
+    li
+      | Save ஆன lines
+      strong  Bank Transactions
+      | -ல இருக்கும். Ledger தப்பா select பண்ணியிருந்தா, அங்க மாத்த உங்க Admin-கிட்ட சொல்லுங்க.
+
+section#ta-sap-upload
+  h2 12. Oil company (SAP) statement upload பண்றது
+  .help-who யார்: Manager
+  +howVideo('sap-upload', 'oil company (SAP) statement upload பண்றது', false, 'ta')
+  p Oil company portal-ல இருந்து வர்ற account statement-உம் இதே screen-ல, இதே மாதிரி upload ஆகும். Excel file-ஆ download பண்ணுங்க.
+  ol.help-steps
+    li
+      strong Daily Operations → Upload Transactions
+      |  open பண்ணி உங்க oil company (SAP) account select பண்ணுங்க.
+    li
+      | Statement file select பண்ணி
+      strong  Next: Preview Transactions
+      |  click பண்ணுங்க.
+    li
+      | ஒவ்வொரு line-க்கும் ledger select பண்ணுங்க: product invoices
+      strong  Purchase Invoice
+      | -க்கு, உங்க payments உங்க bank account-க்கு, fleet card, loyalty credits அதுக்கான ledgers-க்கு, fees அதுக்கான charge ledger-க்கு.
+    li
+      strong Next
+      | , அப்புறம்
+      strong  Save All Transactions
+      |  click பண்ணி
+      strong  OK
+      |  குடுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li
+      | Save ஆன lines
+      strong  SAP Transactions
+      | -ல இருக்கும்.
+    li ரெண்டு statements-ஐயும் தவறாம upload பண்ணுங்க: oil company-க்கு கட்டின payment ரெண்டுலயும் வரும், bank-ல debit-ஆ, SAP-ல credit-ஆ.
+
+section#ta-paytm-recon
+  h2 13. Paytm reconcile பண்றது (digital reconciliation)
+  .help-who யார்: Manager
+  +howVideo('paytm-recon', 'Paytm reconcile பண்றது', false, 'ta')
+  p
+    | உங்க cashiers Paytm-ல (அல்லது எந்த card, UPI, fleet card vendor-லயும்) வாங்கின ஒவ்வொரு ரூபாயும் உங்க bank-க்கு வந்துச்சான்னு check பண்ணுங்க.
+    | உங்க shifts-ல போட்ட
+    strong  Digital Sales
+    | -ஐ, upload பண்ண bank statement-ல இருக்குற vendor payments-ஓட PetroMath compare பண்ணி, உங்களுக்காக match பண்ணும்.
+  ol.help-steps
+    li
+      strong Reports → Digital Reconciliation
+      |  open பண்ணுங்க.
+    li
+      | Period,
+      strong  Digital Vendor
+      |  select பண்ணி
+      strong  Go
+      |  click பண்ணுங்க.
+    li
+      | Debits உங்க shifts-ல இருந்து வந்த sales; credits vendor payments. Match ஆன lines-க்கு ஒரே
+      strong  Match ID
+      |  இருக்கும்: அடுத்த நாளே வந்தா பச்சை, சில நாள் கழிச்சு வந்தா orange (உதா. weekend sales திங்கக்கிழமை வந்தா).
+    li
+      strong Show Only Unreconciled
+      |  tick பண்ணா மீதி என்னன்னு தெரியும்.
+    li
+      | கையால match பண்ண, lines-ஐ tick பண்ணி
+      strong  Manual Match
+      |  click பண்ணுங்க. Amount வேறுபட்டா, காரணத்தை note-ஆ போட்டு
+      strong  Save & Match
+      |  click பண்ணுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li முதல்ல bank statement upload பண்ணி, vendor payments-ஐ அந்த vendor-க்கு (உதா. PAYTM) tag பண்ணுங்க; இல்லன்னா அவை credits-ஆ வராது.
+    li Manager ₹100 வரைக்கும், Admin ₹1,000 வரைக்கும் வித்தியாசத்தை match பண்ணலாம். அதுக்கு மேல இருந்தா, ஒரு sale அல்லது payment விடுபட்டிருக்கும் அல்லது தப்பான vendor-ல போட்டிருக்கும்.
+    li தப்பா match பண்ணிட்டீங்களா? Save ஆன Match ID பக்கத்துல இருக்குற சிவப்பு ✕ அந்த group-ஐ unmatch பண்ணும்.
+
+section#ta-customer-statement
+  h2 14. Customer credit statement எடுக்கிறது
+  .help-who யார்: Manager
+  +howVideo('customer-statement', 'customer credit statement எடுக்கிறது', false, 'ta')
+  p
+    strong Customer Detailed Report
+    |  ஒரு credit customer-ஓட statement: ஒரு period-ல எல்லா bills, payments, running balance-ஓட.
+  ol.help-steps
+    li
+      strong Reports → Customer Detailed Report
+      |  open பண்ணுங்க.
+    li
+      strong Date Range
+      |  select பண்ணுங்க: This Month, Last Month, ஒரு மாசம் / வருஷம், financial year, அல்லது Custom Date-ல உங்க dates.
+    li
+      strong Company Name
+      | -ல customer-ஐ select பண்ணி
+      strong  Go
+      |  click பண்ணுங்க.
+    li
+      strong Period Summary
+      |  (opening balance, bills, payments, closing balance) check பண்ணுங்க; அப்புறம் கீழ ஒவ்வொரு bill-உம் product, vehicle, quantity, amount-ஓட, ஒவ்வொரு payment-உம்.
+    li
+      | அனுப்ப, பச்சை
+      strong  Download PDF
+      |  button, அல்லது print-க்கு நீல
+      strong  Print
+      |  button click பண்ணுங்க.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li Shift close ஆனதும் bills வரும். Payments record ஆனதும் வரும்: customer-ஐ ledger-ஆ வச்சு upload பண்ண bank statement-ல இருந்து, அல்லது Credit Receipts-ல போட்டது.
+    li PDF-ல உங்க பங்க் பேரு, address இருக்கும், அதனால அப்படியே WhatsApp-ல அனுப்பலாம்.
+    li
+      | ஒரு bill / payment-க்கு ஒரு line-னு சின்ன statement வேணும்னா
+      strong  Customer Ledger Report
+      |  use பண்ணுங்க.
+
+section#ta-customer-phone
+  h2 15. Customer தன் statement-ஐ phone-ல பார்க்கலாம்
+  .help-who யார்: உங்க credit customer
+  +howVideo('customer-phone', 'உங்க statement-ஐ phone-ல பாருங்க', true, 'ta')
+  p ஒவ்வொரு credit customer-க்கும் தனி login இருக்கு, அதனால உங்களை call பண்ணாமலே எவ்வளவு பாக்கின்னு எப்ப வேணும்னாலும் பார்க்கலாம். இந்த video-வை அவங்க username, password-ஓட அனுப்புங்க.
+  ol.help-steps
+    li
+      | Customer தன் phone-ல
+      strong  petromath.co.in
+      |  open பண்ணி, நீங்க அனுப்பின username, password-ஓட sign in பண்ணுவாங்க (பாருங்க:
+      a(href='#ta-add-customer')  Credit customer சேர்க்கிறது
+      | ).
+    li அவங்க statement உடனே திறக்கும்: opening balance, ஒவ்வொரு bill (date, bill number, product, litre, vehicle), ஒவ்வொரு payment, ஒவ்வொரு line-க்கு அப்புறம் balance, கடைசில closing balance.
+    li
+      | வேற period பார்க்க
+      strong  Date Range
+      |  (உதா. Last Month) select பண்ணி
+      strong  Go
+      |  tap பண்ணுவாங்க.
+    li பச்சை button statement-ஐ PDF-ஆ download பண்ணும்; நீலம் print பண்ணும்.
+    li
+      | Menu (☰)-ல
+      strong  Change Password
+      |  பண்ணலாம்.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li Customer-க்கு அவங்க bills, payments மட்டும் தான் தெரியும்.
+    li Password மறந்துட்டா, Masters → Customers-ல அவங்க login பக்கத்துல இருக்குற Reset Password use பண்ணுங்க.
+
+section#ta-accounting
+  h2 16. Accounts உருவாக்கி, Profit &amp; Loss பார்க்கிறது
+  .help-who யார்: Owner (Admin), மாசம் ஒரு தடவை
+  +howVideo('accounting', 'accounts உருவாக்கி Profit & Loss பார்க்கிறது', false, 'ta')
+  p ஒரு மாசத்தோட shifts, bills, invoices, bank lines-ஐ accounting entries-ஆ மாத்தி, உங்க profit-ஐயும் அது எப்படி வந்துச்சுன்னும் பாருங்க.
+  ol.help-steps
+    li
+      strong Accounting → GL Control
+      |  open பண்ணுங்க. (கீழ இருக்குற steps-ஐ owner, Admin மட்டும் தான் run பண்ண முடியும்.)
+    li
+      strong Generate Events
+      | -ல period select பண்ணி (உதா.
+      strong  Last Month
+      | )
+      strong  Generate Missing Events
+      |  click பண்ணுங்க. அந்த period-ஓட ஒவ்வொரு sale, receipt, invoice, bank line-உம் accounts-க்கு queue ஆகும்.
+    li
+      strong Events Monitor
+      | -ல
+      strong  View
+      |  click பண்ணா queue தெரியும். Eye button ஒவ்வொரு event-க்கு பின்னாடி இருக்குற transaction-ஐ காட்டும்.
+    li
+      strong Create Accounting
+      | -ல அதே period select பண்ணி
+      strong  Run Create Accounting
+      |  click பண்ணுங்க. PetroMath vouchers எழுதி, எத்தனை உருவாச்சுன்னு காட்டும்.
+    li
+      strong Accounting → Profit &amp; Loss
+      |  open பண்ணி period select பண்ணி
+      strong  View
+      |  click பண்ணுங்க: income, expenses, net profit.
+    li எந்த ledger பேரை click பண்ணாலும் அதோட Ledger Report திறக்கும்: அந்த figure-க்கு பின்னாடி இருக்குற ஒவ்வொரு entry-உம் date, voucher, description-ஓட.
+  h3 தெரிஞ்சுக்கோங்க
+  ul
+    li ரெண்டு steps-ஐயும் மறுபடி run பண்ணலாம்: ஏற்கனவே queue ஆன events, உருவான vouchers திரும்ப வராது.
+    li Shift இன்னும் draft-ல இருக்குற dates skip ஆகும். Shift-ஐ close பண்ணி Create Accounting மறுபடி run பண்ணுங்க.
+    li ஒரு event Error காட்டினா, eye button-ல open பண்ணி காரணத்தை சரி பண்ணுங்க (பெரும்பாலும் ledger இல்லாதது), அப்புறம் Retry.
+    li P&amp;L-ல தப்பான figure பெரும்பாலும் தப்பா tag பண்ண bank அல்லது SAP line-ல இருந்து வரும்: ledger open பண்ணி, அந்த line-ஐ கண்டுபிடிச்சு, tag-ஐ சரி பண்ணுங்க.

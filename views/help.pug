@@ -1,34 +1,62 @@
 extends layout
 
-//- Each video can have a Tamil copy (<name>.ta.mp4, Tamil voice + captions); the language switch picks it.
-mixin howVideo(name, label, phone)
-  - const src = (lang) => { const f = name + (lang === 'en' ? '' : '.' + lang); return { mp4: `/videos/${f}.mp4?v=${videoV[f + '.mp4'] || ''}`, jpg: `/videos/${f}.jpg?v=${videoV[f + '.jpg'] || ''}`, share: 'https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + f + '.mp4') }; }
-  - const en = src('en'), ta = videoV[name + '.ta.mp4'] ? src('ta') : null;
-  figure.help-video(class=phone ? 'phone' : undefined data-en=JSON.stringify(en) data-ta=ta ? JSON.stringify(ta) : undefined)
-    video(src=en.mp4 poster=en.jpg controls playsinline preload="none")
+//- Each video can have a Tamil / Hindi copy (<name>.ta.mp4, <name>.hi.mp4: voice + captions); the language switch picks it.
+//- The page text is in views/help/body-<lang>.pug; `lang` is the language of the text around this video.
+mixin howVideo(name, label, phone, lang)
+  - const ui = { en: ['Watch how', 'English only', 'Share on WhatsApp'], ta: ['எப்படின்னு பாருங்க', 'English-ல மட்டும்', 'WhatsApp-ல share பண்ணுங்க'], hi: ['देखें कैसे', 'सिर्फ़ English में', 'WhatsApp पर share करें'] }[lang || 'en'];
+  - const src = (l) => { const f = name + (l === 'en' ? '' : '.' + l); return { mp4: `/videos/${f}.mp4?v=${videoV[f + '.mp4'] || ''}`, jpg: `/videos/${f}.jpg?v=${videoV[f + '.jpg'] || ''}`, share: 'https://wa.me/?text=' + encodeURIComponent('PetroMath: ' + label + ' ' + origin + '/videos/' + f + '.mp4') }; }
+  - const en = src('en'), ta = videoV[name + '.ta.mp4'] ? src('ta') : null, hi = videoV[name + '.hi.mp4'] ? src('hi') : null;
+  - const first = (lang === 'ta' && ta) || (lang === 'hi' && hi) || en;
+  figure.help-video(class=phone ? 'phone' : undefined data-en=JSON.stringify(en) data-ta=ta ? JSON.stringify(ta) : undefined data-hi=hi ? JSON.stringify(hi) : undefined)
+    video(src=first.mp4 poster=first.jpg controls playsinline preload="none")
     figcaption
       span
-        strong Watch how: #{label}
-        span.badge.badge-light.border.ml-2.help-en-only(hidden) English only
-      a.help-share(href=en.share target='_blank' rel='noopener')
+        strong #{ui[0]}: #{label}
+        span.badge.badge-light.border.ml-2.help-en-only(hidden) #{ui[1]}
+      a.help-share(href=first.share target='_blank' rel='noopener')
         i.bi.bi-whatsapp.me-1
-        | Share on WhatsApp
+        | #{ui[2]}
 
 block content
   style.
-    .help-page { max-width: 980px; }
+    /* Reading layout: light grey page, each topic a white card; text stays dark on white. */
+    body, .main-content, .content-wrapper { background: #eef1f5 !important; }
+    .help-page { max-width: 980px; color: #1f2937; font-size: 1.02rem; line-height: 1.65; padding-bottom: 2.5rem; }
+    .help-page .text-muted { color: #4b5563 !important; }
+    .help-page .help-toc, .help-page section { background: #fff; border: 1px solid #e3e7ed; border-radius: 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06); }
     .help-page .help-toc ol { margin-bottom: 0; }
-    .help-page section { margin-bottom: 2rem; }
-    .help-page h2 { font-size: 1.35rem; margin-bottom: .75rem; }
-    .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; }
+    .help-page .help-toc a { color: #1d4ed8; }
+    .help-page section { padding: 22px 26px 8px; margin-bottom: 1.25rem; }
+    .help-page h2 { font-size: 1.35rem; margin-bottom: .75rem; color: #111827; }
+    .help-page h3 { font-size: 1.05rem; margin-top: 1.25rem; color: #111827; }
     .help-video { margin: 0 0 1.25rem; }
-    .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 6px; display: block; }
+    .help-video video { width: 100%; max-width: 960px; aspect-ratio: 16 / 9; background: #111; border-radius: 8px; display: block; }
     .help-video.phone { max-width: 360px; }
     .help-video.phone video { aspect-ratio: 720 / 1504; }
     .help-video figcaption { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 2px; font-size: .95rem; }
-    .help-steps > li { margin-bottom: .6rem; }
+    /* Steps: numbered yellow circles */
+    .help-page ol.help-steps { list-style: none; counter-reset: step; padding-left: 0; }
+    .help-page ol.help-steps > li { counter-increment: step; position: relative; padding-left: 2.5rem; margin-bottom: .8rem; }
+    .help-page ol.help-steps > li::before { content: counter(step); position: absolute; left: 0; top: .15rem; width: 1.75rem; height: 1.75rem;
+      border-radius: 50%; background: #facc15; color: #111827; font-weight: 700; font-size: .9rem; display: flex; align-items: center; justify-content: center; }
+    /* "Good to know" / "What happens next": a light yellow note box */
+    .help-page section h3 + ul { background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: .75rem 1rem .75rem 2.2rem; margin-bottom: 1rem; }
+    .help-page section h3 + ul > li { margin-bottom: .3rem; }
+    /* Part headings: a navy band, like the video cards */
+    .help-page h2.help-part { font-size: 1.05rem; text-transform: uppercase; letter-spacing: .06em; color: #facc15; background: #0f172a;
+      border-radius: 10px; padding: .6rem 1.1rem; margin: 2.2rem 0 1rem; }
+    .help-who { display: inline-block; font-size: .88rem; color: #78350f; background: #fef3c7; border: 1px solid #f59e0b; border-radius: 999px; padding: 1px 12px; margin: -.35rem 0 .9rem; }
+    .help-toc-part { font-weight: 600; margin-top: .6rem; }
+    @media (max-width: 576px) {
+      .help-page section { padding: 16px 14px 4px; border-radius: 10px; }
+      .help-page { font-size: 1rem; }
+    }
     .help-steps dt { font-weight: 600; }
     .help-steps dd { margin-left: 1.25rem; }
+    /* One language shown at a time (html[data-help-lang], set before the page draws). No script: English. */
+    [data-l] { display: none; }
+    html[data-help-lang="en"] [data-l="en"], html[data-help-lang="ta"] [data-l="ta"], html[data-help-lang="hi"] [data-l="hi"],
+    html:not([data-help-lang]) [data-l="en"] { display: revert; }
 
   .container-fluid.help-page
     if !user
@@ -37,665 +65,62 @@ block content
         a.btn.btn-sm.btn-warning(href='/login')
           i.bi.bi-box-arrow-in-right.me-1
           |  Sign in
+    script.
+      // Page language before anything draws: ?lang=, else the last choice, else Tamil (owner, 2026-11-12).
+      (function () {
+        var L = ['en', 'ta', 'hi'], l = new URLSearchParams(location.search).get('lang');
+        if (L.indexOf(l) < 0) { try { l = localStorage.getItem('helpVideoLang'); } catch (e) { l = null; } }
+        document.documentElement.setAttribute('data-help-lang', L.indexOf(l) >= 0 ? l : 'ta');
+      })();
     h3.mb-1
       i.bi.bi-question-circle.me-2
-      | Help
-    p.text-muted How to use PetroMath, step by step. Each topic has a short video.
+      span(data-l='en') Help
+      span(data-l='ta') உதவி
+      span(data-l='hi') मदद
+    p.text-muted(data-l='en') How to use PetroMath, step by step. Each topic has a short video.
+    p.text-muted(data-l='ta') PetroMath-ஐ எப்படி use பண்றதுன்னு, step by step. ஒவ்வொரு topic-க்கும் ஒரு சின்ன video இருக்கு.
+    p.text-muted(data-l='hi') PetroMath कैसे इस्तेमाल करें, step by step। हर topic का एक छोटा video है।
     .d-flex.align-items-center.flex-wrap.mb-3.help-lang
-      span.mr-2 Video language:
+      span.mr-2(data-l='en') Language:
+      span.mr-2(data-l='ta') மொழி:
+      span.mr-2(data-l='hi') भाषा:
       .btn-group.btn-group-sm(role='group' aria-label='Video language')
         button.btn.btn-outline-primary(type='button' data-lang='en') English
         button.btn.btn-outline-primary(type='button' data-lang='ta') தமிழ்
+        button.btn.btn-outline-primary(type='button' data-lang='hi') हिन्दी
 
-    section#intro
-      h2 Start here: a quick tour of PetroMath
-      +howVideo('intro', 'take a quick tour of PetroMath')
-      p Sign in and see what each part of the menu is for. The tour shows the owner's (Admin) menu; managers and staff see only the parts their role needs.
-      ul
-        li
-          strong Daily Operations
-          | : shifts, the day bill, Day Close, and uploading bank and oil company statements.
-        li
-          strong Transactions
-          | : credit receipts, purchase invoices, tanker receipts, tank dips and renewal dates.
-        li
-          strong Reports
-          | : customer balances and statements, reconciliations, GST, sales and stock.
-        li
-          strong Masters
-          | : users, products, customers, digital payments, banks and employees.
-        li
-          strong Accounting
-          | : create the accounts each month, then the Day Book, Profit &amp; Loss and Balance Sheet.
-        li
-          strong Administration
-          | : support tickets and password resets.
-
-    section#phone-app
-      h2 Install PetroMath on your phone
-      +howVideo('phone-app', 'install PetroMath on your phone', true)
-      ol.help-steps
-        li
-          | On an Android phone, open Chrome, go to
-          strong  petromath.co.in
-          |  and tap
-          strong  Sign in
-          | .
-        li Sign in with your username and password.
-        li
-          | On the
-          strong  Get the PetroMath app
-          |  banner, tap
-          strong  Install
-          | , then
-          strong  Install
-          |  again to confirm. PetroMath appears on your home screen.
-        li Open it from the home screen: it opens full screen, already signed in.
-        li
-          | Every screen is a tile, grouped like the computer menu. Tap
-          strong  more
-          |  to see a whole section, or type in
-          strong  Search screens
-          | .
-      h3 Good to know
-      ul
-        li
-          | On an iPhone, open petromath.co.in in Safari, tap
-          strong  Share
-          | , then
-          strong  Add to Home Screen
-          | .
-        li After signing in, you can turn on fingerprint login so you don't need the password on that phone.
-
-    .card.help-toc.mb-4
-      .card-body
-        strong Contents
-        ol.mt-2
-          li: a(href='#shift') Enter and close a shift
-          li: a(href='#day-close') Close the day, and read the Day-Close Report
-          li: a(href='#bank-upload') Upload a bank statement
-          li: a(href='#sap-upload') Upload the oil company (SAP) statement
-          li: a(href='#customer-statement') Run a customer's credit statement
-          li: a(href='#customer-phone') Your customer sees their statement on their phone
-          li: a(href='#paytm-recon') Reconcile Paytm (digital reconciliation)
-          li: a(href='#add-user') Add staff logins: Admin, Manager and Cashier roles
-          li: a(href='#add-customer') Add a credit customer, with opening balance and login
-          li: a(href='#add-product') Add a product, with opening stock
-          li: a(href='#fuel-invoice') Upload a fuel (tanker) invoice PDF
-          li: a(href='#lube-invoice') Upload a lube purchase invoice PDF
-          li: a(href='#accounting') Create the accounts and read the Profit &amp; Loss
-
-    section#shift
-      h2 1. Enter and close a shift
-      +howVideo('shift-closing', 'enter and close a shift')
-      p
-        strong What is a shift?
-        |  In PetroMath a shift is one cashier's duty: from taking the opening cash to handing over the cash.
-        |  A bunk that runs one 24-hour duty enters one shift a day; if cashiers change during the day, enter one shift per cashier.
-      p
-        | A shift is entered on one screen with a tab for each part. Work through the tabs left to right with
-        strong  Next
-        | . PetroMath saves the shift as a draft each time you move to the next tab, so you can stop and come back to it from
-        strong  Edit
-        |  on the Cashier Shift list.
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Cashier Shift
-          |  and click
-          strong  Add New
-          | .
-        li
-          strong Closing:
-          |  choose the cashier, the shift date and the opening cash given. Check the selling rates (they come from the last shift).
-        li
-          strong Attendance:
-          |  click
-          strong  Add
-          |  for each person who worked: person, shift, in and out time.
-        li
-          strong Reading:
-          |  choose the closing reading time, click
-          strong  Add All Nozzles
-          | , then type each nozzle's closing meter reading. Enter testing litres, if any. Sale and amount are worked out for you.
-        li
-          strong Lube Sales:
-          |  oils and other products sold for cash: product and quantity.
-        li
-          strong Credit Sales:
-          |  click
-          strong  Add credits
-          |  for each credit bill: product, bill number, company, vehicle and quantity, then
-          strong  Save
-          | .
-        li
-          strong Digital Sales:
-          |  UPI, card and fleet card payments received: vendor and amount.
-        li
-          strong Collections
-          |  (optional, only if switched on for your bunk): payments from credit customers received during the shift: cash or digital, customer and amount. The customer's balance comes down.
-        li
-          strong Employee Advance
-          |  (optional, only if switched on for your bunk): cash given to staff from the shift, as salary advance or salary paid. It goes to the employee's ledger.
-        li
-          strong Expenses:
-          |  money paid out of the cash during the shift. The usual amount fills in; change it if needed.
-        li
-          strong Cash Count:
-          |  how many of each note and coin are handed over. The total is worked out.
-        li
-          strong Summary:
-          |  check the whole shift, especially
-          strong  Excess/Shortage
-          |  (cash counted against cash due). Then click
-          strong  CLOSE
-          |  and confirm with
-          strong  OK
-          | .
-      h3 Good to know
-      ul
-        li Your bunk may show extra tabs, such as 2T Sales, Collections or Employee Advance. They work the same way.
-        li A closed shift can no longer be edited. Its closing readings become the next shift's opening readings.
-        li If Close says the credit quantity is more than the meter sale, check the product on the credit bills (for example, HSD entered as MS).
-
-    section#day-close
-      h2 2. Close the day, and read the Day-Close Report
-      +howVideo('day-close', 'close the day and read the Day-Close Report')
-      p
-        strong Day Close is your office accounts for one 24-hour day.
-        |  Think of the cash drawer in your office: cash comes in (InFlow) and cash goes out (OutFlow). What is left stays in the locker and is carried forward to the next day.
-      p
-        | Your bunk decides when its 24 hours start. For example, 14-Nov 9 am to 15-Nov 9 am; your bunk may use a different time.
-      p Close it once a day, after all of that day's shifts are closed. The Day-Close Report then gives a snapshot of the whole day.
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Day Close
-          | . The date to close is filled in; click
-          strong  Generate Day Close
-          |  (or
-          strong  Continue Day Close
-          |  for a day already started).
-        li
-          strong InFlow
-          |  (on the left) is the cash that came into the drawer:
-          ul
-            li
-              strong Balance B/F
-              | : the cash left in the locker at the end of yesterday, brought forward.
-            li
-              strong Collection
-              | : the day's sales collection from the shifts. It is
-              strong  not
-              |  the total of the notes the cashier counted.
-            li A cashier's excess and the 2T oil sale.
-        li
-          strong OutFlow
-          |  (on the right) is the cash that went out of the drawer: a cashier's shortage and the shift expenses.
-        li
-          | The
-          strong  grey rows
-          |  are filled in from the shifts. To change one, correct the shift.
-        li
-          | Add what PetroMath can't know with
-          strong  +
-          | : a cash receipt from a customer (InFlow), salary paid (OutFlow), and the cash deposited in the bank.
-          | A row you add is white, with a
-          strong  ✕
-          |  at the end to delete it.
-        li
-          strong Cash deposited in the bank goes in OutFlow.
-          |  It is still your money, but it has left the office drawer, so it is cash going out.
-        li
-          strong Difference
-          |  (InFlow − OutFlow) is the cash that should be left in the locker tonight. Count the notes actually left under
-          strong  Denominations
-          | ; any gap is the day's cash excess or shortage.
-        li
-          | Click
-          strong  SAVE
-          | , then
-          strong  CLOSE
-          |  and confirm. The Day-Close Report opens.
-      h3 What the Day-Close Report shows
-      ul
-        li Sales in litres and in rupees (cash, digital, credit), lubes, digital sales, credit bills and expenses.
-        li Each cashier shift with its excess or shortage; tanker loads received; payments from customers.
-        li
-          strong Credit Customer Balances
-          | : the top 3 customers who owe you the most, and a
-          strong  Total
-          |  row for all your credit customers together. On the 15th and the last day of the month, every customer is listed.
-        li Prices, fuel offtake this month vs last month and last year, nozzle readings, the day's cash flow and cash excess or shortage, bank and SAP lines, and deadlines.
-        li Pick any date and click Go; the green button downloads it as a PDF to share.
-      h3 Good to know
-      ul
-        li A day can be closed only after the day before it is closed.
-        li The next day starts from the Difference of the day before: it comes in as that day's Balance B/F.
-        li A closed day can't be changed. Reopening one needs special permission; raise a support ticket if a day has to be reopened.
-
-    section#bank-upload
-      h2 3. Upload a bank statement
-      +howVideo('bank-upload', 'upload a bank statement')
-      p Bring every credit and debit in your bank account into PetroMath. Download the statement from your internet banking as an Excel file (some banks also work as PDF).
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Upload Transactions
-          | .
-        li
-          strong Step 1:
-          |  choose the bank account, choose the statement file and click
-          strong  Next: Preview Transactions
-          | . If the file has a password, PetroMath asks for it.
-        li
-          strong Step 2:
-          |  choose a ledger for each line: the customer who paid, the UPI or card vendor, Cash for cash deposits, your SAP account for payments to the oil company, or an expense such as Bank Charges.
-        li
-          strong Step 3:
-          |  check the number of lines and the account, then click
-          strong  Save All Transactions
-          |  and confirm with
-          strong  OK
-          | .
-      h3 Good to know
-      ul
-        li Lines you uploaded before are marked as duplicates and skipped, so an overlapping statement is safe to upload.
-        li After the first few uploads, PetroMath suggests the ledger from what you chose before. Check the suggestions.
-        li The saved lines are in
-          strong  Bank Transactions
-          | . If a ledger was chosen wrongly, ask your Admin to change it there.
-
-    section#sap-upload
-      h2 4. Upload the oil company (SAP) statement
-      +howVideo('sap-upload', 'upload the oil company (SAP) statement')
-      p The account statement from your oil company portal is uploaded the same way, on the same screen. Download it as an Excel file.
-      ol.help-steps
-        li
-          | Open
-          strong  Daily Operations → Upload Transactions
-          |  and choose your oil company (SAP) account.
-        li Choose the statement file and click
-          strong  Next: Preview Transactions
-          | .
-        li
-          | Choose a ledger for each line: product invoices go to
-          strong  Purchase Invoice
-          | , your payments to your bank account, fleet card and loyalty credits to their own ledgers, and fees to the matching charge ledger.
-        li
-          | Click
-          strong  Next
-          | , then
-          strong  Save All Transactions
-          |  and confirm with
-          strong  OK
-          | .
-      h3 Good to know
-      ul
-        li The saved lines are in
-          strong  SAP Transactions
-          | .
-        li Upload both statements regularly: a payment to the oil company appears in both, as a debit in the bank and a credit in SAP.
-
-    section#customer-statement
-      h2 5. Run a customer's credit statement
-      +howVideo('customer-statement', "run a customer's credit statement")
-      p
-        | The
-        strong  Customer Detailed Report
-        |  is a credit customer's statement: every bill and payment in a period, with the running balance.
-      ol.help-steps
-        li
-          | Open
-          strong  Reports → Customer Detailed Report
-          | .
-        li
-          | Choose the
-          strong  Date Range
-          | : This Month, Last Month, a month and year, a financial year, or Custom Date with your own dates.
-        li
-          | Choose the customer in
-          strong  Company Name
-          |  and click
-          strong  Go
-          | .
-        li
-          | Check the
-          strong  Period Summary
-          |  (opening balance, bills, payments, closing balance), then the lines below: each bill with product, vehicle, quantity and amount, and each payment.
-        li
-          | To send it, click the green
-          strong  Download PDF
-          |  button, or the blue
-          strong  Print
-          |  button to open it ready to print.
-      h3 Good to know
-      ul
-        li Bills appear once their shift is closed. Payments appear once they are recorded: from an uploaded bank statement with the customer as the ledger, or entered in Credit Receipts.
-        li The PDF carries your bunk's name and address, so you can share it on WhatsApp as it is.
-        li For a shorter statement with one line per bill or payment, use
-          strong  Customer Ledger Report
-          | .
-
-    section#customer-phone
-      h2 6. Your customer sees their statement on their phone
-      +howVideo('customer-phone', 'see your statement on your phone', true)
-      p Each credit customer has their own login, so they can check what they owe any time, without calling you. Send them this video with their username and password.
-      ol.help-steps
-        li
-          | The customer opens
-          strong  petromath.co.in
-          |  on their phone and signs in with the username and password you sent them (see
-          a(href='#add-customer')  Add a credit customer
-          | ).
-        li Their statement opens straight away: opening balance, every bill (date, bill number, product, litres, vehicle) and every payment, with the balance after each line, and the closing balance at the end.
-        li
-          | To see another period, they pick a
-          strong  Date Range
-          |  (for example Last Month) and tap
-          strong  Go
-          | .
-        li The green button downloads the statement as a PDF; the blue one prints it.
-        li
-          | From the menu (☰) they can
-          strong  Change Password
-          | .
-      h3 Good to know
-      ul
-        li A customer sees only their own bills and payments.
-        li If they forget the password, use Reset Password next to their login in Masters → Customers.
-
-    section#paytm-recon
-      h2 7. Reconcile Paytm (digital reconciliation)
-      +howVideo('paytm-recon', 'reconcile Paytm')
-      p
-        | Check that every rupee your cashiers collected through Paytm (or any card, UPI or fleet card vendor) was paid into your bank.
-        | PetroMath compares the
-        strong  Digital Sales
-        |  entered in your shifts with the vendor's payments from your uploaded bank statement, and matches them for you.
-      ol.help-steps
-        li
-          | Open
-          strong  Reports → Digital Reconciliation
-          | .
-        li
-          | Choose the period and the
-          strong  Digital Vendor
-          | , then click
-          strong  Go
-          | .
-        li
-          | Debits are the sales from your shifts; credits are the vendor's payments. Matched lines share a
-          strong  Match ID
-          | : green when paid the next day, orange when paid a few days later (for example weekend sales paid on Monday).
-        li
-          | Tick
-          strong  Show Only Unreconciled
-          |  to see what is left.
-        li
-          | To match lines by hand, tick them and click
-          strong  Manual Match
-          | . If the amounts differ, enter a note explaining the difference and click
-          strong  Save & Match
-          | .
-      h3 Good to know
-      ul
-        li Upload your bank statement first and tag the vendor's payments to the vendor (for example PAYTM), or they won't appear as credits.
-        li A Manager can match a difference of up to ₹100; an Admin up to ₹1,000. A larger gap usually means a sale or payment is missing or entered against the wrong vendor.
-        li Matched by mistake? The red ✕ next to a saved Match ID unmatches the group.
-
-    section#add-user
-      h2 8. Add staff logins: Admin, Manager and Cashier roles
-      +howVideo('add-user', 'add staff logins and roles')
-      p Everyone who uses PetroMath gets their own login, and their role decides what they can see.
-      ul
-        li
-          strong Admin
-          | : the owner. PetroMath gives the owner this login.
-        li
-          strong Manager
-          | : the person who runs the bunk day to day.
-        li
-          strong Cashier
-          | : your cashiers and pump attendants. They appear in each shift's Attendance.
-      p
-        | Each role has its own default menu and access. If you want a role to see more, or less, at your bunk, ask PetroMath (raise a
-        strong  Support Ticket
-        | ) and we add or remove that access for the role.
-      ol.help-steps
-        li
-          | Open
-          strong  Masters → Users
-          |  and click
-          strong  Add User
-          | .
-        li Type the full name in capital letters. The username is made from the name and your bunk code.
-        li Every new login starts with the default password shown in the form; ask the person to change it after they sign in.
-        li
-          | Choose the role and click
-          strong  Save
-          | .
-        li
-          | When someone leaves, click
-          strong  Disable
-          | . They can no longer sign in; their past entries stay. Disabled users are under
-          strong  Disabled
-          | , where
-          strong  Enable
-          |  brings them back.
-      h3 Good to know
-      ul
-        li
-          | Forgot password? Reset it from
-          strong  Administration → Password Reset
-          | .
-
-    section#add-customer
-      h2 9. Add a credit customer, with opening balance and login
-      +howVideo('add-customer', 'add a credit customer')
-      p Customers are added by the owner (Admin login).
-      ol.help-steps
-        li
-          | Open
-          strong  Masters → Customers
-          |  and click
-          strong  Add Customer
-          | .
-        li Enter the company name, a short name (printed on bills), phone, address, and the GST number if they need tax invoices.
-        li
-          strong Remittance Bank:
-          |  the account they pay into. Their payments then appear under this customer when you upload that bank's statement.
-        li
-          strong Opening Balance:
-          |  what they owed before their first bill in PetroMath, from your old ledger.
-          strong  As on
-          |  is filled in as the day before you started on PetroMath. Leave 0 for a brand-new customer.
-        li
-          | Click
-          strong  Save Customer
-          | . PetroMath also creates the customer's login.
-        li
-          | Click the
-          strong  key
-          |  next to the login to see the username and password, and send them to the customer. Reset Password gives a new one; you can also switch the login off there.
-        li
-          | Add their vehicles with the
-          strong  truck
-          |  button.
-      h3 Good to know
-      ul
-        li
-          | An existing customer whose opening balance shows
-          strong  Not set
-          |  can get one with the
-          strong  Set
-          |  button in the Opening Balance column.
-        li Changing an opening balance after it is set needs a reason, and the change is kept in its history.
-
-    section#add-product
-      h2 10. Add a product, with opening stock
-      +howVideo('add-product', 'add a product')
-      p For lubes, coolant and any other item you sell. Fuels (MS, HSD and so on) are set up by the PetroMath team with your tanks and nozzles.
-      ol.help-steps
-        li
-          | Open
-          strong  Masters → Products
-          |  and click
-          strong  Add Product
-          | .
-        li Enter the product name as you want it on bills, with the pack size (for example 500 ML, 1 LTR), and the HSN code from the supplier's invoice.
-        li
-          strong Unit:
-          |  NOS for packs and bottles, LIT for loose oil.
-        li
-          | The selling
-          strong  Price
-          |  (with GST), and the GST rate split into
-          strong  CGST
-          |  and
-          strong  SGST
-          |  (18% is 9 and 9).
-        li
-          | Click
-          strong  Add Product
-          | . Cashiers can now pick it in Lube Sales and Credit Sales.
-        li
-          | In the
-          strong  Opening Stock
-          |  column click
-          strong  Set
-          | , and enter how many you have in hand (from a physical count) on the date shown.
-      h3 Good to know
-      ul
-        li Purchases add to the stock and every sale takes from it, so the opening count matters.
-        li To change a price, use the edit button on the product.
-
-    section#fuel-invoice
-      h2 11. Upload a fuel (tanker) invoice PDF
-      +howVideo('fuel-invoice', 'upload a fuel invoice')
-      p Enter the oil company's tanker invoice from its PDF, without typing.
-      ol.help-steps
-        li
-          | Open
-          strong  Transactions → Purchase Invoice
-          | , click
-          strong  New Purchase
-          | , then
-          strong  Fuel Invoice
-          | .
-        li
-          | Click
-          strong  Choose File
-          |  and pick the invoice PDF you downloaded from the oil company portal.
-        li PetroMath reads it and fills in the invoice number, date, tanker number, delivery and seal numbers, the total, and each product with quantity, rate, density, HSN code and VAT.
-        li
-          | The first time only, pick which of your products each invoice product is (for example EBMS is MS). PetroMath remembers it.
-        li
-          | Check the figures against the paper invoice and click
-          strong  Save Mapping
-          | . The PDF is kept with the invoice (View PDF).
-      h3 Good to know
-      ul
-        li Where your oil company account is connected, Fetch from IOCL on the same screen brings the invoice PDFs in for you.
-
-    section#lube-invoice
-      h2 12. Upload a lube purchase invoice PDF
-      +howVideo('lube-invoice', 'upload a lube purchase invoice')
-      p Enter your lube distributor's invoice from its PDF.
-      ol.help-steps
-        li
-          | Open
-          strong  Transactions → Purchase Invoice
-          | , click
-          strong  New Purchase
-          | , then
-          strong  Lube Invoice
-          | .
-        li
-          | Click
-          strong  Fill from invoice PDF
-          |  and pick the invoice PDF.
-        li PetroMath fills in the supplier, invoice number and date, and every product line with quantity, rate, discount and GST.
-        li
-          | Each line shows
-          strong  Matched
-          | ,
-          strong  Suggested
-          |  or
-          strong  Pick
-          | . Check Suggested lines and choose the product for Pick lines; PetroMath remembers your choice for that supplier.
-        li
-          | Check that the total matches the invoice, then click
-          strong  Save & Close Invoice
-          |  and confirm. The stock of each product goes up and the PDF is attached.
-      h3 Good to know
-      ul
-        li It reads IndianOil (SERVO) distributor invoices and Tally-style tax invoices. For other formats, enter the invoice by hand on the same screen.
-        li Figures read from the PDF are locked, so the invoice in PetroMath matches the paper exactly.
-        li PetroMath warns if the same invoice number has already been entered.
-
-    section#accounting
-      h2 13. Create the accounts and read the Profit &amp; Loss
-      +howVideo('accounting', 'create the accounts and read the Profit & Loss')
-      p Turn a month's shifts, bills, invoices and bank lines into accounting entries, then see your profit and what makes it up.
-      ol.help-steps
-        li
-          | Open
-          strong  Accounting → GL Control
-          | . (Only the owner, Admin, can run the steps below.)
-        li
-          | On
-          strong  Generate Events
-          | , choose the period (for example
-          strong  Last Month
-          | ) and click
-          strong  Generate Missing Events
-          | . Every sale, receipt, invoice and bank line of that period is queued for the accounts.
-        li
-          | On
-          strong  Events Monitor
-          | , click
-          strong  View
-          |  to see the queue. The eye button shows the transaction behind any event.
-        li
-          | On
-          strong  Create Accounting
-          | , choose the same period and click
-          strong  Run Create Accounting
-          | . PetroMath writes the vouchers and shows how many were created.
-        li
-          | Open
-          strong  Accounting → Profit &amp; Loss
-          | , choose the period and click
-          strong  View
-          | : income, expenses and net profit.
-        li Click any ledger name to open its Ledger Report: every entry behind that figure, with date, voucher and description.
-      h3 Good to know
-      ul
-        li Both steps are safe to run again: events already queued and vouchers already created are not repeated.
-        li Dates with a shift still in draft are skipped. Close the shift, then run Create Accounting again.
-        li If an event shows Error, open it with the eye button, fix the cause (usually a missing ledger), then Retry.
-        li A wrong figure in the P&amp;L usually comes from a wrongly tagged bank or SAP line: open the ledger, find the line, and correct its tag.
+    div(data-l='en')
+      include help/body-en.pug
+    div(data-l='ta')
+      include help/body-ta.pug
+    div(data-l='hi')
+      include help/body-hi.pug
 
 
   script.
-    // Video language switch: Tamil by default (owner, 2026-11-12), English if chosen. Remembered per browser;
-    // ?lang=en / ?lang=ta in a link sets it. A video without a Tamil copy plays in English.
+    // Language switch: page text and videos together. Tamil by default (owner, 2026-11-12), English / Hindi if
+    // chosen. Remembered per browser; ?lang=en / ?lang=ta / ?lang=hi in a link sets it (the script at the top of
+    // the page already set html[data-help-lang]). A video without a copy in that language plays in English.
     (function () {
       var KEY = 'helpVideoLang';
-      var q = new URLSearchParams(location.search).get('lang');
-      var lang = q === 'ta' || q === 'en' ? q : null;
-      if (!lang) { try { lang = localStorage.getItem(KEY); } catch (e) { /* storage blocked */ } }
-      if (lang !== 'en') lang = 'ta';
+      var lang = document.documentElement.getAttribute('data-help-lang') || 'ta';
+      // Topic links (/help#shift) name the English section; Tamil and Hindi copies are #ta-shift / #hi-shift.
+      function goToHash(l) {
+        var id = decodeURIComponent(location.hash.slice(1)).replace(/^(ta|hi)-/, '');
+        if (!id) return;
+        var el = document.getElementById(l === 'en' ? id : l + '-' + id);
+        if (el) el.scrollIntoView();
+      }
       function apply(l) {
+        document.documentElement.setAttribute('data-help-lang', l);
         document.querySelectorAll('.help-lang button').forEach(function (b) {
           var on = b.getAttribute('data-lang') === l;
           b.classList.toggle('active', on);
           b.setAttribute('aria-pressed', on ? 'true' : 'false');
         });
         document.querySelectorAll('figure.help-video').forEach(function (fig) {
-          var ta = fig.getAttribute('data-ta');
-          var s = JSON.parse(l === 'ta' && ta ? ta : fig.getAttribute('data-en'));
+          var copy = l === 'en' ? null : fig.getAttribute('data-' + l);
+          var s = JSON.parse(copy || fig.getAttribute('data-en'));
           var v = fig.querySelector('video');
           if (v.getAttribute('src') !== s.mp4) {
             v.pause();
@@ -704,7 +129,7 @@ block content
             v.load();
           }
           fig.querySelector('.help-share').setAttribute('href', s.share);
-          fig.querySelector('.help-en-only').hidden = !(l === 'ta' && !ta);
+          fig.querySelector('.help-en-only').hidden = !(l !== 'en' && !copy);
         });
       }
       document.querySelectorAll('.help-lang button').forEach(function (b) {
@@ -715,6 +140,8 @@ block content
         });
       });
       apply(lang);
+      goToHash(lang);
+      window.addEventListener('hashchange', function () { goToHash(lang); });
       // One video at a time: starting a video pauses any other that is playing.
       // 'play' doesn't bubble, so listen in the capture phase.
       document.addEventListener('play', function (e) {
@@ -722,5 +149,57 @@ block content
         document.querySelectorAll('figure.help-video video').forEach(function (v) {
           if (v !== e.target && !v.paused) v.pause();
         });
+      }, true);
+
+      // Phones: a desktop (landscape) video goes full screen and turns sideways when it starts, and the
+      // screen turns back upright when full screen ends. The installed app is locked to portrait
+      // (manifest), so without the lock the video stays small and upright. Phone-screen videos
+      // (figure.phone) stay upright. iPhone can't lock orientation; its own full-screen player turns
+      // with the phone.
+      var isPhone = window.matchMedia && window.matchMedia('(pointer: coarse)').matches &&
+        Math.min(screen.width, screen.height) < 600;
+      if (!isPhone) return;
+      function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+      function isWideVideo(el) {
+        return el && el.tagName === 'VIDEO' && el.closest('figure.help-video') && !el.closest('figure.help-video.phone');
+      }
+      // iPhone: a page can't go full screen from the 'play' event (not counted as the tap), but a
+      // video without playsinline opens in the iPhone's own player on tap, which turns with the phone.
+      // (Detect iPhone by name: newer iPhones may list requestFullscreen yet refuse it for a video.)
+      var isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+      if (isIPhone) {
+        document.querySelectorAll('figure.help-video video').forEach(function (v) {
+          if (isWideVideo(v)) { v.removeAttribute('playsinline'); v.playsInline = false; }
+        });
+      }
+      document.addEventListener('play', function (e) {
+        var v = e.target;
+        if (!isWideVideo(v) || fsElement()) return;
+        if (isIPhone) {
+          // Without playsinline the iPhone player normally opens by itself; this is a fallback
+          if (!v.webkitDisplayingFullscreen && v.webkitEnterFullscreen) {
+            try { v.webkitEnterFullscreen(); } catch (err) { /* stays in the page */ }
+          }
+        } else if (v.requestFullscreen) {
+          v.requestFullscreen({ navigationUI: 'hide' }).catch(function () { /* no tap to go on: stays in the page */ });
+        } else if (v.webkitEnterFullscreen) {
+          try { v.webkitEnterFullscreen(); } catch (err) { /* stays in the page */ }
+        }
+      }, true);
+      function onFullscreenChange() {
+        if (!screen.orientation || !screen.orientation.lock) return;
+        if (isWideVideo(fsElement())) {
+          screen.orientation.lock('landscape').catch(function () { /* not allowed here: user can rotate */ });
+        } else {
+          try { screen.orientation.unlock(); } catch (err) { /* nothing locked */ }
+        }
+      }
+      document.addEventListener('fullscreenchange', onFullscreenChange);
+      document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+      // Video finished: leave full screen so the page (and the next topic) is back upright
+      document.addEventListener('ended', function (e) {
+        if (isWideVideo(e.target) && fsElement() === e.target && document.exitFullscreen) {
+          document.exitFullscreen().catch(function () {});
+        }
       }, true);
     })();
