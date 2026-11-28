@@ -13,23 +13,24 @@ const PUBLIC = path.join(__dirname, '..', '..', 'public', 'videos');
 const ICON = path.join(__dirname, '..', '..', 'public', 'images', 'app-icons', 'icon-512.png');
 const LANGS = ['en', 'ta', 'hi'];
 
-// Help-page number ('' = unnumbered "Start here" topics), the screen shown (fraction of the video), and titles.
+// Help-page number (same order as views/help.pug), the screen shown (fraction of the video), and titles.
 const THUMBS = {
-  intro: { n: '', at: 0.2, en: 'A quick tour of PetroMath', ta: 'PetroMath ஒரு சின்ன tour', hi: 'PetroMath का छोटा सा tour' },
-  'phone-app': { n: '', at: 0.75, phone: true, en: 'Install PetroMath on your phone', ta: 'உங்க phone-ல PetroMath install பண்ணுங்க', hi: 'अपने phone पर PetroMath install करें' },
-  'shift-closing': { n: 1, at: 0.3, en: 'Enter and close a shift', ta: 'Shift entry பண்ணி close பண்றது', hi: 'Shift भरें और close करें' },
-  'day-close': { n: 2, at: 0.25, en: 'Close the day, and read the Day-Close Report', ta: 'Day Close பண்றது, Day-Close Report படிக்கிறது', hi: 'दिन close करें, Day-Close Report पढ़ें' },
-  'bank-upload': { n: 3, at: 0.45, en: 'Upload a bank statement', ta: 'Bank statement upload பண்றது', hi: 'Bank statement upload करें' },
-  'sap-upload': { n: 4, at: 0.45, en: 'Upload the oil company (SAP) statement', ta: 'Oil company (SAP) statement upload பண்றது', hi: 'Oil company (SAP) statement upload करें' },
-  'customer-statement': { n: 5, at: 0.55, en: "Run a customer's credit statement", ta: 'Customer credit statement எடுக்கிறது', hi: 'Customer का credit statement निकालें' },
-  'customer-phone': { n: 6, at: 0.4, phone: true, en: 'Your customer sees their statement on their phone', ta: 'Customer தன் statement-ஐ phone-ல பார்க்கலாம்', hi: 'Customer अपना statement phone पर देखें' },
-  'paytm-recon': { n: 7, at: 0.3, en: 'Reconcile Paytm', ta: 'Paytm reconcile பண்றது', hi: 'Paytm reconcile करें' },
-  'add-user': { n: 8, at: 0.55, en: 'Add staff logins: Admin, Manager and Cashier', ta: 'Staff login சேர்க்கிறது: Admin, Manager, Cashier', hi: 'Staff के login जोड़ें: Admin, Manager और Cashier' },
-  'add-customer': { n: 9, at: 0.35, en: 'Add a credit customer, with opening balance and login', ta: 'Credit customer சேர்க்கிறது: opening balance, login', hi: 'Credit customer जोड़ें: opening balance और login' },
-  'add-product': { n: 10, at: 0.35, en: 'Add a product, with opening stock', ta: 'Product சேர்க்கிறது, opening stock-ஓட', hi: 'Product जोड़ें, opening stock के साथ' },
-  'fuel-invoice': { n: 11, at: 0.6, en: 'Upload a fuel (tanker) invoice PDF', ta: 'Fuel (tanker) invoice PDF upload பண்றது', hi: 'Fuel (tanker) invoice PDF upload करें' },
-  'lube-invoice': { n: 12, at: 0.5, en: 'Upload a lube purchase invoice PDF', ta: 'Lube purchase invoice PDF upload பண்றது', hi: 'Lube purchase invoice PDF upload करें' },
-  accounting: { n: 13, at: 0.6, en: 'Create the accounts and read the Profit & Loss', ta: 'Accounts உருவாக்கி, Profit & Loss பார்க்கிறது', hi: 'Accounts बनाएँ, Profit & Loss देखें' },
+  'getting-started': { n: 1, at: 0.45, en: 'Getting started: fill in your bunk details', ta: 'தொடக்கம்: உங்க பங்க் details போடுங்க', hi: 'शुरुआत: अपने पंप की details भरें' },
+  intro: { n: 2, at: 0.2, en: 'A quick tour of PetroMath', ta: 'PetroMath ஒரு சின்ன tour', hi: 'PetroMath का छोटा सा tour' },
+  'phone-app': { n: 3, at: 0.75, phone: true, en: 'Install PetroMath on your phone', ta: 'உங்க phone-ல PetroMath install பண்ணுங்க', hi: 'अपने phone पर PetroMath install करें' },
+  'add-user': { n: 4, at: 0.55, en: 'Add staff logins: Admin, Manager and Cashier', ta: 'Staff login சேர்க்கிறது: Admin, Manager, Cashier', hi: 'Staff के login जोड़ें: Admin, Manager और Cashier' },
+  'add-product': { n: 5, at: 0.35, en: 'Add a product, with opening stock', ta: 'Product சேர்க்கிறது, opening stock-ஓட', hi: 'Product जोड़ें, opening stock के साथ' },
+  'add-customer': { n: 6, at: 0.35, en: 'Add a credit customer, with opening balance and login', ta: 'Credit customer சேர்க்கிறது: opening balance, login', hi: 'Credit customer जोड़ें: opening balance और login' },
+  'shift-closing': { n: 7, at: 0.3, en: 'Enter and close a shift', ta: 'Shift entry பண்ணி close பண்றது', hi: 'Shift भरें और close करें' },
+  'day-close': { n: 8, at: 0.25, en: 'Close the day, and read the Day-Close Report', ta: 'Day Close பண்றது, Day-Close Report படிக்கிறது', hi: 'दिन close करें, Day-Close Report पढ़ें' },
+  'fuel-invoice': { n: 9, at: 0.6, en: 'Upload a fuel (tanker) invoice PDF', ta: 'Fuel (tanker) invoice PDF upload பண்றது', hi: 'Fuel (tanker) invoice PDF upload करें' },
+  'lube-invoice': { n: 10, at: 0.5, en: 'Upload a lube purchase invoice PDF', ta: 'Lube purchase invoice PDF upload பண்றது', hi: 'Lube purchase invoice PDF upload करें' },
+  'bank-upload': { n: 11, at: 0.45, en: 'Upload a bank statement', ta: 'Bank statement upload பண்றது', hi: 'Bank statement upload करें' },
+  'sap-upload': { n: 12, at: 0.45, en: 'Upload the oil company (SAP) statement', ta: 'Oil company (SAP) statement upload பண்றது', hi: 'Oil company (SAP) statement upload करें' },
+  'paytm-recon': { n: 13, at: 0.3, en: 'Reconcile Paytm', ta: 'Paytm reconcile பண்றது', hi: 'Paytm reconcile करें' },
+  'customer-statement': { n: 14, at: 0.55, en: "Run a customer's credit statement", ta: 'Customer credit statement எடுக்கிறது', hi: 'Customer का credit statement निकालें' },
+  'customer-phone': { n: 15, at: 0.4, phone: true, en: 'Your customer sees their statement on their phone', ta: 'Customer தன் statement-ஐ phone-ல பார்க்கலாம்', hi: 'Customer अपना statement phone पर देखें' },
+  accounting: { n: 16, at: 0.6, en: 'Create the accounts and read the Profit & Loss', ta: 'Accounts உருவாக்கி, Profit & Loss பார்க்கிறது', hi: 'Accounts बनाएँ, Profit & Loss देखें' },
 };
 const WORDS = {
   en: { how: 'How-to video', start: 'Start here', lang: 'English' },
