@@ -182,12 +182,11 @@ block content
             tr
                 td Date Range:
                 td
-                    select#dateRange.form-control(onchange="updateDateRange()")
-                        option(value='this_month',selected=true) This Month
-                        option(value='last_month') Last Month
-                        option(value='this_financial_year') This Financial Year
-                        option(value='last_financial_year') Last Financial Year
-                        option(value='custom') Custom Date
+                    //- name= keeps the chosen period after Generate
+                    - var _range = selectedRange || 'this_month'
+                    select#dateRange.form-control(name='selectedRange', onchange="updateDateRange()")
+                        each r in [['this_month', 'This Month'], ['last_month', 'Last Month'], ['this_financial_year', 'This Financial Year'], ['last_financial_year', 'Last Financial Year'], ['custom', 'Custom Date']]
+                            option(value=r[0] selected=(r[0] === _range))= r[1]
                 td &nbsp;                   
                 td#fromDateLabel From Date:
                 td

@@ -48,6 +48,8 @@ module.exports = {
 
             if (req.body.fromClosingDate) fromDate = req.body.fromClosingDate;
             if (req.body.toClosingDate) toDate = req.body.toClosingDate;
+            // Period dropdown value, so the page re-opens on what the user picked
+            const selectedRange = req.body.selectedRange || (req.body.fromClosingDate ? 'custom' : 'this_month');
 
             const personId = req.user.Person_id;
             const personLocationPromise = await personDao.findUserLocations(personId);
@@ -66,6 +68,7 @@ module.exports = {
                 user: req.user,
                 fromClosingDate: fromDate,
                 toClosingDate: toDate,
+                selectedRange,
                 personLocations,
                 locationName: locationDetails.location_name,
                 locationCode,
