@@ -1483,6 +1483,42 @@ body {
   margin: 0;
 }
 
+.breadcrumb-nav a {
+  color: #007bff;
+}
+
+/* Back / Home buttons in the desktop top bar (tkt #498). Phones keep the
+   yellow tile Home button below, so these hide there. */
+.page-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #fff;
+  color: #343a40;
+  border: 1px solid #ced4da;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-right: 10px;
+  text-decoration: none;
+}
+.page-nav-btn:hover,
+.page-nav-btn:focus {
+  background: #e9ecef;
+  color: #212529;
+  text-decoration: none;
+}
+body.phone-nav .page-nav-btn {
+  display: none !important;
+}
+@media (max-width: 768px) {
+  .page-nav-btn { display: none !important; }
+}
+@media print {
+  .page-nav-btn { display: none !important; }
+}
+
 /* Tile home (/m) shortcut — only on phones, next to the hamburger */
 .mobile-home-btn {
   display: none;
