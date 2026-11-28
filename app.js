@@ -1385,6 +1385,11 @@ app.get('/edit-draft-closing', isLoginEnsured, function (req, res, next) {
     ClosingEditController.getDataToEdit(req, res, next, false);  // response returned inside controller
 });
 
+// Cashier Shift Summary PDF (tkt #485) - Summary tab button
+app.get('/closing/:closingId/summary-pdf', isLoginEnsured, function (req, res, next) {
+    require('./controllers/shift-summary-pdf-controller').getShiftSummaryPdf(req, res, next);
+});
+
 app.post('/close-closing', [isLoginEnsured, security.hasPermission('CLOSE_SHIFT_CLOSE')], function (req, res, next) {
     ClosingEditController.closeData(req, res, next);  // response returned inside controller
 });
