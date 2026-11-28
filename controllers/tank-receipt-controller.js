@@ -18,6 +18,8 @@ const InvoiceParserService = require("../services/invoice-parser-service");
 const TankInvoiceDao = require("../dao/tank-invoice-dao");
 const InvoiceProductMapDao = require("../dao/invoice-product-map-dao");
 const { v4: uuidv4 } = require('uuid');
+const CngInvoiceService = require("../services/cng-invoice-service");
+const OilInvoiceDao = require("../dao/oil-invoice-dao");
 
 // Temp store for uploaded PDF buffers pending user product confirmation (in-memory, short-lived)
 const tempInvoiceStore = new Map();
@@ -600,6 +602,23 @@ async function parseInvoiceForLocation(locationCode, pdfBuffer, originalFileName
         } };
     }
 
+    // CNG invoice (tkt #481): only at a bunk that sells CNG, and (IOCL) only for its own IOCL customer code
+    let cngProduct = null;
+    if (result.is_cng) {
+        cngProduct = await CngInvoiceService.findCngProduct(locationCode);
+        if (!cngProduct) {
+            return { status: 400, body: { success: false, error: `This is a CNG invoice, but ${locationCode} has no CNG product.` } };
+        }
+        if (result.customer_code) {
+            const acct = await OilInvoiceDao.getIoclAccount(locationCode);
+            const acctNo = acct ? String(acct.account_number || '').trim() : '';
+            if (acctNo && !acctNo.endsWith(result.customer_code)) {
+                return { status: 400, body: { success: false,
+                    error: `This CNG invoice is for IOCL customer ${result.customer_code}, but ${locationCode}'s IOCL account is ${acctNo}. Upload it at the bunk it belongs to.` } };
+            }
+        }
+    }
+
     // Resolve supplier_id — mandatory
     const supplierRow = await db.sequelize.query(
         `SELECT supplier_id, supplier_name FROM m_supplier WHERE UPPER(supplier_short_name) = UPPER(:code) AND location_code = :loc LIMIT 1`,
@@ -623,8 +642,14 @@ async function parseInvoiceForLocation(locationCode, pdfBuffer, originalFileName
         InvoiceProductMapDao.getMappings(locationCode, supplierRow.supplier_id)
     ]);
 
+    // A CNG line goes to the bunk's CNG product until someone maps it otherwise
+    if (cngProduct) {
+        result.lines.forEach(l => { if (l.product_name && !mappings[l.product_name]) mappings[l.product_name] = cngProduct.product_id; });
+    }
+
     const linesWithCharges = result.lines.map(l => {
-        const charges = [];
+        // IOCL CNG reader already returns its charges (VAT, TCS, rounding)
+        const charges = Array.isArray(l.charges) ? [...l.charges] : [];
         if (l.vat_pct != null || l.vat_amount != null)
             charges.push({ charge_type: 'VAT', charge_pct: l.vat_pct || null, charge_amount: l.vat_amount || null });
         if (l.additional_vat_amount != null)
@@ -645,6 +670,7 @@ async function parseInvoiceForLocation(locationCode, pdfBuffer, originalFileName
         products,
         mappings,
         qty_unit: result.qty_unit || 'KL',
+        is_cng: !!result.is_cng,
         data: { header: result.header, lines: linesWithCharges }
     } };
 }
