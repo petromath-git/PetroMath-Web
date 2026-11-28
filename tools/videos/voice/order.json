@@ -387,5 +387,26 @@
     "Disabled users are kept under Disabled. Enable brings them back.",
     "If someone forgets their password, reset it from Administration, then Password Reset.",
     "PetroMath: the right access for every person."
+  ],
+  "getting-started": [
+    "After your PetroMath demo, we send you a link to fill in your bunk's details. This is the first step.",
+    "Open the link on your computer or phone.",
+    "There is a tab for each part of your bunk.",
+    "What you type is saved on its own. You can stop, and come back to the same link any time.",
+    "RO Details: your bunk's name as on the GST certificate, the owner's mobile number, oil company, GST number and address.",
+    "Employees: everyone who works at the bunk, and their job. Their logins are made from this list.",
+    "Products: the fuels you sell from the nozzles, with today's selling price.",
+    "HSN code and GST are checked by PetroMath, so leave them if you are not sure.",
+    "Tanks: each tank, its capacity in litres, and its fuel.",
+    "Nozzles: each nozzle, the make of the pump, the tank it draws from, and the next stamping date.",
+    "Lubes and other items: the name with pack size, the unit and the selling price.",
+    "Banks: every bank account the bunk uses.",
+    "Digital: the payment apps and cards you accept.",
+    "Customers: your credit customers, with their address, GST number and the bank they pay into.",
+    "Suppliers: who you buy from, by the name on their invoice.",
+    "That is all. PetroMath checks your details and sets up your bunk.",
+    "Then we send the owner the first login: the Admin username and password.",
+    "Sign in with it. From then on, you add new staff, products and credit customers yourself, with opening stock and what each customer owes. The next videos show how.",
+    "PetroMath: your bunk, set up from one link."
   ]
 }

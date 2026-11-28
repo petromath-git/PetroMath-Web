@@ -742,6 +742,9 @@ async function pickMonth(h, prefix, ms) {
 
 const weekAgoIST = () => new Date(Date.now() + 5.5 * 3600e3 - 7 * 864e5).toISOString().slice(0, 10);
 
+// The made-up bunk whose onboarding link the getting-started video fills in (beta DB, reset before each recording).
+const ONBOARD_VIDEO = { token: '6f1c2b7e-3d4a-4e5f-9a8b-7c6d5e4f3a21', name: 'SRI MURUGAN FUELS (DEMO)' };
+
 const VIDEOS = {
   'bank-upload': {
     title: 'Upload a bank statement',
@@ -1131,6 +1134,156 @@ const VIDEOS = {
 
   // Sign in and tour the menu as the owner (Admin), at the beta training station: it has every Admin menu
   // (Accounting, Accounting Setup, Bank Reconciliation, Support Tickets). Run node training-login.js first.
+  // First video on the Help page: after the demo, PetroMath sends a new bunk the onboarding link (/onboard/<token>,
+  // public, saves as you type). The video fills one or two made-up rows in every tab, then says what happens next.
+  // Its own onboarding record on the beta DB (ONBOARD_VIDEO) is emptied before each recording.
+  'getting-started': {
+    title: 'Getting started: fill in your bunk details',
+    user: 'none', // the onboarding link needs no login
+    async run(h, page) {
+      const db = await betaDb();
+      try {
+        const [[old]] = await db.query('SELECT id FROM t_onboarding WHERE token = ?', [ONBOARD_VIDEO.token]);
+        if (old) {
+          for (const t of ['ro', 'employees', 'metered_products', 'tanks', 'nozzles', 'lubes', 'banks', 'digital', 'customers', 'suppliers']) {
+            await db.query(`DELETE FROM t_onboarding_${t} WHERE onboarding_id = ?`, [old.id]);
+          }
+          await db.query("UPDATE t_onboarding SET status = 'pending', link_active = 'Y', location_name = ? WHERE id = ?", [ONBOARD_VIDEO.name, old.id]);
+        } else {
+          const [[admin]] = await db.query('SELECT Person_id FROM m_persons WHERE User_Name = ?', [process.env.DEMO_ADMIN_USER]);
+          await db.query('INSERT INTO t_onboarding (token, location_name, created_by_person_id) VALUES (?, ?, ?)',
+            [ONBOARD_VIDEO.token, ONBOARD_VIDEO.name, admin.Person_id]);
+        }
+      } finally { await db.end(); }
+
+      // The form's fixed top bar covers the tab strip once the page has scrolled: back to the top first.
+      const tab = async (id, caption, ms = 600) => {
+        await h.say(caption, ms);
+        await h.top(400);
+        await h.tap(`a.nav-link[href="#tab-${id}"]`, 600);
+      };
+      // + Add Row, then the new (last) row of that section.
+      const addRow = async (section) => {
+        const rows = page.locator(`#tbody-${section} tr`);
+        const n = await rows.count();
+        await h.tap(`button[data-add-section="${section}"]`, 0);
+        await page.waitForFunction(([s, c]) => document.querySelectorAll(`#tbody-${s} tr`).length > c, [section, n]);
+        await h.pause(300);
+        return rows.last();
+      };
+      const fill = async (row, field, text) => h.type(row.locator(`[data-field="${field}"]`), text, 45);
+      const choose = async (row, field, label) => h.pick(row.locator(`[data-field="${field}"]`), label, 350);
+      const saved = () => page.waitForFunction(() => /saved/i.test(document.getElementById('save-indicator')?.textContent || ''), null, { timeout: 15000 });
+
+      await h.go(`/onboard/${ONBOARD_VIDEO.token}`); // hidden under a blank new tab until the address is typed
+      // The look-alike browser bar pushes the page down, and the form's fixed top bar then covers the tab strip:
+      // let the top bar scroll with the page so the tabs show.
+      await page.addStyleTag({ content: '.top-bar { position: static !important; } .main-content { margin-top: 0 !important; }' });
+      await h.newTab('desktop');
+      await h.begin();
+      await h.say("After your PetroMath demo, we send you a link to fill in your bunk's details. This is the first step.", 3400);
+      await h.say('Open the link on your computer or phone.', 1200);
+      await h.typeUrl(`petromath.co.in/onboard/${ONBOARD_VIDEO.token.slice(0, 8)}…`);
+      await h.say('There is a tab for each part of your bunk.', 600);
+      await h.point('.tab-nav-wrap', 2000);
+      await h.say('What you type is saved on its own. You can stop, and come back to the same link any time.', 800);
+      await h.spot('#save-indicator', 2400, { z: 2 });
+
+      // RO Details
+      await h.say("RO Details: your bunk's name as on the GST certificate, the owner's mobile number, oil company, GST number and address.", 600);
+      await h.type('[data-field="ro_name"]', 'SRI MURUGAN FUELS', 45);
+      await h.type('[data-field="owner_contact"]', '9876543210', 45);
+      await h.pick('[data-field="ro_brand"]', 'IOCL', 350);
+      await h.type('[data-field="gst_number"]', '33ABCDE1234F1Z5', 45);
+      await h.type('[data-field="ro_address"]', 'SALEM MAIN ROAD, ERODE', 45);
+      await saved();
+
+      await tab('employees', 'Employees: everyone who works at the bunk, and their job. Their logins are made from this list.');
+      let r = await addRow('employees');
+      await fill(r, 'employee_name', 'SENTHIL KUMAR');
+      await choose(r, 'designation', 'Manager');
+      r = await addRow('employees');
+      await fill(r, 'employee_name', 'KARTHIK R');
+      await choose(r, 'designation', 'Cashier');
+      await saved();
+
+      await tab('metered-products', "Products: the fuels you sell from the nozzles, with today's selling price.");
+      r = await addRow('metered-products');
+      await fill(r, 'short_name', 'MS');
+      await fill(r, 'selling_price', '100.80');
+      r = await addRow('metered-products');
+      await fill(r, 'short_name', 'HSD');
+      await fill(r, 'selling_price', '92.40');
+      await h.say('HSN code and GST are checked by PetroMath, so leave them if you are not sure.', 2600);
+      await saved();
+
+      await tab('tanks', 'Tanks: each tank, its capacity in litres, and its fuel.');
+      r = await addRow('tanks');
+      await fill(r, 'tank_name', 'TANK1');
+      await fill(r, 'tank_capacity', '15000');
+      await choose(r, 'product_short_name', 'MS');
+      r = await addRow('tanks');
+      await fill(r, 'tank_name', 'TANK2');
+      await fill(r, 'tank_capacity', '20000');
+      await choose(r, 'product_short_name', 'HSD');
+      await saved();
+
+      await tab('nozzles', 'Nozzles: each nozzle, the make of the pump, the tank it draws from, and the next stamping date.');
+      r = await addRow('nozzles');
+      await fill(r, 'nozzle_name', 'MS1');
+      await fill(r, 'du_make', 'GILBARCO');
+      await choose(r, 'tank_connected', 'TANK1');
+      await h.point(r.locator('[data-field="next_stamping_date"]'), 300);
+      await r.locator('[data-field="next_stamping_date"]').fill('2027-03-15');
+      await r.locator('[data-field="next_stamping_date"]').dispatchEvent('input', { bubbles: true });
+      await h.pause(600);
+      await saved();
+
+      await tab('lubes', 'Lubes and other items: the name with pack size, the unit and the selling price.');
+      r = await addRow('lubes');
+      await fill(r, 'product_name', 'SERVO 4T 20W40 1L');
+      await choose(r, 'unit', 'Nos'); // a newly added row lists Litres / Nos / Kgs (onboarding-form.js)
+      await fill(r, 'selling_price', '480');
+      await saved();
+
+      await tab('banks', 'Banks: every bank account the bunk uses.');
+      r = await addRow('banks');
+      await fill(r, 'bank_name', 'INDIAN OVERSEAS BANK');
+      await fill(r, 'short_name', 'IOB');
+      await fill(r, 'branch', 'ERODE MAIN');
+      await fill(r, 'account_name', 'SRI MURUGAN FUELS');
+      await fill(r, 'account_last4', '1234');
+      await choose(r, 'account_type', 'Current');
+      await saved();
+
+      await tab('digital', 'Digital: the payment apps and cards you accept.');
+      r = await addRow('digital');
+      await fill(r, 'platform_name', 'PAYTM');
+      r = await addRow('digital');
+      await fill(r, 'platform_name', 'CARD SWIPE');
+      await saved();
+
+      await tab('customers', 'Customers: your credit customers, with their address, GST number and the bank they pay into.');
+      r = await addRow('customers');
+      await fill(r, 'customer_name', 'KAVERI ROADWAYS');
+      await fill(r, 'address', 'PERUNDURAI ROAD, ERODE');
+      await fill(r, 'remittance_bank', 'IOB');
+      await choose(r, 'customer_type', 'Credit');
+      await saved();
+
+      await tab('suppliers', 'Suppliers: who you buy from, by the name on their invoice.');
+      r = await addRow('suppliers');
+      await fill(r, 'supplier_name', 'INDIAN OIL CORPORATION LTD');
+      await fill(r, 'short_name', 'IOCL');
+      await saved();
+
+      await h.say('That is all. PetroMath checks your details and sets up your bunk.', 2800);
+      await h.say("Then we send the owner the first login: the Admin username and password.", 2800);
+      await h.say('Sign in with it. From then on, you add new staff, products and credit customers yourself, with opening stock and what each customer owes. The next videos show how.', 4400);
+      await h.say('PetroMath: your bunk, set up from one link.', 2400);
+    },
+  },
+
   intro: {
     title: 'A quick tour of PetroMath',
     user: 'none', // the video shows the sign-in
