@@ -31,9 +31,13 @@ const SCALE = 1.5; // captured at 1920x1080, saved at 1280x720: sharp text, smal
 //  3. Sarvam AI's Bulbul (SARVAM_API_KEY; bulbul:v3 "ishita"): a draft only, sounds like a Hindi speaker.
 const LANG = (process.argv.find((a) => a.startsWith('--lang=')) || '').slice(7) || null;
 const CAPTIONS_ONLY = process.argv.includes('--captions');
-const ELEVEN = !!(process.env.ELEVENLABS_API_KEY && process.env.ELEVENLABS_VOICE_ID);
+// Each language has its own native voice: ELEVENLABS_VOICE_ID_HI etc.; ELEVENLABS_VOICE_ID (Mangai) is Tamil's.
+// Hindi default: library voice "Kanika" (H6QPv2pQZDcGqLwDTIJQ), a Hindi narrator.
+const VOICE_ID = (LANG && process.env[`ELEVENLABS_VOICE_ID_${LANG.toUpperCase()}`])
+  || (LANG === 'hi' ? 'H6QPv2pQZDcGqLwDTIJQ' : process.env.ELEVENLABS_VOICE_ID);
+const ELEVEN = !!(process.env.ELEVENLABS_API_KEY && VOICE_ID);
 const VOICE = ELEVEN
-  ? { provider: 'elevenlabs', voice: process.env.ELEVENLABS_VOICE_ID, model: process.env.ELEVENLABS_MODEL || 'eleven_v4' }
+  ? { provider: 'elevenlabs', voice: VOICE_ID, model: process.env.ELEVENLABS_MODEL || 'eleven_v4' }
   : { model: 'bulbul:v3', speaker: process.env.VOICE_SPEAKER || 'ishita', temperature: 0.8, pace: 1.1 };
 const SCRIPT = LANG ? JSON.parse(fs.readFileSync(path.join(__dirname, 'voice', `${LANG}.json`), 'utf8')) : null;
 const voiceFile = (speech) => path.join(OUT, 'voice', LANG,
@@ -121,7 +125,7 @@ function overlayScript(phone) {
     body { padding-bottom: 180px !important; } /* lets buttons at the end of a page scroll clear of the caption */
     #__vcap { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); max-width: 860px; z-index: 2147483647;
       background: rgba(15, 23, 42, 0.92); color: #fff; border-radius: 12px; padding: 12px 22px; pointer-events: none;
-      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Nirmala UI", "Noto Sans Tamil", sans-serif; text-align: center;
+      font: 600 21px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, "Nirmala UI", "Noto Sans Tamil", "Noto Sans Devanagari", sans-serif; text-align: center;
       box-shadow: 0 6px 24px rgba(0,0,0,.35); transition: opacity .25s; }
     #__vptr { position: fixed; left: 0; top: 0; width: 26px; height: 26px; z-index: 2147483647; pointer-events: none;
       transition: transform .55s cubic-bezier(.4,0,.2,1); }
