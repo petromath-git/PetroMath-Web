@@ -13,7 +13,6 @@ block content
                 a.text-secondary(href='/lubes-invoice-home') Purchases
                 span.text-muted  /
                 | CNG Invoices
-            a.btn.btn-outline-secondary.btn-sm.ml-auto(href='/purchases/cng-invoices/cancellations') Cancelled by IOCL
 
         div.card.mb-3
             div.card-body
@@ -58,7 +57,7 @@ block content
             btn.disabled = true;
             body.innerHTML = '';
             document.getElementById('cngTable').style.display = '';
-            const counts = { IMPORTED: 0, EXISTS: 0, CANCELLED: 0, ERROR: 0 };
+            const counts = { IMPORTED: 0, EXISTS: 0, ERROR: 0 };
             let qty = 0, amount = 0;
 
             // oldest file name first, so the list reads in order; one file per request (small bodies)
@@ -79,10 +78,8 @@ block content
                 }
                 counts[r.status] = (counts[r.status] || 0) + 1;
                 if (r.status === 'IMPORTED') { qty += Number(r.quantity) || 0; amount += Number(r.amount) || 0; }
-                const badge = r.status === 'IMPORTED' ? 'badge-success' : r.status === 'EXISTS' ? 'badge-secondary'
-                    : r.status === 'CANCELLED' ? 'badge-warning' : 'badge-danger';
-                const label = r.status === 'IMPORTED' ? 'Saved' : r.status === 'EXISTS' ? 'Already in'
-                    : r.status === 'CANCELLED' ? 'Cancelled by IOCL' : 'Not saved';
+                const badge = r.status === 'IMPORTED' ? 'badge-success' : r.status === 'EXISTS' ? 'badge-secondary' : 'badge-danger';
+                const label = r.status === 'IMPORTED' ? 'Saved' : r.status === 'EXISTS' ? 'Already in' : 'Not saved';
                 const link = r.invoice_id ? '<a href="/purchases/fuel-invoice/' + r.invoice_id + '">' + cngEsc(r.invoice_number) + '</a>' : cngEsc(r.invoice_number || '');
                 body.insertAdjacentHTML('beforeend', '<tr>'
                     + '<td data-label="File">' + cngEsc(f.name) + '</td>'
@@ -91,13 +88,11 @@ block content
                     + '<td data-label="Qty (KG)" class="text-right">' + (r.quantity ? Number(r.quantity).toFixed(3) : '') + '</td>'
                     + '<td data-label="Amount" class="text-right">' + fmtAmt(r.amount) + '</td>'
                     + '<td data-label="Result"><span class="badge ' + badge + '">' + label + '</span>'
-                    + (r.status === 'ERROR' || r.status === 'CANCELLED'
-                        ? ' <span class="small ' + (r.status === 'ERROR' ? 'text-danger' : 'text-muted') + '">' + cngEsc(r.detail) + '</span>' : '') + '</td>'
+                    + (r.status === 'ERROR' ? ' <span class="small text-danger">' + cngEsc(r.detail) + '</span>' : '') + '</td>'
                     + '</tr>');
             }
             summary.className = 'small mt-1 ' + (counts.ERROR ? 'text-danger' : 'text-success');
             summary.textContent = files.length + ' file(s): ' + counts.IMPORTED + ' saved (' + qty.toFixed(3) + ' KG, Rs ' + fmtAmt(amount) + '), '
-                + counts.EXISTS + ' already in, ' + (counts.CANCELLED ? counts.CANCELLED + ' cancelled by IOCL, ' : '')
-                + counts.ERROR + ' not saved.';
+                + counts.EXISTS + ' already in, ' + counts.ERROR + ' not saved.';
             btn.disabled = false;
         }
