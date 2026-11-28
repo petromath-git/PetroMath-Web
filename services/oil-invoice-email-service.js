@@ -135,6 +135,7 @@ async function importCngIfCng(buffer, fileName, locations) {
     const r = await CngInvoiceService.importCngPdf(hits[0], buffer, fileName); // DB trouble throws: retried next run
     if (r.status === 'IMPORTED') return { status: 'IMPORTED', location_code: hits[0], invoice_no: no, detail: 'Saved as a CNG purchase invoice.' };
     if (r.status === 'EXISTS') return { status: 'EXISTS', location_code: hits[0], invoice_no: no, detail: 'CNG purchase invoice already entered.' };
+    if (r.status === 'CANCELLED') return { status: 'EXISTS', location_code: hits[0], invoice_no: no, detail: 'CNG invoice ' + r.detail };
     return { status: 'BLOCKED', location_code: hits[0], invoice_no: no, detail: 'CNG invoice: ' + r.detail };
 }
 

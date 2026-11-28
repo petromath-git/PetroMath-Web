@@ -22,5 +22,9 @@ const cngUpload = multer({
 router.get('/cng-invoices/upload', isLoginEnsured, (req, res, next) => purchasesController.getCngUpload(req, res, next));
 router.post('/cng-invoices/import', isLoginEnsured, cngUpload.single('invoicePdf'),
     (req, res, next) => purchasesController.importCngInvoice(req, res, next));
+router.get('/cng-invoices/cancellations', isLoginEnsured, (req, res, next) => purchasesController.getCngCancellations(req, res, next));
+router.post('/cng-invoices/cancel', isLoginEnsured, (req, res, next) => purchasesController.cancelCngInvoice(req, res, next));
+router.post('/cng-invoices/cancelled/:id(\\d+)/restore', isLoginEnsured, (req, res, next) => purchasesController.restoreCngInvoice(req, res, next));
+router.get('/cng-invoices/cancelled/:id(\\d+)/pdf', isLoginEnsured, (req, res, next) => purchasesController.getCancelledCngPdf(req, res, next));
 
 module.exports = router;
