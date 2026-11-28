@@ -642,9 +642,9 @@ block content
                         //- tkt #485: PDF of the saved shift, to send to the RO owner.
                         //- target=_blank so the phone app opens it in its viewer (with Share).
                         div.text-right.mb-2
-                            a.btn.btn-outline-primary.btn-sm#shiftSummaryPdfLink(href='#' target='_blank' title='Shift Summary'
+                            a.btn.btn-outline-danger.btn-sm#shiftSummaryPdfLink(href='#' target='_blank' title='Shift Summary'
                                 onclick="var id = document.getElementById('closing_hiddenId').value; if (!id) { alert('Save the shift first.'); return false; } this.href = '/closing/' + id + '/summary-pdf';")
-                                i.bi.bi-file-earmark-pdf.mr-1
+                                i.bi.bi-file-earmark-pdf-fill.mr-1
                                 | Download PDF
                         div#summary-div
                             div
